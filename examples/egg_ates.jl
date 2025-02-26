@@ -150,7 +150,7 @@ end
 # number of iterations (maxiter), both we set to 200 here. Increasing these
 # numbers will likely give a better match.
 proxy_cal = calibrate_case(objective, proxy, n_steps, opt_config; 
-    lbfgs_args = (maxfun = 500, maxiter = 500))
+    lbfgs_args = (maxfun = 200, maxiter = 200))
 
 # ### Simulate the full schedule using the calibrated proxy
 results_proxy_cal = simulate_reservoir(proxy_cal)
