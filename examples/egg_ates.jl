@@ -1,6 +1,10 @@
 # # Digital twinning of a high-temperature aquifer thermal energy storage system
 #
-# This script was prepared for the 2025 DTE & AICOMAS conference
+# This script was prepared for the [2025 DTE & AICOMAS conference](https://dte_aicomas_2025.iacm.info):
+#
+#   Ø. Klemetsdal, O. Andersen,
+#   S. Krogstad, O. Møyner, "Predictive Digital Twins for Underground Thermal
+#   Energy Storage using Differentiable Programming"
 #
 # The example demonstrates digital twinning of high-temperature aquifer thermal
 # energy storage (HT-ATES). We first set up and simulate  high-fidelity model of
@@ -102,13 +106,13 @@ println("Initial proxy mismatch: $obj0")
 ## ## Set up optimization
 # We start by declaring the parameters to be optimized and their bounds
 parameters = setup_parameters(proxy.model)
-opt_config = optimization_config(proxy_cal.model, parameters,
+opt_config = optimization_config(proxy.model, parameters,
     use_scaling = true,
     rel_min = 1e-3,
     rel_max = 1e3
 )
 # We will only cosider a subset of all the model parameters
-wells = well_symbols(proxy_cal.model)
+wells = well_symbols(proxy.model)
 for (k, v) in opt_config
     for (ki, vi) in v
         if ki in [ # Volumetric properties
