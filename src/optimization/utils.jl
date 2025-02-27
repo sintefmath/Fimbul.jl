@@ -7,7 +7,6 @@ function calibrate_case(objective, case, n_steps, opt_config; lbfgs_args = Named
         tol_cnv_well=1e-5,
         info_level=-1,
     );
-    push!(cfg[:timestep_selectors], TimestepSelector(min = convert_to_si(0.5, :day)))
     cfg[:tolerances][:Reservoir][:default] = 1e-6
     for well in well_symbols(case.model)
         cfg[:tolerances][well][:default] = 1e-6
