@@ -14,7 +14,7 @@
 
 # Add modules to namespace
 using Jutul, JutulDarcy # Jutul and JutulDarcy modules
-using Fimbul # GHOTSTDigiT likely to be removed
+using Fimbul # Fimbul module
 using HYPRE # Iterative linear solvers
 using GLMakie # Visualization
 
