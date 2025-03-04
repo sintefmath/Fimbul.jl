@@ -4,7 +4,7 @@ module Fimbul
     using Dates
     include("cases/egg_geothermal.jl")
 
-    export egg_geothermal, egg_doublet, egg_ates
+    export egg_geothermal, egg_geothermal_doublet, egg_ates
     export well_mismatch_thermal, calibrate_proxy
 
     using LBFGSB
