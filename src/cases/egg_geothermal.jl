@@ -133,7 +133,7 @@ function egg_geothermal_doublet(;
     # ## Set up forces
     rmodel = reservoir_model(case0.model)
     rho_ref = rmodel.system.rho_ref[1]
-    bc = case0.forces[:Reservoir].bc
+    bc = case0.forces[1][:Reservoir].bc
     # Set observation well control
     if ismissing(rate_observation)
         rate_observation = 1e-3*min(rate_injection, rate_production)
