@@ -2,5 +2,5 @@ using Fimbul
 using Test
 
 @testset "Fimbul.jl" begin
-    # Write your tests here.
+    include("cases.jl")
 end
