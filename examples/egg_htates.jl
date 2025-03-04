@@ -2,9 +2,9 @@
 #
 # This script was prepared for the [2025 DTE & AICOMAS conference](https://dte_aicomas_2025.iacm.info):
 #
-#   Ø. Klemetsdal, O. Andersen,
-#   S. Krogstad, O. Møyner, "Predictive Digital Twins for Underground Thermal
-#   Energy Storage using Differentiable Programming"
+#   Ø. Klemetsdal, O. Andersen, S. Krogstad, O. Møyner,
+#   "Predictive Digital Twins for Underground Thermal Energy Storage using
+#   Differentiable Programming"
 #
 # The example demonstrates digital twinning of high-temperature aquifer thermal
 # energy storage (HT-ATES). We first set up and simulate  high-fidelity model of
