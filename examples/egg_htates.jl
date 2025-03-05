@@ -30,7 +30,7 @@ using GLMakie # Visualization
 # at a constant BHP of 25 bar. The system is then discharged from December to
 # March by producing hot water from the main well at a rate of 25 l/s with the
 # supporting well injecting water at 10°C at a BHP of 45 bar. For the remaining
-# monthsm the system is left to rest with no external forces applied. This cycle
+# months, the system is left to rest with no external forces applied. This cycle
 # of charge -- rest -- discharge -- rest is repeated for a total of 5 years.
 hifi = egg_ates(;
     use_bc = false, report_interval = si_unit(:year)/12/4)
