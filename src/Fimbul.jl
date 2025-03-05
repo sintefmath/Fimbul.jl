@@ -3,15 +3,16 @@ module Fimbul
     using Jutul, JutulDarcy
     using Dates
     include("cases/egg_geothermal.jl")
+    include("cases/analytical.jl")
 
     export egg_geothermal, egg_geothermal_doublet, egg_ates
-    export well_mismatch_thermal, calibrate_proxy
+    export beam_thermal
 
     using LBFGSB
     include("optimization/objectives.jl")
     include("optimization/utils.jl")
 
-    export well_mismatch_thermal
+    export well_mismatch_thermal, calibrate_proxy
     export calibrate_case
 
     using GLMakie
