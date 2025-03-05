@@ -3,8 +3,10 @@ module Fimbul
     using Jutul, JutulDarcy
     using Dates
     include("cases/egg_geothermal.jl")
+    include("cases/analytical.jl")
 
     export egg_geothermal, egg_geothermal_doublet, egg_ates
+    export beam_thermal
 
     using LBFGSB
     include("optimization/objectives.jl")
