@@ -7,7 +7,9 @@ using GLMakie
 
 # initial_condition = x -> convert_to_si(90.0, :Celsius) .+ 0.0*x
 # case, sol = analytical_1d(num_cells = 4000, num_steps = 500, initial_condition = initial_condition);
-case, sol = analytical_1d(num_cells = 4000, num_steps = 500)
+# case, sol = analytical_1d(num_cells = 8000, num_steps = 1500)
+case, sol = analytical_1d(num_cells = 8000, num_steps = 1500; 
+thermal_conductivity = 2.0, heat_capacity = 10000.0, density = 1.0, length_x = 1.0);
 
 ## Simulate
 res = simulate_reservoir(case, info_level = 0)
@@ -20,13 +22,13 @@ mesh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(mesh)
 x = geo.cell_centroids[1,:]
 t = cumsum(case.dt)   
-n = 5
+n = 10
 timesteps = Int.(round.(collect(range(1, stop = length(t), length = n))))
 for n = timesteps
     T_sim = res.states[n][:Temperature]
     T_analytical = sol(x, t[n])
     lines!(ax1, x, T_analytical, linestyle = (:dash, 1), linewidth = 6, color = :black)
-    lines!(ax1, x, T_sim, color = :blue)
+    lines!(ax1, x, T_sim, color = :black, linewidth = 2)
     ΔT = norm((T_sim .- T_analytical)./T_analytical, Inf)
     println("Time: $(t[n]), Relative error: $(ΔT)")
 end
