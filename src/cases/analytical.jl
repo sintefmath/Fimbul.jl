@@ -52,7 +52,7 @@ function analytical_1d(;
     # ## Set up initial state
     state0 = setup_reservoir_state(model,
     Pressure = 1atm,
-    Temperature = sol(x, 0),
+    Temperature = initial_condition.(x) .+ temperature_boundary,
     )
 
     bc = flow_boundary_condition(
@@ -80,7 +80,7 @@ function analytical_solution_1d(x, t,
         density,
         initial_condition,
         temperature_boundary,
-        k_cutoff = 200
+        k_cutoff = 500
     )
 
     L, λ, Cₚ, ρ = length_x, thermal_conductivity, heat_capacity, density
