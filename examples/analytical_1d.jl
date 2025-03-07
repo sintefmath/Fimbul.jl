@@ -5,11 +5,20 @@ using GLMakie
 
 ## Set up case
 
-# initial_condition = x -> convert_to_si(90.0, :Celsius) .+ 0.0*x
-# case, sol = analytical_1d(num_cells = 4000, num_steps = 500, initial_condition = initial_condition);
+T0 = convert_to_si(10.0, :Celsius)
+initial_condition = x -> convert_to_si(90.0, :Celsius) .+ 0.0*x - T0
+
+initial_condition = x -> convert_to_si(90.0, :Celsius).*(x < 50) + convert_to_si(10.0, :Celsius).*(x >= 50) - T0
+
+initial_condition = x -> convert_to_si(100.0, :Celsius).*(x < 25) + 
+    convert_to_si(10.0, :Celsius).*(25 <= x < 50) +
+    convert_to_si(50.0, :Celsius).*(50 <= x < 75) +
+    convert_to_si(75.0, :Celsius).*(75 <= x) -
+    T0
+
+
+case, sol = analytical_1d(num_cells = 1000, num_steps = 500, initial_condition = initial_condition);
 # case, sol = analytical_1d(num_cells = 8000, num_steps = 1500)
-case, sol = analytical_1d(num_cells = 8000, num_steps = 1500; 
-thermal_conductivity = 2.0, heat_capacity = 10000.0, density = 1.0, length_x = 1.0);
 
 ## Simulate
 res = simulate_reservoir(case, info_level = 0)
@@ -21,16 +30,18 @@ ax1 = Axis(fig[1, 1];)
 mesh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(mesh)
 x = geo.cell_centroids[1,:]
+xa = range(0, 100, length = 500)
 t = cumsum(case.dt)   
-n = 10
+n = 5
 timesteps = Int.(round.(collect(range(1, stop = length(t), length = n))))
+timesteps = 1:4:32
 for n = timesteps
     T_sim = res.states[n][:Temperature]
-    T_analytical = sol(x, t[n])
-    lines!(ax1, x, T_analytical, linestyle = (:dash, 1), linewidth = 6, color = :black)
+    T_analytical = sol(xa, t[n])
+    lines!(ax1, xa, T_analytical, linestyle = (:dash, 1), linewidth = 6, color = :black)
     lines!(ax1, x, T_sim, color = :black, linewidth = 2)
-    ΔT = norm((T_sim .- T_analytical)./T_analytical, Inf)
-    println("Time: $(t[n]), Relative error: $(ΔT)")
+    # ΔT = norm((T_sim .- T_analytical)./T_analytical, Inf)
+    # println("Time: $(t[n]), Relative error: $(ΔT)")
 end
 fig
 

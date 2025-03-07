@@ -27,11 +27,12 @@ function analytical_1d(;
     mesh = CartesianMesh((num_cells, 1, 1), (length_x + dx, 1.0, 1.0), origin = (-dx/2, 0.0, 0.0))
     domain = reservoir_domain(mesh;
         porosity = 1e-10,
+        permeability = 1e-6si_unit(:darcy),
         rock_thermal_conductivity = thermal_conductivity,
         rock_heat_capacity = heat_capacity,
         rock_density = density,
         fluid_thermal_conductivity = thermal_conductivity,
-        fluid_heat_capacity = heat_capacity,
+        component_heat_capacity = heat_capacity,
     )
 
     sys = SinglePhaseSystem(AqueousPhase(); reference_density = density)
@@ -63,7 +64,7 @@ function analytical_1d(;
     L, λ, Cₚ, ρ = length_x, thermal_conductivity, heat_capacity, density
     α = λ/(ρ*Cₚ)
     println("α = $α")
-    time = -log(0.05)/(α*(π/L)^2)
+    time = -log(0.1)/(α*(π/L)^2)
     dt = fill(time/num_steps, num_steps)
 
     case = JutulCase(model, dt, forces, state0 = state0, parameters = parameters)
