@@ -39,20 +39,18 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 L = 100.0
 T_b = to_kelvin(10.0)
 T_0 = x -> to_kelvin(90.0).*sin(π*x/L) .+ T_b;
-setup_case = (nx, nt) -> analytical_1d(
+case, sol, x, t = analytical_1d(
     length_x = L, temperature_boundary = T_b, initial_condition = T_0,
-    num_cells = nx, num_steps = nt);
+    num_cells = 100, num_steps = 100);
 
-## ### Simulate with 100 cells and 100 timesteps
-out = setup_case(100, 100)
-results = simulate_reservoir(out[1], info_level = 0)
+results = simulate_reservoir(case, info_level = 0)
 
 ## Plot the temperature profile
 # We set up a simple function for plotting the numerical and analytical
 # temperature profiles at a selected number of timesteps from the initial time
 # up to a fraction of the total time.
 function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n, frac)
-    fig = Figure(size = (600, 600), fontsize = 20)
+    fig = Figure(size = (800, 600), fontsize = 20)
     ax = Axis(fig[1, 1]; xlabel = "Distance (m)", ylabel = "Temperature (°C)")
 
     x_a = range(0, 100, length = 500)
@@ -75,12 +73,12 @@ function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n, frac)
     fig
 end
 
-plot_temperature_1d(out[1], results, out[2], 10, 0.5)
+plot_temperature_1d(case, results, sol, x, t, 10, 0.5)
 
 ## ## Piecewise constant initial conditions
 # We now consider a more complex initial condition where the initial temperature
 # profile is piecewise constant, with four different constant values.
-initial_condition = x ->
+T_0 = x ->
     to_kelvin(100.0).*(x < 25) + 
     to_kelvin(20.0).*(25 <= x < 50) +
     to_kelvin(50.0).*(50 <= x < 75) +
@@ -90,47 +88,80 @@ initial_condition = x ->
 # sum will now be an infinite series. The function `analytical_1d` handles this
 # pragmatically by cutting off the series when the contribution of the next term
 # is less than a 1e-6.
-out = analytical_1d(
-    length_x = L, temperature_boundary = T_b, initial_condition = initial_condition,
+case, sol, x, t = analytical_1d(
+    length_x = L, temperature_boundary = T_b, initial_condition = T_0,
     num_cells = 500, num_steps = 500);
 
-results = simulate_reservoir(out[1], info_level = 0)
-plot_temperature_1d(out[1], results, out[2], 10, 0.175)
+results = simulate_reservoir(case, info_level = 0)
+plot_temperature_1d(case, results, sol, x, t, 10, 0.1)
 
 ## ### Convergence study
 # Next, we perform a convergence study by simulating the same problem with
 # increasing number of cells and timesteps, and comparing the numerical and
 # analytical solutions
 
-Δx, err = [], []
-for nx in 2 .^range(3, 12)
-    for nt = 100
-        out = setup_case(nx, nt)
-        case, sol, x, t = out
-        
-        sim, cfg = setup_reservoir_simulator(case;
-            relaxation=true,
-            tol_cnv=1e-8,
-            info_level=-1,
-        );
-        cfg[:tolerances][:Reservoir][:default] = 1e-8
-       
-        results = simulate_reservoir(out[1], info_level = 0, simulator = sim, config = cfg)
-        nt_comp = nt÷2
-        nt_comp = 5
-        x = tpfv_geometry(physical_representation(reservoir_model(
-            case.model).data_domain)).cell_centroids[1,:]
-        dx = x[2] - x[1]
-        T_n = results.states[nt_comp][:Temperature]
-        T_a = sol(x, t[nt_comp])
+T_0 = x -> to_kelvin(90.0).*sin(π*x/L) .+ T_b;
+setup_case = (nx, nt) -> analytical_1d(
+    length_x = L, temperature_boundary = T_b, initial_condition = T_0,
+    num_cells = nx, num_steps = nt);
 
-        push!(Δx, dx)
-        push!(err, norm(dx.*(T_n .- T_a)./L))
+function convergence_1d(setup_fn, type = :space)
+    if type == :space
+        Nx = 2 .^(range(3, 6))
+        Nt = 10000
+    else
+        Nx = 10000
+        Nt = 2 .^(range(7, 10))
     end
+    Δx, Δt, err = [], [], []
+    for nx in Nx
+        for (i, nt) in enumerate(Nt)
+            out = setup_fn(nx, nt)
+            case, sol, x, t = out
+            dt = t[2] - t[1]
+            push!(Δt, dt)
+            dx = x[2] - x[1]
+            i == 1 ? push!(Δx, dx) : nothing
+            
+            sim, cfg = setup_reservoir_simulator(case;
+                relaxation=true,
+                tol_cnv=1e-8,
+                info_level=-1,
+            );
+            cfg[:tolerances][:Reservoir][:default] = 1e-8
+        
+            results = simulate_reservoir(case, info_level = 0, simulator = sim, config = cfg)
+            x = tpfv_geometry(physical_representation(reservoir_model(
+                case.model).data_domain)).cell_centroids[1,:]
+
+            ϵ = 0.0
+            for k = 1:nt
+                T_n = results.states[k][:Temperature]
+                T_a = sol(x, t[k])
+                ϵ += dt.*norm(dx.*(T_n .- T_a)./L)
+            end
+
+            push!(err, ϵ./sum(t))
+        end
+    end
+    return Δx, Δt, err
+
 end
+
+##
+Δx, _, err_space = convergence_1d(setup_case, :space)
 
 fig = Figure(size = (800, 800), fontsize = 20)
 ax = Axis(fig[1, 1]; xlabel = "Δx", ylabel = "Error", xscale = log2, yscale = log2)
-lines!(ax, Δx, err, linewidth = 2, color = :black)
-scatter!(ax, Δx, err, marker = :rect, markersize = 20, color = :black)
+lines!(ax, Δx, err_space, linewidth = 2, color = :black)
+scatter!(ax, Δx, err_space, marker = :rect, markersize = 20, color = :black)
+fig
+
+##
+_, Δt, err_time = convergence_1d(setup_case, :time)
+
+fig = Figure(size = (800, 800), fontsize = 20)
+ax = Axis(fig[1, 1]; xlabel = "Δx", ylabel = "Error", xscale = log2, yscale = log2)
+lines!(ax, Δt, err_time, linewidth = 2, color = :black)
+scatter!(ax, Δt, err_time, marker = :rect, markersize = 20, color = :black)
 fig

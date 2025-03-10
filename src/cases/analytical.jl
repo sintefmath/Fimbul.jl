@@ -61,7 +61,6 @@ function analytical_1d(;
 
     L, λ, Cₚ, ρ = length_x, thermal_conductivity, heat_capacity, density
     α = λ/(ρ*Cₚ)
-    println("α = $α")
     time = -log(0.1)/(α*(π/L)^2)
     dt = fill(time/num_steps, num_steps)
 
