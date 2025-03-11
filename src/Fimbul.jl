@@ -1,6 +1,8 @@
 module Fimbul
 
     using Jutul, JutulDarcy
+    using LinearAlgebra
+
     using Dates
     include("cases/egg_geothermal.jl")
 
