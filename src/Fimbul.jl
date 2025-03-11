@@ -1,10 +1,16 @@
 module Fimbul
 
     using Jutul, JutulDarcy
+    using LinearAlgebra
+
     using Dates
     include("cases/egg_geothermal.jl")
 
+    using Integrals
+    include("cases/analytical.jl")
+
     export egg_geothermal, egg_geothermal_doublet, egg_ates
+    export analytical_1d
 
     using LBFGSB
     include("optimization/objectives.jl")
