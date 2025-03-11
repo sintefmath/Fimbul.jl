@@ -40,7 +40,7 @@ L = 100.0
 T_b = to_kelvin(10.0)
 T_0 = x -> to_kelvin(90.0).*sin(π*x/L) .+ T_b;
 case, sol, x, t = analytical_1d(
-    length_x = L, temperature_boundary = T_b, initial_condition = T_0,
+    L = L, temperature_boundary = T_b, initial_condition = T_0,
     num_cells = 100, num_steps = 100);
 
 results = simulate_reservoir(case, info_level = 0)
@@ -60,20 +60,22 @@ function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n, frac)
     for (i,k) = enumerate(timesteps)
         if k == 0
             T_n = to_celsius.(case.state0[:Reservoir][:Temperature])
-            lines!(ax, x_n, T_n, linestyle = (:dash, 1), linewidth = 6, color = colors[i], label = "Analytical")
+            lines!(ax, x_n, T_n, linestyle = (:dash, 1), linewidth = 6, 
+                color = colors[i], label = "Analytical")
             lines!(ax, x_n, T_n, linewidth = 2, color = colors[i], label = "Numerical")
         else
             T_a = to_celsius.(sol_a(x_a, t_n[k]))
             T_n = to_celsius.(sol_n.states[k][:Temperature])
-            lines!(ax, x_a, T_a, linestyle = (:dash, 1), linewidth = 6, color = colors[i])
+            lines!(ax, x_a, T_a, linestyle = (:dash, 1), linewidth = 6, 
+                color = colors[i])
             lines!(ax, x_n, T_n, linewidth = 2, color = colors[i])
         end
     end
-    Legend(fig[1,2], ax, loc = :northeast)
+    Legend(fig[1,2], ax)
     fig
 end
 
-plot_temperature_1d(case, results, sol, x, t, 10, 0.5)
+plot_temperature_1d(case, results, sol, x, t, 10, 0.25)
 
 ## ## Piecewise constant initial conditions
 # We now consider a more complex initial condition where the initial temperature
@@ -89,7 +91,7 @@ T_0 = x ->
 # pragmatically by cutting off the series when the contribution of the next term
 # is less than a 1e-6.
 case, sol, x, t = analytical_1d(
-    length_x = L, temperature_boundary = T_b, initial_condition = T_0,
+    L = L, temperature_boundary = T_b, initial_condition = T_0,
     num_cells = 500, num_steps = 500);
 
 results = simulate_reservoir(case, info_level = 0)
@@ -98,70 +100,93 @@ plot_temperature_1d(case, results, sol, x, t, 10, 0.1)
 ## ### Convergence study
 # Next, we perform a convergence study by simulating the same problem with
 # increasing number of cells and timesteps, and comparing the numerical and
-# analytical solutions
+# analytical solutions. The default two-point flux apporximation (TPFA) scheme
+# used in JutulDarcy reduces to a central finite difference scheme for the heat
+# equation, which is second order accurate in space, whereas Backward Euler is
+# first order accurate in time.
 
+# We use the same initial conditions as in the first example above
 T_0 = x -> to_kelvin(90.0).*sin(π*x/L) .+ T_b;
 setup_case = (nx, nt) -> analytical_1d(
-    length_x = L, temperature_boundary = T_b, initial_condition = T_0,
+    L = L, temperature_boundary = T_b, initial_condition = T_0,
     num_cells = nx, num_steps = nt);
 
-function convergence_1d(setup_fn, type = :space)
+function convergence_1d(setup_fn, type = :space; Nx = 2 .^(range(3, 6)), Nt = 2 .^(range(3, 6)))
     if type == :space
-        Nx = 2 .^(range(3, 6))
         Nt = 10000
-    else
+    elseif type == :time
         Nx = 10000
-        Nt = 2 .^(range(7, 10))
+    else
+        @assert type == :spacetime
+        "Input type must be either :space, :time, or :spacetime"
     end
     Δx, Δt, err = [], [], []
     for nx in Nx
-        for (i, nt) in enumerate(Nt)
+        dx = L/nx
+        push!(Δx, dx)
+        for nt in Nt
             out = setup_fn(nx, nt)
             case, sol, x, t = out
             dt = t[2] - t[1]
+            println("dx = $dx, dt = $dt")
             push!(Δt, dt)
-            dx = x[2] - x[1]
-            i == 1 ? push!(Δx, dx) : nothing
             
             sim, cfg = setup_reservoir_simulator(case;
                 relaxation=true,
                 tol_cnv=1e-8,
-                info_level=-1,
+                info_level=0,
+                max_timestep = Inf,
+                timesteps = :none
             );
             cfg[:tolerances][:Reservoir][:default] = 1e-8
-        
-            results = simulate_reservoir(case, info_level = 0, simulator = sim, config = cfg)
-            x = tpfv_geometry(physical_representation(reservoir_model(
-                case.model).data_domain)).cell_centroids[1,:]
 
+            results = simulate_reservoir(case, simulator = sim, config = cfg)
             ϵ = 0.0
             for k = 1:nt
                 T_n = results.states[k][:Temperature]
                 T_a = sol(x, t[k])
-                ϵ += dt.*norm(dx.*(T_n .- T_a)./L)
+                ϵ += dt.*norm(dx.*(T_n .- T_a))
             end
 
-            push!(err, ϵ./sum(t))
+            push!(err, ϵ)
         end
     end
+    err ./= err[1]
     return Δx, Δt, err
 
 end
 
-##
+## ### Convergence in space
+# We simulate the problem with increasing number of cells and compare the
+# numerical and analytical solutions. To eliminate the error contribution from
+# temporal discretization, we use a high number of timesteps (10 000). This
+# number is arbitrarily, and must be increased if we want to study the spatial
+# convergence at higher spatial resolutions. We see that the method converges as
+# expected, with second order accuracy in space.
 Δx, _, err_space = convergence_1d(setup_case, :space)
 
-fig = Figure(size = (800, 800), fontsize = 20)
-ax = Axis(fig[1, 1]; xlabel = "Δx", ylabel = "Error", xscale = log2, yscale = log2)
-lines!(ax, Δx, err_space, linewidth = 2, color = :black)
+Δx ./= Δx[1]
+opt = Δx.^2
+fig = Figure(size = (800, 600), fontsize = 20)
+ax = Axis(fig[1, 1]; xlabel = "Δx/Δx₀", ylabel = "Error", xscale = log2, yscale = log2)
+lines!(ax, Δx, opt, linewidth = 4, color = :black, linestyle = :dash, label = "2nd order")
 scatter!(ax, Δx, err_space, marker = :rect, markersize = 20, color = :black)
+lines!(ax, Δx, err_space, linewidth = 2, color = :black, label = "Numerical")
+Legend(fig[1,2], ax)
 fig
 
-##
+## ### Convergence in time
+# Next, we study convergene in time, this time setting the number of cells to 10
+# 000 to mitigate the spatial error. Again, the method converges as expected,
+# with first order accuracy in time.
 _, Δt, err_time = convergence_1d(setup_case, :time)
 
-fig = Figure(size = (800, 800), fontsize = 20)
-ax = Axis(fig[1, 1]; xlabel = "Δx", ylabel = "Error", xscale = log2, yscale = log2)
+Δt ./= Δt[1]
+opt = copy(Δt)
+fig = Figure(size = (800, 600), fontsize = 20)
+ax = Axis(fig[1, 1]; xlabel = "Δt/Δt₀", ylabel = "Error", xscale = log2, yscale = log2)
+lines!(ax, Δt, opt, linewidth = 4, color = :black, linestyle = :dash, label = "1st order")
+scatter!(ax, Δt, err_time, marker = :rect, markersize = 20, color = :black, label = "Numerical")
 lines!(ax, Δt, err_time, linewidth = 2, color = :black)
-scatter!(ax, Δt, err_time, marker = :rect, markersize = 20, color = :black)
+Legend(fig[1,2], ax)
 fig
