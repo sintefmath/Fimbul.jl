@@ -3,6 +3,12 @@ module Fimbul
     using Jutul, JutulDarcy
     using LinearAlgebra
 
+    using Gmsh
+    include("meshing/extruded.jl")
+    include("meshing/utils.jl")
+
+    export fibonachi_pattern_2d, extruded_mesh
+
     using Dates
     include("cases/egg_geothermal.jl")
 
