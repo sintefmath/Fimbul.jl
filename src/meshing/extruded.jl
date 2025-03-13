@@ -73,17 +73,19 @@ function extruded_mesh(well_coordinates, depth;
     gmsh.model.mesh.field.setNumber(2, "SizeMin", hxy_min)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
     dist_min = dist_min_factor*radius
-    dist_max = dist_max_factor*radius
+    dist_max = min(dist_max_factor*radius, radius_outer*0.9)
     @assert dist_min < dist_max
     "dist_min must be smaller than dist_max"
     if dist_max > radius_outer
-        println("Warning: dist_max is larger than outer radius")
+        @warn "Warning: dist_max is larger than outer radius"
     end
     gmsh.model.mesh.field.setNumber(2, "DistMin", dist_min)
     gmsh.model.mesh.field.setNumber(2, "DistMax", dist_max)
     gmsh.model.mesh.field.setAsBackgroundMesh(2)
     # Recombine mesh into quadrilaterals
     gmsh.model.geo.mesh.setRecombine(2, 1)
+
+    println("dist_min: $dist_min, dist_max: $dist_max, hxy_min: $hxy_min, hxy_max: $hxy_max, radius: $radius, radius_outer: $radius_outer") 
 
     # ## Extrude to 3D and generate
     num_elements = Int(ceil(depth/hz))
@@ -94,6 +96,11 @@ function extruded_mesh(well_coordinates, depth;
     # ## Create mesh object
     mesh = Jutul.mesh_from_gmsh(z_is_depth=true)
     gmsh.finalize()
-    return mesh
+
+    metrics = (radius = radius, radius_outer = radius_outer,
+        hxy_min = hxy_min, hxy_max = hxy_max, hz = hz,
+        dist_min = dist_min, dist_max = dist_max)
+
+    return mesh, metrics
 
 end

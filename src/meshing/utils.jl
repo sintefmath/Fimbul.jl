@@ -13,9 +13,8 @@ function fibonachi_pattern_2d(num_points; spacing = 5.0, radius = missing)
     elseif !ismissing(radius)
         @assert ismissing(spacing) "Please provide either radius or spacing"
     end
-    r = radius
 
-    x = [p(n, r) for n = 1:N];
+    x = [p(n, radius) for n = 1:N];
 
     return x
 
