@@ -1,10 +1,9 @@
 to_kelvin = T -> convert_to_si(T, :Celsius)
-meter, = si_units(:meter)
-year, day = si_units(:year, :day)
-litre, = si_units(:litre)
-Kelvin, = si_unit(:Kelvin)
-second, = si_units(:second)
-darcy, = si_units(:darcy)
+second, year, day = si_units(:second, :year, :day)
+meter = si_unit(:meter)
+litre = si_unit(:litre)
+Kelvin = si_unit(:Kelvin)
+darcy = si_unit(:darcy)
 
 function btes(;
     num_wells = 50,
@@ -12,7 +11,7 @@ function btes(;
     temperature_charge = to_kelvin(90.0),
     temperature_discharge = to_kelvin(10.0),
     rate_charge = 0.5litre/second,
-    rate_discharge = 0.5litre/second,
+    rate_discharge = rate_charge,
     temperature_surface = to_kelvin(10.0),
     geothermal_gradient = 0.03Kelvin/meter,
     num_years = 5,
@@ -20,12 +19,12 @@ function btes(;
     charge_months = ["June", "July", "August", "September"],
     discharge_months = ["December", "January", "February", "March"],
     report_interval = 14day,
-    mehsing_args = NamedTuple(),
+    meshing_args = NamedTuple(),
     )
 
     # ## Create mesh
     well_coordinates = fibonachi_pattern_2d(num_wells; spacing = 5.0)
-    mesh, metrics = extruded_mesh(well_coordinates, depth)
+    mesh, metrics = extruded_mesh(well_coordinates, depth, meshing_args...)
 
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite
@@ -48,7 +47,7 @@ function btes(;
         trajectory = [xw[1] xw[2] 0.0; xw[1] xw[2] depth]
         cells = Jutul.find_enclosing_cells(mesh, trajectory)
         name = Symbol("B$wno")
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:u1)
+        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:simple)
         push!(well_models, w_sup, w_ret)
     end
     # Make the model
@@ -66,7 +65,7 @@ function btes(;
     dpdz = rho*gravity_constant
     dTdz = geothermal_gradient
     T = z -> temperature_surface .+ dTdz*z
-    p = z -> 1atm .+ rho.*dpdz.*z
+    p = z -> 1atm .+ dpdz.*z
     # Set initial conditions
     z_cells = geo.cell_centroids[3, :]
     z_hat = z_cells .- minimum(z_cells)

@@ -14,7 +14,7 @@ discharge -- rest.
 - `start_month::Union{Missing, String}`: Month in which the schedule starts.
   Defaults to the first month of charging.
 - `num_years::Int`: Number of years the schedule is repeated (starting from
-  2025). If provided,keyword argument `years` must be missing.
+  2025). If provided, keyword argument `years` must be missing.
 - `years::Vector{Int}`: Years in which the schedule is repeated. Defaults to
   `2025:num_years`. If provided, keyword argument `num_years` must be missing.
 - `report_interval = 14si_unit(:day)`: Interval at which the simulation output
@@ -29,10 +29,12 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     report_interval = 14day
     )
 
+    # ## Process input
+    # Validate months
     @assert intersect(charge_months, discharge_months) == []
         "Charge and discharge months must be disjoint"
     # TODO add more month checks
-
+    # Porcess years/number of cycles
     if ismissing(years)
         years = 2025:2025+num_years-1
     else
@@ -40,12 +42,15 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     end
     @assert all(diff(years) .== 1) "Years must be consecutive"
 
+    # ## Construct schedule
+    # Set month order
     dt_vec, forces = Float64[], []
     if ismissing(start_month)
         start_month = charge_months[1]
     end
     start_monthno = findall(monthname.(1:12) .== start_month)[1]
     month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
+    # Set up schedule for each year
     for year in years
         for mno in month_ix
             mname = monthname(mno)
@@ -57,7 +62,7 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
                 "the length of $mname. Adjusting to $num_days days"
                 n_steps = 1
             else
-                n_steps = Int(ceil(time/report_interval))
+                n_steps = max(Int(round(time/report_interval)), 1)
             end
             dt = fill(time/n_steps, n_steps)
             # Set forces
