@@ -3,12 +3,14 @@ using Fimbul
 using HYPRE
 
 ##
-case = btes(num_wells = 50, depth = 100,
+case = btes(num_wells = 50, depth = 100, meshing_args = (hz = 10.0,), 
     temperature_charge = convert_to_si(50.0, :Celsius),
     charge_months = ["April", "May", "June", "July", "August", "September"],
     discharge_months = ["October", "November", "December", "January", "February", "March"],
-    rate_charge = 0.25si_unit(:litre)/si_unit(:second),
-    rate_discharge = 0.25si_unit(:litre)/si_unit(:second)
+    rate_charge = 0.5si_unit(:litre)/si_unit(:second),
+    rate_discharge = 0.5si_unit(:litre)/si_unit(:second),
+    num_years = 20,
+    report_interval = Inf,
 )
 
 simulator, config = setup_reservoir_simulator(case;
@@ -36,3 +38,10 @@ plot_reservoir(case.model, results.states)
 
 ##
 plot_well_results(results.wells)
+
+##
+c = case.model.models[:B1_return].domain.representation.perforations.reservoir
+mesh = physical_representation(reservoir_model(case.model).data_domain);
+geo = tpfv_geometry(mesh)
+z = geo.cell_centroids[3,c]
+println(z)
