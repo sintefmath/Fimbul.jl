@@ -1,4 +1,4 @@
-function fibonachi_pattern_2d(num_points; spacing = 5.0, radius = missing)
+function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
     
     # Define coordinate funciton using golden ratio
     N = num_points
@@ -19,4 +19,3 @@ function fibonachi_pattern_2d(num_points; spacing = 5.0, radius = missing)
     return x
 
 end
-
