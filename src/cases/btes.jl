@@ -19,12 +19,12 @@ function btes(;
     charge_months = ["June", "July", "August", "September"],
     discharge_months = ["December", "January", "February", "March"],
     report_interval = 14day,
-    meshing_args = NamedTuple(),
+    mesh_args = NamedTuple(),
     )
 
     # ## Create mesh
-    well_coordinates = fibonachi_pattern_2d(num_wells; spacing = 5.0)
-    mesh, metrics = extruded_mesh(well_coordinates, depth, meshing_args...)
+    well_coordinates = fibonacci_pattern_2d(num_wells; spacing = 5.0)
+    mesh, metrics = extruded_mesh(well_coordinates, depth; mesh_args...)
 
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite
@@ -45,15 +45,15 @@ function btes(;
         # Shift coordiates a bit to avoid not be exactly on the node
         xw = xw .+ (hxy_min/2) .* v
         trajectory = [xw[1] xw[2] 0.0; xw[1] xw[2] depth]
-        cells = Jutul.find_enclosing_cells(mesh, trajectory)
+        cells = Jutul.find_enclosing_cells(mesh, trajectory, n = 100)
         name = Symbol("B$wno")
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:simple)
+        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:u1)
         push!(well_models, w_sup, w_ret)
     end
     # Make the model
     model, parameters = setup_reservoir_model(
         domain, :geothermal,
-        wells = well_models
+        wells = well_models,
     );
 
     # ## Set up initial state and boundary conditions
@@ -65,7 +65,7 @@ function btes(;
     dpdz = rho*gravity_constant
     dTdz = geothermal_gradient
     T = z -> temperature_surface .+ dTdz*z
-    p = z -> 1atm .+ dpdz.*z
+    p = z -> 5atm .+ dpdz.*z
     # Set initial conditions
     z_cells = geo.cell_centroids[3, :]
     z_hat = z_cells .- minimum(z_cells)
