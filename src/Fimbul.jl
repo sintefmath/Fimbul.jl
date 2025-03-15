@@ -3,14 +3,24 @@ module Fimbul
     using Jutul, JutulDarcy
     using LinearAlgebra
 
+    using Gmsh
+    include("meshing/extruded.jl")
+    include("meshing/utils.jl")
+
+    export fibonachi_pattern_2d, extruded_mesh
+
+    # Cases
     using Dates
-    include("cases/egg_geothermal.jl")
-
     using Integrals
+    include("cases/utils.jl")
+    include("cases/egg_geothermal.jl")
     include("cases/analytical.jl")
+    include("cases/btes.jl")
 
+    export make_utes_schedule
     export egg_geothermal, egg_geothermal_doublet, egg_ates
     export analytical_1d
+    export btes
 
     using LBFGSB
     include("optimization/objectives.jl")
