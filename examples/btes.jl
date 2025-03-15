@@ -1,7 +1,8 @@
 ## # Borehole Thermal Energy Storage (BTES)
 # NOTE: This example currently relies on a timestepper that is not yet part of
-# the main branch of Jutul. To run the example, check out the ´timestepping´
-# branch on Jutul. The example will be updated once the branch is merged.
+# the main branch of JutulDarcy. To run the example, check out the
+# ´timestepping´ branch on JutulDarcy. The example will be updated once the
+# branch is merged.
 using Jutul, JutulDarcy
 using Fimbul
 using HYPRE
