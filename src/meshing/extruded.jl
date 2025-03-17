@@ -1,7 +1,7 @@
-function extruded_mesh(well_coordinates, depth;
+function extruded_mesh(well_coordinates, depths;
     radius_outer = missing,
     radius_outer_factor = 5,
-    hxy_min = missing, hxy_max = missing, hz = depth/50,
+    hxy_min = missing, hxy_max = missing, hz = missing,
     dist_min_factor = 1.1, dist_max_factor = 1.5
     )
 
@@ -45,6 +45,9 @@ function extruded_mesh(well_coordinates, depth;
     end
     @assert 0.0 < hxy_min < hxy_max < perimeter/4
     "Please ensure that 0 < hxy_min < hxy_max < perimeter/4"
+    if ismissing(hz)
+        hz = sum(depths)/50
+    end
 
     # ## Create 2D mesh
     n = Int(ceil(perimeter/hxy_max))
@@ -89,8 +92,17 @@ function extruded_mesh(well_coordinates, depth;
     println("dist_min: $dist_min, dist_max: $dist_max, hxy_min: $hxy_min, hxy_max: $hxy_max, radius: $radius, radius_outer: $radius_outer") 
 
     # ## Extrude to 3D and generate
-    num_elements = Int(ceil(depth/hz))
-    gmsh.model.geo.extrude([(2, 1)], 0, 0, depth, [num_elements], [1.0], true)
+
+    z, layer = interpolate_z(depths, hz)
+    z = z[2:end]
+    depth = sum(depths)
+    height = z./depth
+    println()
+    num_elements = ones(Int, length(z))
+    println("z: $z")
+    println("height: $height")
+
+    gmsh.model.geo.extrude([(2, 1)], 0, 0, depth, num_elements, height, true)
     gmsh.model.geo.synchronize()
     gmsh.model.mesh.generate(3)
 
@@ -109,9 +121,19 @@ end
 function interpolate_z(depths, hz;
     interpolation = :default, transition = 0.33)
 
+    n = length(depths)
+    @assert n >= 2
+    
+    hz = length(hz) == 1 ? fill(hz, n-1) : hz
+    @assert length(hz) == n-1
+
+    interpolation = (interpolation isa Symbol) ? [interpolation] : interpolation
+    interpolation = length(interpolation) == 1 ?
+        fill(interpolation, n-1) : interpolation
+    @assert length(hz) == n-1
+
     z = Vector{Float64}(undef, 0)
     layer = Vector{Int}(undef, 0)
-    n = length(depths)
 
     thickness = depths[2:end] - depths[1:end-1]
     hz = min.(hz, 0.5*thickness)
@@ -128,7 +150,7 @@ function interpolate_z(depths, hz;
         hz_0, hz_1 = hz_prev, hz_next
         thickness = depths[i+1] - depths[i]
 
-        if interpolation == :default
+        if interpolation[i] == :default
 
             dz = transition*thickness
             if hz_curr > 1.5*hz_prev
