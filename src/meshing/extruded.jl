@@ -2,14 +2,15 @@ function extruded_mesh(well_coordinates, depth;
     radius_outer = missing,
     radius_outer_factor = 5,
     hxy_min = missing, hxy_max = missing, hz = depth/50,
-    dist_min_factor = 1.1, dist_max_factor = 1.5)
+    dist_min_factor = 1.1, dist_max_factor = 1.5
+    )
 
     # Initialize Gmsh
     gmsh.initialize()
     gmsh.clear()
     gmsh.model.add("extruded_mesh")
 
-    # ## Get and set doain metrics
+    # ## Get and set domain metrics
     # Compute radius and center of mass of well region
     xw = well_coordinates
     xc = (0.0, 0.0)
@@ -102,5 +103,102 @@ function extruded_mesh(well_coordinates, depth;
         dist_min = dist_min, dist_max = dist_max)
 
     return mesh, metrics
+
+end
+
+function interpolate_z(depths, hz;
+    interpolation = :default, transition = 0.33)
+
+    z = Vector{Float64}(undef, 0)
+    layer = Vector{Int}(undef, 0)
+    n = length(depths)
+
+    thickness = depths[2:end] - depths[1:end-1]
+    hz = min.(hz, 0.5*thickness)
+
+    for i = 1:n-1
+        z_0, z_1 = depths[i], depths[i+1]
+
+        hz_prev = hz[max(i-1,1)]
+        hz_curr = hz[i]
+        hz_next = hz[min(i+1, n-1)]
+
+        z_0t, z_1t = z_0, z_1
+        hz_0t, hz_1t = hz_curr, hz_curr
+        hz_0, hz_1 = hz_prev, hz_next
+        thickness = depths[i+1] - depths[i]
+
+        if interpolation == :default
+
+            dz = transition*thickness
+            if hz_curr > 1.5*hz_prev
+                frac = i < n-1 ? transition : 1.0
+                dz = frac*thickness
+                if hz_curr < 1.0*dz
+                    z_0t = z_0 + dz
+                else
+                    @warn "Transition from layer $(i-1) to layer $(i) not feasible"
+                end
+            end
+            if hz_curr > 1.5*hz_next
+                frac = i > 1 ? transition : 1.0
+                dz = frac*thickness
+                if hz_curr < 1.0*dz
+                    z_1t = z_1 - dz
+                else
+                    @warn "Transition from layer $i to layer $(i+1) not feasible"
+                end
+            end
+            
+        else
+            @error "Unknown interpolation method $interpolation"
+        end
+
+        z_top = interpolate_z(z_0, z_0t, hz_0, hz_0t)
+        z_mid = interpolate_z(z_0t, z_1t, hz_curr, hz_curr)
+        z_bottom = interpolate_z(z_1t, z_1, hz_1t, hz_1)
+        z_i = unique(vcat(z_top, z_mid, z_bottom))
+
+        push!(z, z_i[1:end-1]...)
+        unique!(z)
+
+        push!(layer, fill(i, length(z_i)-1)...)
+
+    end
+
+    push!(z, depths[end])
+
+    return z, layer
+
+end
+
+function interpolate_z(z_a::Float64, z_b::Float64, dz_a::Float64, dz_b::Float64)
+
+    L = z_b - z_a
+    println()
+    println("z_a: $z_a, z_b: $z_b, L: $L, dz_a: $dz_a, dz_b: $dz_b")
+    if isapprox(L, 0.0)
+        z = [z_a, z_b]
+
+    elseif isapprox(dz_a, dz_b)
+        n = max(Int(ceil(L/dz_a))+1,2)
+        println("n: $n")
+        z = collect(range(z_a, z_b, length=n))
+
+    else
+        α = (L-dz_a)/(L-dz_b)
+        K = Int(ceil(log(dz_b/dz_a)/log(α)))
+        α = (dz_b/dz_a)^(1/K)
+        dz = dz_a*α.^(0:K)
+        rem = sum(dz) - L
+        dz .-= rem.*dz./sum(dz)
+        z = z_a .+ cumsum(vcat(0, dz))
+
+    end
+
+    @assert isapprox(z[1], z_a) && isapprox(z[end], z_b)
+    println("z: $z")
+
+    return z
 
 end
