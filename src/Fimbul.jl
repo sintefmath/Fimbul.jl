@@ -7,7 +7,7 @@ module Fimbul
     include("meshing/extruded.jl")
     include("meshing/utils.jl")
 
-    export fibonachi_pattern_2d, extruded_mesh
+    export fibonacci_pattern_2d, extruded_mesh
 
     # Cases
     using Dates
