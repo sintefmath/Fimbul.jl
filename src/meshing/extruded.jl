@@ -1,6 +1,5 @@
 function extruded_mesh(well_coordinates, depths;
-    radius_outer = missing,
-    radius_outer_factor = 5,
+    offset = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
     dist_min_factor = 1.1, dist_max_factor = 1.5
     )
@@ -12,37 +11,23 @@ function extruded_mesh(well_coordinates, depths;
 
     # ## Get and set domain metrics
     # Compute radius and center of mass of well region
-    xw = well_coordinates
-    xc = (0.0, 0.0)
-    diameter, well_distance = -Inf, Inf
-    for (i,x) in enumerate(xw)
-        xc = xc .+ x
-        for (j,y) in enumerate(xw)
-            i == j ? continue : nothing
-            d_ij = norm(x .- y,2)
-            well_distance = min(well_distance, d_ij)
-            diameter = max(diameter, d_ij)
-        end
-    end
-    radius = diameter/2
-    xc = xc./length(xw)
-    # Set outer radius
-    if ismissing(radius_outer)
-        @assert !ismissing(radius_outer_factor) 
-        "Please provide either radius_outer or radius_outer_factor"
-        radius_outer = radius*radius_outer_factor
-    end
-    @assert radius_outer > radius 
-    "radius_outer must be larger than the well region diameter"
-    # Construct outer boundary
-    perimeter = 2*π*radius_outer
+    xb_inner, xc = get_convex_hull(well_coordinates)
+    xb_outer = offset_boundary(xb_inner, xc, offset)
+    min_well_distance, max_well_distance = min_max_distance(well_coordinates)
+    radius_inner = max_well_distance/2
+    radius_outer = max_distance(xb_outer)/2
+    println("radius_inner: $radius_inner, radius_outer: $radius_outer")
+
+    perimeter = chain_measure(xb_outer)
+    println("perimeter: $perimeter")
     # Set mesh sizes
     if ismissing(hxy_min)
-        hxy_min = well_distance/5
+        hxy_min = min_well_distance/5
     end
     if ismissing(hxy_max)
         hxy_max = perimeter/25
     end
+    println("hxy_min: $hxy_min, hxy_max: $hxy_max")
     @assert 0.0 < hxy_min < hxy_max < perimeter/4
     "Please ensure that 0 < hxy_min < hxy_max < perimeter/4"
     if ismissing(hz)
@@ -50,34 +35,34 @@ function extruded_mesh(well_coordinates, depths;
     end
 
     # ## Create 2D mesh
-    n = Int(ceil(perimeter/hxy_max))
-    Δθ = 2*π/n
-    for i = 1:n
-        x, y = xc[1] + radius_outer*cos(i*Δθ), xc[2] + radius_outer*sin(i*Δθ)
+    nb = length(xb_outer)
+    for i = 1:nb
+        x, y = xb_outer[i]
         gmsh.model.geo.addPoint(x, y, 0.0, hxy_max, i)
     end
-    for i = 1:n
-        gmsh.model.geo.addLine(i, mod(i, n) + 1, i)
+    for i = 1:nb
+        gmsh.model.geo.addLine(i, mod(i, nb) + 1, i)
     end
-    gmsh.model.geo.addCurveLoop(collect(1:n), 1)
+    gmsh.model.geo.addCurveLoop(collect(1:nb), 1)
     gmsh.model.geo.addPlaneSurface([1], 1)
     # Embed well coordinates
-    for (i, x) in enumerate(xw)
-        gmsh.model.geo.addPoint(x[1], x[2], 0.0, hxy_min, n + i)
+    for (i, x) in enumerate(well_coordinates)
+        gmsh.model.geo.addPoint(x[1], x[2], 0.0, hxy_min, nb + i)
     end
-    nw = length(xw)
+    nw = length(well_coordinates)
     gmsh.model.geo.synchronize()
-    gmsh.model.mesh.embed(0, collect(n+1:n+length(xw)), 2, 1)
-    gmsh.model.geo.addPoint(xc[1], xc[2], 0.0, hxy_min, n + nw + 1)
+    gmsh.model.mesh.embed(0, collect((1:nw) .+ nb), 2, 1)
+    gmsh.model.geo.addPoint(xc[1], xc[2], 0.0, hxy_min, nb + nw + 1)
     # Set mesh size
     gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.setNumbers(1, "PointsList", [n + nw + 1])
+    gmsh.model.mesh.field.setNumbers(1, "PointsList", [nb + nw + 1])
     gmsh.model.mesh.field.add("Threshold", 2)
     gmsh.model.mesh.field.setNumber(2, "InField", 1)
     gmsh.model.mesh.field.setNumber(2, "SizeMin", hxy_min)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
-    dist_min = dist_min_factor*radius
-    dist_max = min(dist_max_factor*radius, radius_outer*0.9)
+    dist_min = dist_min_factor*radius_inner
+    dist_max = min(dist_max_factor*radius_inner, radius_outer*0.9)
+    println("dist_min: $dist_min, dist_max: $dist_max")
     @assert dist_min < dist_max
     "dist_min must be smaller than dist_max"
     if dist_max > radius_outer
@@ -95,7 +80,7 @@ function extruded_mesh(well_coordinates, depths;
 
     z, layer = interpolate_z(depths, hz)
     z = z[2:end]
-    depth = sum(depths)
+    depth = depths[end]
     height = z./depth
     println()
     num_elements = ones(Int, length(z))
@@ -129,7 +114,8 @@ function interpolate_z(depths, hz;
 
     interpolation = (interpolation isa Symbol) ? [interpolation] : interpolation
     interpolation = length(interpolation) == 1 ?
-        fill(interpolation, n-1) : interpolation
+        repeat(interpolation, n-1) : interpolation
+    println("interpolation: $interpolation")
     @assert length(hz) == n-1
 
     z = Vector{Float64}(undef, 0)
