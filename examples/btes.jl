@@ -18,7 +18,7 @@ case = btes(num_wells = 50, depth = 100;
 )
 
 # ## Set up reservoir simulator
-Simulator, config = setup_reservoir_simulator(case;
+simulator, config = setup_reservoir_simulator(case;
     tol_cnv = 1e-2,
     tol_mb = 1e-6,
     timesteps = :auto,
@@ -31,7 +31,7 @@ Simulator, config = setup_reservoir_simulator(case;
 # challenging to resolve for the nonlinear solver. We therefore use a timestep
 # selector that reduces the timestep to 5 seconds when the control changes.
 thresholds = Dict(:B1_supply => 0.0)
-sel = setup_control_change_timestep_selector(
+sel = JutulDarcy.ControlChangeTimestepSelector(
     case.model, 0.0, convert_to_si(5.0, :second))
 push!(config[:timestep_selectors], sel)
 config[:timestep_max_decrease] = 1e-6
@@ -40,7 +40,7 @@ for ws in well_symbols(case.model)
 end
 
 ## ## Simulate the case
-results = simulate_reservoir(case, simulator=simulator, config=config, info_level=2);
+ results = simulate_reservoir(case, simulator=simulator, config=config, info_level=2);
 
 ## ## Visualize the results
 

@@ -1,26 +1,26 @@
 using Fimbul
 
-xw = fibonachi_pattern_2d(100; radius = missing, spacing = 5.0)
+##
+<<<<<<< Updated upstream
+xw = fibonacci_pattern_2d(100; radius = missing, spacing = 5.0)
+
+##
+mesh, m = extruded_mesh(xw, [0, 50.0, 75.0], hz = [0.5, 5.0])
 
 ##
 using GLMakie
-fig = Figure()
-ax = Axis(fig[1, 1], title = "BTES well coordinates", aspect = 1.0)
-scatter!(ax, xw, markersize=10)
+GLMakie.activate!()
+
+fig = Figure(size = (1200, 800))
+ax = Axis3(fig[1, 1], zreversed = true)
+Jutul.plot_mesh_edges!(ax, mesh, alpha = 0.5)
 fig
 
 ##
+x, xc = Fimbul.get_convex_hull(xw)
 
-for (i,x) in enumerate(xw)
-    d = Inf
-    for (j,y) in enumerate(xw)
-        if i == j
-            continue
-        end
-        d = min(d, norm(x .- y,2))
-    end
-    println("Minimum distance from well $i to other wells: $d")
-end
+v = map(x -> x .- xc, x)
+v = map(v -> v./norm(v,2), v)
 
-##
-mesh = extruded_mesh(xw, 100.0)
+<<<<<<< Updated upstream
+xb = Fimbul.offset_boundary(x, xc, 50)
