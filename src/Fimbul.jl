@@ -4,6 +4,7 @@ module Fimbul
     using LinearAlgebra
 
     using Gmsh
+    using Meshes
     include("meshing/extruded.jl")
     include("meshing/utils.jl")
 

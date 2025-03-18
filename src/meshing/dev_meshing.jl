@@ -1,6 +1,7 @@
 using Fimbul
 
 ##
+<<<<<<< Updated upstream
 xw = fibonacci_pattern_2d(100; radius = missing, spacing = 5.0)
 
 ##
@@ -21,4 +22,5 @@ x, xc = Fimbul.get_convex_hull(xw)
 v = map(x -> x .- xc, x)
 v = map(v -> v./norm(v,2), v)
 
+<<<<<<< Updated upstream
 xb = Fimbul.offset_boundary(x, xc, 50)
