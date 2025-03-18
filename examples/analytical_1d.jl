@@ -128,7 +128,6 @@ function convergence_1d(setup_fn, type = :space; Nx = 2 .^(range(3, 6)), Nt = 2 
             out = setup_fn(nx, nt)
             case, sol, x, t = out
             dt = t[2] - t[1]
-            println("dx = $dx, dt = $dt")
             push!(Δt, dt)
             
             sim, cfg = setup_reservoir_simulator(case;
