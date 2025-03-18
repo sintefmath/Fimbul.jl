@@ -54,7 +54,6 @@ function extruded_mesh(cell_constraints, depths;
             push!(tag0d_cc, t0d_i)
             i0 += 1
         else
-            println(cc)
             t1d_i, t0d_i = add_geometry_1d(cc, hxy_min, i1, i0, true)
             push!(tag1d_cc, t1d_i...)
             i1 += 1
@@ -109,7 +108,7 @@ function extruded_mesh(cell_constraints, depths;
 end
 
 function interpolate_z(depths, hz;
-    interpolation = :default, transition = 0.33)
+    interpolation = :default, transition = 1/3)
 
     n = length(depths)
     @assert n >= 2
@@ -120,14 +119,14 @@ function interpolate_z(depths, hz;
     interpolation = (interpolation isa Symbol) ? [interpolation] : interpolation
     interpolation = length(interpolation) == 1 ?
         repeat(interpolation, n-1) : interpolation
-    println("interpolation: $interpolation")
     @assert length(hz) == n-1
+
+    @assert 0 < transition <= 0.5
 
     z = Vector{Float64}(undef, 0)
     layer = Vector{Int}(undef, 0)
 
     thickness = depths[2:end] - depths[1:end-1]
-    hz = min.(hz, 0.5*thickness)
 
     for i = 1:n-1
         z_0, z_1 = depths[i], depths[i+1]
@@ -137,29 +136,20 @@ function interpolate_z(depths, hz;
         hz_next = hz[min(i+1, n-1)]
 
         z_0t, z_1t = z_0, z_1
-        hz_0t, hz_1t = hz_curr, hz_curr
-        hz_0, hz_1 = hz_prev, hz_next
         thickness = depths[i+1] - depths[i]
 
         if interpolation[i] == :default
 
-            dz = transition*thickness
-            if hz_curr > 1.5*hz_prev
-                frac = i < n-1 ? transition : 1.0
-                dz = frac*thickness
-                if hz_curr < 1.0*dz
+            frac = (1 < i < n-1) ? transition : 2/3
+            dz = frac*thickness
+            if hz_curr > dz
+                @warn "Transition in layer $(i) not feasible (hz = $hz_curr > dz = $dz)"  
+            else
+                if hz_curr > 1.5*hz_prev
                     z_0t = z_0 + dz
-                else
-                    @warn "Transition from layer $(i-1) to layer $(i) not feasible"
                 end
-            end
-            if hz_curr > 1.5*hz_next
-                frac = i > 1 ? transition : 1.0
-                dz = frac*thickness
-                if hz_curr < 1.0*dz
+                if hz_curr > 1.5*hz_next
                     z_1t = z_1 - dz
-                else
-                    @warn "Transition from layer $i to layer $(i+1) not feasible"
                 end
             end
             
@@ -167,9 +157,9 @@ function interpolate_z(depths, hz;
             @error "Unknown interpolation method $interpolation"
         end
 
-        z_top = interpolate_z(z_0, z_0t, hz_0, hz_0t)
+        z_top = interpolate_z(z_0, z_0t, hz_prev, hz_curr)
         z_mid = interpolate_z(z_0t, z_1t, hz_curr, hz_curr)
-        z_bottom = interpolate_z(z_1t, z_1, hz_1t, hz_1)
+        z_bottom = interpolate_z(z_1t, z_1, hz_curr, hz_next)
         z_i = unique(vcat(z_top, z_mid, z_bottom))
 
         push!(z, z_i[1:end-1]...)

@@ -6,9 +6,11 @@ module Fimbul
     using Gmsh
     using Meshes
     include("meshing/extruded.jl")
+    include("meshing/fractured.jl")
     include("meshing/utils.jl")
 
-    export fibonacci_pattern_2d, extruded_mesh
+    export fibonacci_pattern_2d
+    export extruded_mesh, horizontal_fractured_mesh
 
     # Cases
     using Dates
