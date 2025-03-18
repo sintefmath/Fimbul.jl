@@ -1,7 +1,7 @@
-function extruded_mesh(well_coordinates, depths;
-    offset = 5,
+function extruded_mesh(cell_constraints, depths;
+    offset = missing, offset_rel = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
-    dist_min_factor = 1.1, dist_max_factor = 5.0
+    dist_min_factor = 1.1, dist_max_factor = 0.75
     )
 
     # Initialize Gmsh
@@ -11,42 +11,71 @@ function extruded_mesh(well_coordinates, depths;
 
     # ## Get and set domain metrics
     # Compute radius and center of mass of well region
-    xb_inner, xc = get_convex_hull(well_coordinates)
-    xb_outer = offset_boundary(xb_inner, xc, offset)
-    min_well_distance, max_well_distance = min_max_distance(well_coordinates)
-    radius_inner = max_well_distance/2
+    x_cc = vcat(cell_constraints...)
+    min_cc_distance, max_cc_distance = min_max_distance(x_cc)
+    if ismissing(offset)
+        @assert !ismissing(offset_rel)
+        offset = max_cc_distance/2*offset_rel
+    else
+        @assert ismissing(offset_rel)
+    end
+    # Set mesh sizes
+    if ismissing(hxy_min)
+        hxy_min = min_cc_distance/5
+    end
+    if ismissing(hxy_max)
+        hxy_max = 2*π*(max_cc_distance/2 + offset)/10
+    end
+
+    xb_inner = Fimbul.get_convex_hull(x_cc)
+    println(xb_inner)
+    xb_outer = offset_boundary(xb_inner, offset, hxy_max)
+    
+    radius_inner = max_cc_distance/2
     radius_outer = max_distance(xb_outer)/2
     depth = depths[end] - depths[1]
 
-    perimeter = curve_measure(vcat(xb_outer, xb_outer[1]))
-    # Set mesh sizes
-    if ismissing(hxy_min)
-        hxy_min = min_well_distance/5
-    end
-    if ismissing(hxy_max)
-        hxy_max = perimeter/25
-    end
+    xb_outer = vcat(xb_outer, xb_outer[1])
+    perimeter = curve_measure(xb_outer)
+   
     @assert 0.0 < hxy_min < hxy_max < perimeter/4
     "Please ensure that 0 < hxy_min < hxy_max < perimeter/4"
-    if ismissing(hz)
-        hz = depth/50
-    end
-
+    hz = ismissing(hz) ? depth/50 : hz
+        
     # ## Create 2D mesh
     # Make 2d domain
     tag2d_brd, tag1d_brd, tag0d_bdr = add_geometry_2d(xb_outer, hxy_max)
     # Embed well coordinates
-    tag0d_wells = add_geometry_0d(well_coordinates, hxy_min, tag0d_bdr[end], true)
+    tag0d_cc, tag1d_cc = Vector{Int}(undef, 0), Vector{Int}(undef, 0)
+    i0, i1 = tag0d_bdr[end], tag1d_brd[end]
+    for (i, cc) in enumerate(cell_constraints)
+        if length(cc) == 1
+            t0d_i, = add_geometry_0d(cc, hxy_min, i0, true)
+            push!(tag0d_cc, t0d_i)
+            i0 += 1
+        else
+            println(cc)
+            t1d_i, t0d_i = add_geometry_1d(cc, hxy_min, i1, i0, true)
+            push!(tag1d_cc, t1d_i...)
+            i1 += 1
+            i0 += length(t0d_i)
+        end
+    end
     # Set mesh size
     gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.setNumbers(1, "PointsList", tag0d_wells)
-    gmsh.model.mesh.field.add("Threshold", 2)
+    if !isempty(tag0d_cc)
+        gmsh.model.mesh.field.setNumbers(1, "PointsList", tag0d_cc)
+    end
+    if !isempty(tag1d_cc)
+        gmsh.model.mesh.field.setNumbers(1, "CurvesList", tag1d_cc)
+    end
+     gmsh.model.mesh.field.add("Threshold", 2)
     gmsh.model.mesh.field.setNumber(2, "InField", 1)
     gmsh.model.mesh.field.setNumber(2, "SizeMin", hxy_min)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
     # Cell size transition
-    dist_min = min_well_distance*dist_min_factor
-    dist_max = min(max(radius_outer*0.75, dist_min*2), radius_outer*0.9)
+    dist_min = min_cc_distance*dist_min_factor
+    dist_max = (max_cc_distance/2 + offset)*dist_max_factor
     @assert dist_min < dist_max
     "dist_min must be smaller than dist_max"
     if dist_max > radius_outer
@@ -62,10 +91,7 @@ function extruded_mesh(well_coordinates, depths;
     z, layer = interpolate_z(depths, hz)
     z = z[2:end]
     height = z./depth
-    println()
     num_elements = ones(Int, length(z))
-    println("z: $z")
-    println("height: $height")
 
     gmsh.model.geo.extrude([(2, 1)], 0, 0, depth, num_elements, height, true)
     gmsh.model.geo.synchronize()
@@ -163,8 +189,6 @@ end
 function interpolate_z(z_a::Float64, z_b::Float64, dz_a::Float64, dz_b::Float64)
 
     L = z_b - z_a
-    println()
-    println("z_a: $z_a, z_b: $z_b, L: $L, dz_a: $dz_a, dz_b: $dz_b")
     if isapprox(L, 0.0)
         z = [z_a, z_b]
 
@@ -185,7 +209,6 @@ function interpolate_z(z_a::Float64, z_b::Float64, dz_a::Float64, dz_b::Float64)
     end
 
     @assert isapprox(z[1], z_a) && isapprox(z[end], z_b)
-    println("z: $z")
 
     return z
 

@@ -23,21 +23,37 @@ end
 function get_convex_hull(x)
 
     ptset = PointSet(x)
+    println(ptset)
     ch = convexhull(ptset)
-    xc = Tuple(centroid(ch).coords)
     x = map(p -> Tuple(p.coords), vertices(ch))
-    return x, xc
+
+    return x
 
 end
 
-function offset_boundary(x, xc, offset)
+function offset_boundary(x, offset, h)
 
     @assert offset > 0 "offset must be larger than 0"
+    
+    n = max(Int(ceil(2π*offset/h)), 6)
 
-    v = map(x -> x .- xc, x)
-    # v = map(v -> v./norm(v,2), v)
-    xs = map((x,v) -> x .+ offset.*v, x, v)
-    return xs
+    function sample_circle(x0, r)
+
+        θ = LinRange(0, 2π, n+1)
+        xc = [x0 .+ (r*cos(θ[i]), r*sin(θ[i])) for i = 1:n]
+        return xc
+
+    end
+
+    xb = Vector{Tuple{Float64,Float64}}(undef, 0)
+    for xi in x
+        xi_c = sample_circle(xi, offset)
+        xb = vcat(xb, xi_c)
+    end
+
+    xb = get_convex_hull(xb)
+
+    return xb
 
 end
 
@@ -91,13 +107,13 @@ function add_geometry_0d(points, h, tag = 0, embed = false)
 
 end
 
-function add_geometry_1d(points, h, tag_0d = 0, tag_1d = 0, embed = false)
+function add_geometry_1d(points, h, tag_1d = 0, tag_0d = 0, embed = false)
     
     np = length(points)
-    tags = Vector{Int}(undef, np)
+    tags = Vector{Int}(undef, np-1)
     tags_0d = add_geometry_0d(points, h, tag_0d, embed)
-    for i = 1:np
-        tags[i] = gmsh.model.geo.addLine(tags_0d[i], tags_0d[mod(i, np) + 1], tag_1d + i)
+    for i = 1:np-1
+        tags[i] = gmsh.model.geo.addLine(tags_0d[i], tags_0d[i+1], tag_1d + i)
     end
     if embed
         gmsh.model.geo.synchronize()
@@ -108,29 +124,13 @@ function add_geometry_1d(points, h, tag_0d = 0, tag_1d = 0, embed = false)
 
 end
 
-function add_geometry_2d(points, h, tag_0d = 0, tag_1d = 0, tag_2d = 0, embed = false)
+function add_geometry_2d(points, h, tag_2d = 0, tag_1d = 0, tag_0d = 0, embed = false)
 
-    np = length(points)
-    tags = Vector{Int}(undef, np)
-    tags_1d, tags_0d = add_geometry_1d(points, h, tag_0d, tag_1d, embed)
-    tag = gmsh.model.geo.addCurveLoop(tags_1d, tag_1d + 1)
-    gmsh.model.geo.addPlaneSurface([1], tag_2d + 1)
+    tags_1d, tags_0d = add_geometry_1d(points, h, tag_1d, tag_0d, embed)
+    println(tags_1d)
+    tag = gmsh.model.geo.addCurveLoop(tags_1d)
+    gmsh.model.geo.addPlaneSurface([tag], tag_2d + 1)
 
     return tag, tags_1d, tags_0d
 
 end
-
-# function make_domain_2d(x, h, tag_0d = 0, tag_1d = 0, tag_2d = 0)
-
-#     n = length(x)
-#     for i = 1:n
-#         xi, yi = x[i]
-#         gmsh.model.geo.addPoint(xi, yi, 0.0, h, tag_0d + i)
-#     end
-#     for i = 1:n
-#         gmsh.model.geo.addLine(i, mod(i, n) + 1, tag_1d + i)
-#     end
-#     gmsh.model.geo.addCurveLoop(collect(1:n), tag_1d + 1)
-#     gmsh.model.geo.addPlaneSurface([1], tag_2d + 1)
-
-# end
