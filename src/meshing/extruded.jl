@@ -4,6 +4,8 @@ function extruded_mesh(cell_constraints, depths;
     dist_min_factor = 1.1, dist_max_factor = 0.75
     )
 
+    @assert depths[1] == 0.0
+
     # Initialize Gmsh
     gmsh.initialize()
     gmsh.clear()
@@ -26,10 +28,8 @@ function extruded_mesh(cell_constraints, depths;
     if ismissing(hxy_max)
         hxy_max = 2*π*(max_cc_distance/2 + offset)/10
     end
-
-    xb_inner = Fimbul.get_convex_hull(x_cc)
-    println(xb_inner)
-    xb_outer = offset_boundary(xb_inner, offset, hxy_max)
+    
+    xb_outer = offset_boundary(x_cc, offset, hxy_max)
     
     radius_inner = max_cc_distance/2
     radius_outer = max_distance(xb_outer)/2
@@ -88,7 +88,7 @@ function extruded_mesh(cell_constraints, depths;
     gmsh.model.geo.mesh.setRecombine(2, 1)
 
     # ## Extrude to 3D and generate
-    z, layer = interpolate_z(depths, hz)
+    z, layers = interpolate_z(depths, hz)
     z = z[2:end]
     height = z./depth
     num_elements = ones(Int, length(z))
@@ -101,11 +101,10 @@ function extruded_mesh(cell_constraints, depths;
     mesh = Jutul.mesh_from_gmsh(z_is_depth=true)
     gmsh.finalize()
 
-    metrics = (radius = radius, radius_outer = radius_outer,
-        hxy_min = hxy_min, hxy_max = hxy_max, hz = hz,
+    metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz,
         dist_min = dist_min, dist_max = dist_max)
 
-    return mesh, metrics
+    return mesh, layers, metrics
 
 end
 
@@ -194,7 +193,6 @@ function interpolate_z(z_a::Float64, z_b::Float64, dz_a::Float64, dz_b::Float64)
 
     elseif isapprox(dz_a, dz_b)
         n = max(Int(ceil(L/dz_a))+1,2)
-        println("n: $n")
         z = collect(range(z_a, z_b, length=n))
 
     else
