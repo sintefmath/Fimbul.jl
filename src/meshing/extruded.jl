@@ -1,7 +1,7 @@
 function extruded_mesh(well_coordinates, depths;
     offset = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
-    dist_min_factor = 1.1, dist_max_factor = 1.5
+    dist_min_factor = 1.1, dist_max_factor = 5.0
     )
 
     # Initialize Gmsh
@@ -16,10 +16,9 @@ function extruded_mesh(well_coordinates, depths;
     min_well_distance, max_well_distance = min_max_distance(well_coordinates)
     radius_inner = max_well_distance/2
     radius_outer = max_distance(xb_outer)/2
-    println("radius_inner: $radius_inner, radius_outer: $radius_outer")
+    depth = depths[end] - depths[1]
 
-    perimeter = chain_measure(xb_outer)
-    println("perimeter: $perimeter")
+    perimeter = curve_measure(vcat(xb_outer, xb_outer[1]))
     # Set mesh sizes
     if ismissing(hxy_min)
         hxy_min = min_well_distance/5
@@ -27,42 +26,27 @@ function extruded_mesh(well_coordinates, depths;
     if ismissing(hxy_max)
         hxy_max = perimeter/25
     end
-    println("hxy_min: $hxy_min, hxy_max: $hxy_max")
     @assert 0.0 < hxy_min < hxy_max < perimeter/4
     "Please ensure that 0 < hxy_min < hxy_max < perimeter/4"
     if ismissing(hz)
-        hz = sum(depths)/50
+        hz = depth/50
     end
 
     # ## Create 2D mesh
-    nb = length(xb_outer)
-    for i = 1:nb
-        x, y = xb_outer[i]
-        gmsh.model.geo.addPoint(x, y, 0.0, hxy_max, i)
-    end
-    for i = 1:nb
-        gmsh.model.geo.addLine(i, mod(i, nb) + 1, i)
-    end
-    gmsh.model.geo.addCurveLoop(collect(1:nb), 1)
-    gmsh.model.geo.addPlaneSurface([1], 1)
+    # Make 2d domain
+    tag2d_brd, tag1d_brd, tag0d_bdr = add_geometry_2d(xb_outer, hxy_max)
     # Embed well coordinates
-    for (i, x) in enumerate(well_coordinates)
-        gmsh.model.geo.addPoint(x[1], x[2], 0.0, hxy_min, nb + i)
-    end
-    nw = length(well_coordinates)
-    gmsh.model.geo.synchronize()
-    gmsh.model.mesh.embed(0, collect((1:nw) .+ nb), 2, 1)
-    gmsh.model.geo.addPoint(xc[1], xc[2], 0.0, hxy_min, nb + nw + 1)
+    tag0d_wells = add_geometry_0d(well_coordinates, hxy_min, tag0d_bdr[end], true)
     # Set mesh size
     gmsh.model.mesh.field.add("Distance", 1)
-    gmsh.model.mesh.field.setNumbers(1, "PointsList", [nb + nw + 1])
+    gmsh.model.mesh.field.setNumbers(1, "PointsList", tag0d_wells)
     gmsh.model.mesh.field.add("Threshold", 2)
     gmsh.model.mesh.field.setNumber(2, "InField", 1)
     gmsh.model.mesh.field.setNumber(2, "SizeMin", hxy_min)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
-    dist_min = dist_min_factor*radius_inner
-    dist_max = min(dist_max_factor*radius_inner, radius_outer*0.9)
-    println("dist_min: $dist_min, dist_max: $dist_max")
+    # Cell size transition
+    dist_min = min_well_distance*dist_min_factor
+    dist_max = min(max(radius_outer*0.75, dist_min*2), radius_outer*0.9)
     @assert dist_min < dist_max
     "dist_min must be smaller than dist_max"
     if dist_max > radius_outer
@@ -74,13 +58,9 @@ function extruded_mesh(well_coordinates, depths;
     # Recombine mesh into quadrilaterals
     gmsh.model.geo.mesh.setRecombine(2, 1)
 
-    println("dist_min: $dist_min, dist_max: $dist_max, hxy_min: $hxy_min, hxy_max: $hxy_max, radius: $radius, radius_outer: $radius_outer") 
-
     # ## Extrude to 3D and generate
-
     z, layer = interpolate_z(depths, hz)
     z = z[2:end]
-    depth = depths[end]
     height = z./depth
     println()
     num_elements = ones(Int, length(z))

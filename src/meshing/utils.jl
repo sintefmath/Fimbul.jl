@@ -20,7 +20,6 @@ function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
 
 end
 
-using Meshes
 function get_convex_hull(x)
 
     ptset = PointSet(x)
@@ -42,9 +41,8 @@ function offset_boundary(x, xc, offset)
 
 end
 
-function chain_measure(x)
+function curve_measure(x)
 
-    x = vcat(x, x[1])
     dx = [x[i+1] .- x[i] for i = 1:length(x)-1]
     return sum(norm.(dx,2))
 
@@ -76,3 +74,63 @@ function max_distance(x)
     return min_max_distance(x)[2]
     
 end
+
+function add_geometry_0d(points, h, tag = 0, embed = false)
+
+    tags = Vector{Int}(undef, length(points))
+    for (i, pt) = enumerate(points)
+        x, y = pt
+        tags[i] = gmsh.model.geo.addPoint(x, y, 0.0, h, tag + i)
+    end
+    if embed
+        gmsh.model.geo.synchronize()
+        gmsh.model.mesh.embed(0, tags, 2, 1)
+    end
+
+    return tags
+
+end
+
+function add_geometry_1d(points, h, tag_0d = 0, tag_1d = 0, embed = false)
+    
+    np = length(points)
+    tags = Vector{Int}(undef, np)
+    tags_0d = add_geometry_0d(points, h, tag_0d, embed)
+    for i = 1:np
+        tags[i] = gmsh.model.geo.addLine(tags_0d[i], tags_0d[mod(i, np) + 1], tag_1d + i)
+    end
+    if embed
+        gmsh.model.geo.synchronize()
+        gmsh.model.mesh.embed(1, tags, 2, 1)
+    end
+
+    return tags, tags_0d
+
+end
+
+function add_geometry_2d(points, h, tag_0d = 0, tag_1d = 0, tag_2d = 0, embed = false)
+
+    np = length(points)
+    tags = Vector{Int}(undef, np)
+    tags_1d, tags_0d = add_geometry_1d(points, h, tag_0d, tag_1d, embed)
+    tag = gmsh.model.geo.addCurveLoop(tags_1d, tag_1d + 1)
+    gmsh.model.geo.addPlaneSurface([1], tag_2d + 1)
+
+    return tag, tags_1d, tags_0d
+
+end
+
+# function make_domain_2d(x, h, tag_0d = 0, tag_1d = 0, tag_2d = 0)
+
+#     n = length(x)
+#     for i = 1:n
+#         xi, yi = x[i]
+#         gmsh.model.geo.addPoint(xi, yi, 0.0, h, tag_0d + i)
+#     end
+#     for i = 1:n
+#         gmsh.model.geo.addLine(i, mod(i, n) + 1, tag_1d + i)
+#     end
+#     gmsh.model.geo.addCurveLoop(collect(1:n), tag_1d + 1)
+#     gmsh.model.geo.addPlaneSurface([1], tag_2d + 1)
+
+# end
