@@ -24,7 +24,7 @@ HYPRE = "1.7.0"
 Integrals = "4.5.0"
 LBFGSB = "0.4.1"
 LinearAlgebra = "1.11.0"
-Meshes = "0.32.3"
+Meshes = "0.32.3, 0.53"
 Revise = "3.7.2"
 julia = "1.7"
 
