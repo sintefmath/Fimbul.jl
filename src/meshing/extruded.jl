@@ -38,8 +38,8 @@ function extruded_mesh(cell_constraints, depths;
     xb_outer = vcat(xb_outer, xb_outer[1])
     perimeter = curve_measure(xb_outer)
    
-    @assert 0.0 < hxy_min < hxy_max < perimeter/4
-    "Please ensure that 0 < hxy_min < hxy_max < perimeter/4"
+    @assert 0.0 < hxy_min < hxy_max < perimeter/4 "Please ensure that "*
+        "0 < hxy_min = $hxy_min < hxy_max = $hxy_max < perimeter/4 = $(perimeter/4)"
     hz = ismissing(hz) ? depth/50 : hz
         
     # ## Create 2D mesh
@@ -50,13 +50,13 @@ function extruded_mesh(cell_constraints, depths;
     i0, i1 = tag0d_bdr[end], tag1d_brd[end]
     for (i, cc) in enumerate(cell_constraints)
         if length(cc) == 1
-            t0d_i, = add_geometry_0d(cc, hxy_min, i0, true)
-            push!(tag0d_cc, t0d_i)
+            t0d_i = add_geometry_0d(cc, hxy_min, i0, true)
+            push!(tag0d_cc, t0d_i...)
             i0 += 1
         else
             t1d_i, t0d_i = add_geometry_1d(cc, hxy_min, i1, i0, true)
             push!(tag1d_cc, t1d_i...)
-            i1 += 1
+            i1 += length(t1d_i)
             i0 += length(t0d_i)
         end
     end
