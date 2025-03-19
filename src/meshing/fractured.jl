@@ -14,6 +14,8 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
 
     z = [depths[1]]
     hz_all = []
+    layer_map = []
+    fracture_map = []
     for i = 1:length(depths)-1
         dz = depths[i+1] - depths[i]
         if num_fractures[i] > 0
@@ -29,6 +31,7 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
             end
             hzi = fill(hzi, 2*nf-1)
             @assert isapprox(zi[end], depths[i+1])
+            fmap = fill([true, false], nf)[1:end-1]
         else
             zi = depths[i+1]
             if ismissing(hz)
@@ -36,7 +39,11 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
             else
                 hzi = hz[i]
             end
+            fmap = false
         end
+        nl = length(zi)-1
+        push!(layer_map, fill(i, nl)...)
+        push!(fracture_map, fmap...)
         push!(z, zi...)
         push!(hz_all, hzi...)
     end
