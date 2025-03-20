@@ -100,6 +100,10 @@ function extruded_mesh(cell_constraints, depths;
     mesh = Jutul.mesh_from_gmsh(z_is_depth=true)
     gmsh.finalize()
 
+    nl = length(layers)
+    nc_2d = Int(number_of_cells(mesh)/nl)
+    layers = repeat(layers, nc_2d)
+
     metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz,
         dist_min = dist_min, dist_max = dist_max)
 
