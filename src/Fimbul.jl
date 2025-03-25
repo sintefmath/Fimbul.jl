@@ -21,6 +21,7 @@ module Fimbul
     include("cases/btes.jl")
 
     export make_utes_schedule
+    export set_dirichlet_bcs
     export egg_geothermal, egg_geothermal_doublet, egg_ates
     export analytical_1d
     export btes

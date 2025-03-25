@@ -1,3 +1,4 @@
+atm = si_unit(:atm)
 year, day = si_units(:year, :day)
 """
     make_utes_schedule(forces_charge, forces_discharge, forces_rest; <keyword arguments>...)
@@ -80,5 +81,39 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     end
 
     return forces, dt_vec
+
+end
+
+function set_dirichlet_bcs(model; 
+        pressure_surface = 1atm, 
+        temperature_surface = convert_to_si(10.0, :Celsius),
+        geothermal_gradient = 0.03Kelvin/meter
+    )
+
+    rmodel = reservoir_model(model)
+    mesh = physical_representation(rmodel.data_domain)
+    geo = tpfv_geometry(mesh)
+
+    rho = reservoir_model(model).system.rho_ref[1]
+    dpdz = rho*gravity_constant
+    dTdz = geothermal_gradient
+    p = z -> pressure_surface .+ dpdz.*z
+    T = z -> temperature_surface .+ dTdz*z
+
+    # Set boundary conditions
+    z_bc = geo.boundary_centroids[3, :]
+    z_hat = z_bc .- minimum(z_bc)
+    bc_cells = geo.boundary_neighbors
+    bc = flow_boundary_condition(bc_cells, rmodel.data_domain, p(z_hat), T(z_hat));
+
+    # Set initial conditions
+    z_cells = geo.cell_centroids[3, :]
+    z_hat = z_cells .- minimum(z_cells)
+    state0 = setup_reservoir_state(model,
+        Pressure = p(z_hat),
+        Temperature = T(z_hat)
+    );
+
+    return bc, state0, p, T
 
 end
