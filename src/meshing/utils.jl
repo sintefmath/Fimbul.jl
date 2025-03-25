@@ -27,7 +27,7 @@ function get_convex_hull(x)
     ch = convexhull(ptset)
     x = map(p -> Tuple(p.coords), vertices(ch))
 
-    return x
+    return x, ch
 
 end
 

@@ -29,7 +29,7 @@ function extruded_mesh(cell_constraints, depths;
         hxy_max = 2*π*(max_cc_distance/2 + offset)/10
     end
     
-    xb_outer = offset_boundary(x_cc, offset, hxy_max)
+    xb_outer, = offset_boundary(x_cc, offset, hxy_max)
     
     radius_inner = max_cc_distance/2
     radius_outer = max_distance(xb_outer)/2
@@ -104,8 +104,8 @@ function extruded_mesh(cell_constraints, depths;
     nc_2d = Int(number_of_cells(mesh)/nl)
     layers = repeat(layers, nc_2d)
 
-    metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz,
-        dist_min = dist_min, dist_max = dist_max)
+    metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz, 
+        offset = offset, dist_min = dist_min, dist_max = dist_max)
 
     return mesh, layers, metrics
 
