@@ -1,6 +1,7 @@
 function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
         aperture = 1e-3,
         hz = missing,
+        interpolation = :default,
         kwargs...
     )
 
@@ -11,6 +12,9 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
     if !ismissing(hz)
         @assert length(hz) == length(depths)-1
     end
+
+    interpolation0 = copy(interpolation)
+    interpolation = Symbol[]
 
     z = [depths[1]]
     hz_all = []
@@ -47,9 +51,13 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
         push!(fracture_map, fmap...)
         push!(z, zi...)
         push!(hz_all, hzi...)
+        if !(interpolation0 isa Symbol)
+            push!(interpolation, fill(interpolation0[i], nl)...)
+        end
     end
 
-    mesh, layers, metrics = extruded_mesh(cell_constraints, z; hz = hz_all, kwargs...)
+    mesh, layers, metrics = extruded_mesh(cell_constraints, z; 
+        hz = hz_all, interpolation = interpolation, kwargs...)
 
     fractures = fracture_map[layers]
     layers = layer_map[layers]
