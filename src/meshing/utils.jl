@@ -33,9 +33,9 @@ end
 
 function offset_boundary(x, offset, h)
 
-    @assert offset > 0 "offset must be larger than 0"
+    @assert offset > 0 "Offset must be larger than 0"
     
-    n = max(Int(ceil(2π*offset/h)), 6)
+    n = max(Int(ceil(2π*offset/h)), 12)
 
     function sample_circle(x0, r)
 
