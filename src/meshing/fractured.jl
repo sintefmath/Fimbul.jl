@@ -13,8 +13,11 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
         @assert length(hz) == length(depths)-1
     end
 
-    interpolation0 = copy(interpolation)
-    interpolation = Symbol[]
+    interp_per_layer = !(interpolation isa Symbol)
+    if interp_per_layer 
+        interpolation0 = copy(interpolation)
+        interpolation = Symbol[]
+    end
 
     z = [depths[1]]
     hz_all = []
@@ -51,7 +54,7 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
         push!(fracture_map, fmap...)
         push!(z, zi...)
         push!(hz_all, hzi...)
-        if !(interpolation0 isa Symbol)
+        if interp_per_layer
             push!(interpolation, fill(interpolation0[i], nl)...)
         end
     end
