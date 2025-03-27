@@ -15,6 +15,7 @@ function extruded_mesh(cell_constraints, depths;
     # ## Get and set domain metrics
     # Compute radius and center of mass of well region
     x_cc = vcat(cell_constraints...)
+
     min_cc_distance, max_cc_distance = min_max_distance(x_cc)
     if ismissing(offset)
         @assert !ismissing(offset_rel)
@@ -22,23 +23,22 @@ function extruded_mesh(cell_constraints, depths;
     else
         @assert ismissing(offset_rel)
     end
+
+    xb_outer, = offset_boundary(x_cc, offset)
+    xb_outer = vcat(xb_outer, xb_outer[1])
+    perimeter = curve_measure(xb_outer)
+
     # Set mesh sizes
     if ismissing(hxy_min)
         hxy_min = min_cc_distance/5
     end
     if ismissing(hxy_max)
-        hxy_max = 2*π*(max_cc_distance/2 + offset)/10
+        hxy_max = perimeter/6
     end
     
-    xb_outer, = offset_boundary(x_cc, offset, hxy_max)
-    
-    radius_inner = max_cc_distance/2
     radius_outer = max_distance(xb_outer)/2
     depth = depths[end] - depths[1]
 
-    xb_outer = vcat(xb_outer, xb_outer[1])
-    perimeter = curve_measure(xb_outer)
-   
     @assert 0.0 < hxy_min < hxy_max < perimeter/4 "Please ensure that "*
         "0 < hxy_min = $hxy_min < hxy_max = $hxy_max < perimeter/4 = $(perimeter/4)"
     hz = ismissing(hz) ? depth/50 : hz
@@ -142,7 +142,6 @@ function interpolate_z(depths, hz;
             end
         end
     end
-    println(interpolation)
     @assert all([itp ∈ [:top, :bottom, :both, :nothing] for itp in interpolation]) "
         interpolation must be either :top, :bottom, :both or :nothing"
     @assert length(interpolation) == n-1
