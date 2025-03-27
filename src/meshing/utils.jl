@@ -31,11 +31,12 @@ function get_convex_hull(x)
 
 end
 
-function offset_boundary(x, offset, h)
+function offset_boundary(x, offset, n = 12)
 
     @assert offset > 0 "Offset must be larger than 0"
     
-    n = max(Int(ceil(2π*offset/h)), 12)
+    # if ismissing(h)
+    # n = max(Int(ceil(2π*offset/h)), 12)
 
     function sample_circle(x0, r)
 
