@@ -24,8 +24,8 @@ function extruded_mesh(cell_constraints, depths;
         @assert ismissing(offset_rel)
     end
 
-    xb_outer, = offset_boundary(x_cc, offset)
-    xb_outer = vcat(xb_outer, xb_outer[1])
+    xb_outer = offset_boundary(x_cc, offset; n = 12)
+    xb_outer = push!(xb_outer, xb_outer[1])
     perimeter = curve_measure(xb_outer)
 
     # Set mesh sizes
@@ -69,7 +69,7 @@ function extruded_mesh(cell_constraints, depths;
     if !isempty(tag1d_cc)
         gmsh.model.mesh.field.setNumbers(1, "CurvesList", tag1d_cc)
     end
-     gmsh.model.mesh.field.add("Threshold", 2)
+    gmsh.model.mesh.field.add("Threshold", 2)
     gmsh.model.mesh.field.setNumber(2, "InField", 1)
     gmsh.model.mesh.field.setNumber(2, "SizeMin", hxy_min)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
@@ -106,7 +106,8 @@ function extruded_mesh(cell_constraints, depths;
     layers = repeat(layers, nc_2d)
 
     metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz, 
-        offset = offset, dist_min = dist_min, dist_max = dist_max)
+        offset = offset, dist_min = dist_min, dist_max = dist_max, 
+        boundary = xb_outer)
 
     return mesh, layers, metrics
 
