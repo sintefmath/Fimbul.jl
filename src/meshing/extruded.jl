@@ -177,7 +177,7 @@ function interpolate_z(depths, hz;
         z_top = interpolate_z(z_0, z_0t, hz_prev, hz_curr)
         z_mid = interpolate_z(z_0t, z_1t, hz_curr, hz_curr)
         z_bottom = interpolate_z(z_1t, z_1, hz_curr, hz_next)
-        z_i = unique(vcat(z_top, z_mid, z_bottom))
+        z_i = unique(vcat(z_top[1:end-1], z_mid[1:end-1], z_bottom[1:end]))
 
         push!(z, z_i[1:end-1]...)
         unique!(z)
