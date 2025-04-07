@@ -11,7 +11,7 @@ using HYPRE
 # We consider a domain with 50 BTES wells that all reach 100 m depth. The BTES
 # wells are charged during the summer months and discharged during the winter
 # months. The simulation is run for 10 years.
-case = btes(num_wells = 50, depth = 100;
+case = btes(num_wells = 50, depths = [0.0, 0.5, 100, 125],
     charge_months = ["April", "May", "June", "July", "August", "September"],
     discharge_months = ["October", "November", "December", "January", "February", "March"],
     num_years = 10,
@@ -40,7 +40,7 @@ for ws in well_symbols(case.model)
 end
 
 ## ## Simulate the case
- results = simulate_reservoir(case, simulator=simulator, config=config, info_level=2);
+results = simulate_reservoir(case, simulator=simulator, config=config, info_level=2);
 
 ## ## Visualize the results
 

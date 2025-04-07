@@ -15,7 +15,6 @@ function plot_well_data(time, reference, other;
 
     for well in wells
         vr = get_field(reference, well, field)
-        println(vr)
         lines!(ax, time, vr; label=names[1], linestyle = (:dash, 1), linewidth = 6, color = :black)
         for (i, proxy) in enumerate(other)
             vp = get_field(proxy, well, field)

@@ -1,6 +1,7 @@
 function extruded_mesh(cell_constraints, depths;
     offset = missing, offset_rel = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
+    interpolation = :default,
     dist_min_factor = 1.1, dist_max_factor = 0.75
     )
 
@@ -14,6 +15,7 @@ function extruded_mesh(cell_constraints, depths;
     # ## Get and set domain metrics
     # Compute radius and center of mass of well region
     x_cc = vcat(cell_constraints...)
+
     min_cc_distance, max_cc_distance = min_max_distance(x_cc)
     if ismissing(offset)
         @assert !ismissing(offset_rel)
@@ -21,25 +23,24 @@ function extruded_mesh(cell_constraints, depths;
     else
         @assert ismissing(offset_rel)
     end
+
+    xb_outer = offset_boundary(x_cc, offset; n = 12)
+    xb_outer = push!(xb_outer, xb_outer[1])
+    perimeter = curve_measure(xb_outer)
+
     # Set mesh sizes
     if ismissing(hxy_min)
         hxy_min = min_cc_distance/5
     end
     if ismissing(hxy_max)
-        hxy_max = 2*π*(max_cc_distance/2 + offset)/10
+        hxy_max = perimeter/6
     end
     
-    xb_outer = offset_boundary(x_cc, offset, hxy_max)
-    
-    radius_inner = max_cc_distance/2
     radius_outer = max_distance(xb_outer)/2
     depth = depths[end] - depths[1]
 
-    xb_outer = vcat(xb_outer, xb_outer[1])
-    perimeter = curve_measure(xb_outer)
-   
-    @assert 0.0 < hxy_min < hxy_max < perimeter/4
-    "Please ensure that 0 < hxy_min < hxy_max < perimeter/4"
+    @assert 0.0 < hxy_min < hxy_max < perimeter/4 "Please ensure that "*
+        "0 < hxy_min = $hxy_min < hxy_max = $hxy_max < perimeter/4 = $(perimeter/4)"
     hz = ismissing(hz) ? depth/50 : hz
         
     # ## Create 2D mesh
@@ -50,14 +51,13 @@ function extruded_mesh(cell_constraints, depths;
     i0, i1 = tag0d_bdr[end], tag1d_brd[end]
     for (i, cc) in enumerate(cell_constraints)
         if length(cc) == 1
-            t0d_i, = add_geometry_0d(cc, hxy_min, i0, true)
-            push!(tag0d_cc, t0d_i)
+            t0d_i = add_geometry_0d(cc, hxy_min, i0, true)
+            push!(tag0d_cc, t0d_i...)
             i0 += 1
         else
-            println(cc)
             t1d_i, t0d_i = add_geometry_1d(cc, hxy_min, i1, i0, true)
             push!(tag1d_cc, t1d_i...)
-            i1 += 1
+            i1 += length(t1d_i)
             i0 += length(t0d_i)
         end
     end
@@ -69,7 +69,7 @@ function extruded_mesh(cell_constraints, depths;
     if !isempty(tag1d_cc)
         gmsh.model.mesh.field.setNumbers(1, "CurvesList", tag1d_cc)
     end
-     gmsh.model.mesh.field.add("Threshold", 2)
+    gmsh.model.mesh.field.add("Threshold", 2)
     gmsh.model.mesh.field.setNumber(2, "InField", 1)
     gmsh.model.mesh.field.setNumber(2, "SizeMin", hxy_min)
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
@@ -88,7 +88,7 @@ function extruded_mesh(cell_constraints, depths;
     gmsh.model.geo.mesh.setRecombine(2, 1)
 
     # ## Extrude to 3D and generate
-    z, layers = interpolate_z(depths, hz)
+    z, layers = interpolate_z(depths, hz; interpolation = interpolation)
     z = z[2:end]
     height = z./depth
     num_elements = ones(Int, length(z))
@@ -101,15 +101,20 @@ function extruded_mesh(cell_constraints, depths;
     mesh = Jutul.mesh_from_gmsh(z_is_depth=true)
     gmsh.finalize()
 
-    metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz,
-        dist_min = dist_min, dist_max = dist_max)
+    nl = length(layers)
+    nc_2d = Int(number_of_cells(mesh)/nl)
+    layers = repeat(layers, nc_2d)
+
+    metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz, 
+        offset = offset, dist_min = dist_min, dist_max = dist_max, 
+        boundary = xb_outer)
 
     return mesh, layers, metrics
 
 end
 
 function interpolate_z(depths, hz;
-    interpolation = :default, transition = 0.33)
+    interpolation = :default, transition = 1/3)
 
     n = length(depths)
     @assert n >= 2
@@ -120,57 +125,59 @@ function interpolate_z(depths, hz;
     interpolation = (interpolation isa Symbol) ? [interpolation] : interpolation
     interpolation = length(interpolation) == 1 ?
         repeat(interpolation, n-1) : interpolation
-    println("interpolation: $interpolation")
-    @assert length(hz) == n-1
+    for i = 1:n-1
+        if interpolation[i] == :default
+            hz_prev = hz[max(i-1,1)]
+            hz_curr = hz[i]
+            hz_next = hz[min(i+1, n-1)]
+            top = hz_curr > 1.5*hz_prev
+            bottom = hz_curr > 1.5*hz_next
+            if top && bottom
+                interpolation[i] = :both
+            elseif top
+                interpolation[i] = :top
+            elseif bottom
+                interpolation[i] = :bottom
+            else
+                interpolation[i] = :nothing
+            end
+        end
+    end
+    @assert all([itp ∈ [:top, :bottom, :both, :nothing] for itp in interpolation]) "
+        interpolation must be either :top, :bottom, :both or :nothing"
+    @assert length(interpolation) == n-1
+
+    @assert 0 < transition <= 0.5
 
     z = Vector{Float64}(undef, 0)
     layer = Vector{Int}(undef, 0)
 
-    thickness = depths[2:end] - depths[1:end-1]
-    hz = min.(hz, 0.5*thickness)
-
     for i = 1:n-1
         z_0, z_1 = depths[i], depths[i+1]
+        z_0t, z_1t = z_0, z_1
+        thickness = z_1 - z_0
 
         hz_prev = hz[max(i-1,1)]
         hz_curr = hz[i]
         hz_next = hz[min(i+1, n-1)]
-
-        z_0t, z_1t = z_0, z_1
-        hz_0t, hz_1t = hz_curr, hz_curr
-        hz_0, hz_1 = hz_prev, hz_next
-        thickness = depths[i+1] - depths[i]
-
-        if interpolation[i] == :default
-
-            dz = transition*thickness
-            if hz_curr > 1.5*hz_prev
-                frac = i < n-1 ? transition : 1.0
-                dz = frac*thickness
-                if hz_curr < 1.0*dz
-                    z_0t = z_0 + dz
-                else
-                    @warn "Transition from layer $(i-1) to layer $(i) not feasible"
-                end
-            end
-            if hz_curr > 1.5*hz_next
-                frac = i > 1 ? transition : 1.0
-                dz = frac*thickness
-                if hz_curr < 1.0*dz
-                    z_1t = z_1 - dz
-                else
-                    @warn "Transition from layer $i to layer $(i+1) not feasible"
-                end
-            end
-            
+        
+        frac = (1 < i < n-1) ? transition : 2/3
+        dz = frac*thickness
+        if interpolation[i] != :nothing && hz_curr > dz
+            @warn "Transition in layer $(i) not feasible (hz = $hz_curr > dz = $dz)"  
         else
-            @error "Unknown interpolation method $interpolation"
+            if interpolation[i] ∈ [:top, :both]
+                z_0t = z_0 + dz
+            end
+            if interpolation[i] ∈ [:bottom, :both]
+                z_1t = z_1 - dz
+            end
         end
 
-        z_top = interpolate_z(z_0, z_0t, hz_0, hz_0t)
+        z_top = interpolate_z(z_0, z_0t, hz_prev, hz_curr)
         z_mid = interpolate_z(z_0t, z_1t, hz_curr, hz_curr)
-        z_bottom = interpolate_z(z_1t, z_1, hz_1t, hz_1)
-        z_i = unique(vcat(z_top, z_mid, z_bottom))
+        z_bottom = interpolate_z(z_1t, z_1, hz_curr, hz_next)
+        z_i = unique(vcat(z_top[1:end-1], z_mid[1:end-1], z_bottom[1:end]))
 
         push!(z, z_i[1:end-1]...)
         unique!(z)
