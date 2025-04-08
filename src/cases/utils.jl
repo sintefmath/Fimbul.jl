@@ -22,8 +22,8 @@ discharge -- rest.
   is reported.
 """
 function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
-    charge_months::Vector{String} = ["June", "July", "August", "September"],
-    discharge_months::Vector{String} = ["December", "January", "February", "March"],
+    charge_months::Union{Nothing, Vector{String}} = ["June", "July", "August", "September"],
+    discharge_months::Union{Nothing, Vector{String}} = ["December", "January", "February", "March"],
     start_month::Union{Missing, String} = missing,
     num_years = 5,
     years = missing,
