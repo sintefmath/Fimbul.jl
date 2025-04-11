@@ -16,15 +16,16 @@ module Fimbul
     using Dates
     using Integrals
     include("cases/utils.jl")
-    include("cases/egg_geothermal.jl")
     include("cases/analytical.jl")
+    include("cases/doublet.jl")
     include("cases/btes.jl")
+    include("cases/egg_geothermal.jl")
 
     export make_utes_schedule
     export set_dirichlet_bcs
-    export egg_geothermal, egg_geothermal_doublet, egg_ates
     export analytical_1d
     export btes
+    export egg_geothermal, egg_geothermal_doublet, egg_ates
 
     using LBFGSB
     include("optimization/objectives.jl")
