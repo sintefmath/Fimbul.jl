@@ -92,6 +92,22 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
 
 end
 
+function make_production_schedule(forces_high, forces_low, forces_rest;
+        high_months::Union{Nothing, Vector{String}} = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"],
+        low_months::Union{Nothing, Vector{String}} = nothing,
+        kwargs...
+    )
+
+    return make_utes_schedule(forces_high, forces_low, forces_rest;
+        charge_months = high_months,
+        discharge_months = low_months,
+        kwargs...
+    )
+
+end
+
 function set_dirichlet_bcs(model; 
         pressure_surface = 1atm, 
         temperature_surface = convert_to_si(10.0, :Celsius),
