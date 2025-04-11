@@ -32,6 +32,8 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
 
     # ## Process input
     # Validate months
+    charge_months = isnothing(charge_months) ? [""] : charge_months
+    discharge_months = isnothing(discharge_months) ? [""] : discharge_months
     @assert intersect(charge_months, discharge_months) == []
         "Charge and discharge months must be disjoint"
     # TODO add more month checks
@@ -81,6 +83,22 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     end
 
     return forces, dt_vec
+
+end
+
+function make_production_schedule(forces_high, forces_low, forces_rest;
+        high_months::Union{Nothing, Vector{String}} = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"],
+        low_months::Union{Nothing, Vector{String}} = nothing,
+        kwargs...
+    )
+
+    return make_utes_schedule(forces_high, forces_low, forces_rest;
+        charge_months = high_months,
+        discharge_months = low_months,
+        kwargs...
+    )
 
 end
 
