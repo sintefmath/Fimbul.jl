@@ -32,6 +32,8 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
 
     # ## Process input
     # Validate months
+    charge_months = isnothing(charge_months) ? [] : charge_months
+    discharge_months = isnothing(discharge_months) ? [] : discharge_months
     @assert intersect(charge_months, discharge_months) == []
         "Charge and discharge months must be disjoint"
     # TODO add more month checks
