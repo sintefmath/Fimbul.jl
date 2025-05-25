@@ -1,8 +1,10 @@
+meter = si_unit(:meter)
+hour, day = si_units(:hour, :day)
 darcy = si_unit(:darcy)
 
 function geothermal_doublet(;
-    temperature_inj = convert_to_si(10.0, :Celsius),
-    rate = 50si_unit(:litre)/si_unit(:second),
+    temperature_inj = convert_to_si(20.0, :Celsius),
+    rate = 350meter^3/hour,
     temperature_surface = convert_to_si(10.0, :Celsius),
     high_months =  ["January", "February", "March", "April", "May", "June",
     "July", "August", "September", "October", "November", "December"],
@@ -38,7 +40,7 @@ function geothermal_doublet(;
     # Create the mesh
     mesh, layers, metrics = extruded_mesh(xw, depths)
 
-    permeability = [1e-3, 1e-1, 1e-1, 1e-3]*darcy
+    permeability = [1e-3, 1e-1, 5e-1, 1e-3]*darcy
     porosity = [0.01, 0.2, 0.35, 0.01]
     density = [2000, 2580, 2600, 2400]*kilogram/meter^3
     thermal_conductivity = [2.0, 2.8, 3.5, 1.9]*watt/meter/Kelvin
