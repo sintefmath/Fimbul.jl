@@ -49,7 +49,13 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     # Set month order
     dt_vec, forces = Float64[], []
     if ismissing(start_month)
-        start_month = charge_months[1]
+        if !isempty(charge_months)
+            start_month = charge_months[1]
+        elseif !isempty(discharge_months)
+            start_month = discharge_months[1]
+        else
+            start_month = "January"
+        end
     end
     start_monthno = findall(monthname.(1:12) .== start_month)[1]
     month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
