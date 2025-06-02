@@ -2,7 +2,8 @@ function extruded_mesh(cell_constraints, depths;
     offset = missing, offset_rel = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
     interpolation = :default,
-    dist_min_factor = 1.1, dist_max_factor = 0.75
+    dist_min_factor = 1.1, dist_max_factor = 0.75,
+    recombine_to_quads = true,
     )
 
     @assert depths[1] == 0.0
@@ -85,7 +86,9 @@ function extruded_mesh(cell_constraints, depths;
     gmsh.model.mesh.field.setNumber(2, "DistMax", dist_max)
     gmsh.model.mesh.field.setAsBackgroundMesh(2)
     # Recombine mesh into quadrilaterals
-    gmsh.model.geo.mesh.setRecombine(2, 1)
+    if recombine_to_quads
+        gmsh.model.geo.mesh.setRecombine(2, 1)
+    end
 
     # ## Extrude to 3D and generate
     z, layers = interpolate_z(depths, hz; interpolation = interpolation)
