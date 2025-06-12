@@ -18,7 +18,7 @@ Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [compat]
 Dates = "1.11.0"
-GLMakie = "0.11.3"
+GLMakie = "0.11.3, 0.12"
 Gmsh = "0.3.1"
 HYPRE = "1.7.0"
 Integrals = "4.5.0"
