@@ -10,7 +10,7 @@ function geothermal_doublet(;
     "July", "August", "September", "October", "November", "December"],
     low_months = nothing,
     num_years = 20,
-    report_interval = si_unit(:year)/12,
+    report_interval = si_unit(:year)/2,
     kwargs...
     )
 
@@ -38,7 +38,9 @@ function geothermal_doublet(;
     depths = [0.0, 500.0, 1900.0, 2000.0, 2500.0]
 
     # Create the mesh
-    mesh, layers, metrics = extruded_mesh(xw, depths)
+    thickness = diff(depths)
+    nz = [10,10,30,10]
+    mesh, layers, metrics = extruded_mesh(xw, depths, hz = thickness./nz)
 
     permeability = [1e-3, 1e-1, 5e-1, 1e-3]*darcy
     porosity = [0.01, 0.2, 0.35, 0.01]
@@ -97,12 +99,10 @@ function geothermal_doublet(;
     forces = setup_reservoir_forces(model, control=control, bc=bc)
     
     # Set up the schedule
-    forces, dt = make_production_schedule(forces, missing, missing;
-        high_months = high_months,
-        low_months = low_months,
-        report_interval = report_interval,
-        num_years = num_years
-    )
+    @assert report_interval <= year
+    n = Int64(ceil(year/report_interval))
+    dt = year/n;
+    dt = fill(dt, n*num_years)
 
     case = JutulCase(model, dt, forces; state0 = state0)
 
