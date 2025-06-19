@@ -36,8 +36,9 @@ function geothermal_doublet(;
 
     # Create the mesh
     thickness = diff(depths)
-    nz = [5,10,30,5]
-    mesh, layers, metrics = extruded_mesh(xw, depths, hz = thickness./nz, offset_rel = 2.5)
+    nz = [4,10,20,4]
+    mesh, layers, metrics = extruded_mesh(xw, depths;
+    hxy_min = 100/3, hxy_max = 750, hz = thickness./nz, dist_min_factor = 3.0, offset_rel = 2.5)
 
     permeability = [1e-3, 5e-2, 1.0, 1e-3]*darcy
     porosity = [0.01, 0.2, 0.35, 0.01]
@@ -46,6 +47,8 @@ function geothermal_doublet(;
     heat_capacity = [1500, 900, 900, 1500]*joule/kilogram/Kelvin
 
     permeability = permeability[layers]
+    # permeability = repeat(permeability', 3, 1)
+    # permeability[3,:] .*= 0.25 # Reduce vertical permeability
     porosity = porosity[layers]
     density = density[layers]
     thermal_conductivity = thermal_conductivity[layers]
@@ -115,5 +118,14 @@ function geothermal_doublet(;
 
     case = JutulCase(model, dt, forces; state0 = state0)
 
-    return case
+    x = reinterpret(reshape, Float64, mesh.node_points)
+    x_min = minimum(x, dims=2)
+    x_max = maximum(x, dims=2)
+    dx = x_max .- x_min
+    aspect = Tuple(dx./maximum(dx))
+
+    plot_args = (aspect = aspect,)
+
+    return case, plot_args
+
 end

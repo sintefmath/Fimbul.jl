@@ -3,14 +3,14 @@ using HYPRE
 using GLMakie
 
 # ## Set up case
-case = Fimbul.geothermal_doublet()
+case, plot_args = Fimbul.geothermal_doublet()
 
 # ## Inspect model
 # We first plot the computational mesh and wells. The mesh is refined around the
 # wells in the horizontal plane and vertically in and near the target aquifer.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (1200, 800))
-ax = Axis3(fig[1, 1], zreversed = true)
+ax = Axis3(fig[1, 1], zreversed = true, aspect = plot_args.aspect)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 1.0)
 wells = get_model_wells(case.model)
 for (k, w) in wells
@@ -18,13 +18,19 @@ for (k, w) in wells
 end
 display(GLMakie.Screen(), fig)
 
-plot_reservoir(case.model)
+# ### Plot reservoir properties
+# Next, we Visualize the reservoir interactively.
+plot_reservoir(case.model; plot_args...)
 
-# ## Simulate
-results = simulate_reservoir(case; info_level = 2)
+# ## Simulate geothermal energy production
+# We simulate the geothermal doublet for 200 years
+results = simulate_reservoir(case; info_level = 0)
 
 # ## Visualize results
-plot_reservoir(case.model, results.states)
+# We first plot the reservoir state interactively. You can notice how the
+# cold front propagates from the injector well by filtering out high values.
+plot_reservoir(case.model, results.states;
+colormap = :seaborn_icefire_gradient, plot_args...)
 
 # ##
 plot_well_results(results.wells)
@@ -47,7 +53,7 @@ for (n, state) in enumerate(states)
 end
 
 timesteps = Int64.(ceil.(range(1, length(states), length = 6)))
-timesteps = [1, 10, 50, 100, 200]
+timesteps = [7, 21, 65, 200]
 for n in timesteps
     T = states[n][:Producer][:Temperature][2:end]
     T = convert_from_si.(T, :Celsius)
@@ -66,30 +72,29 @@ for state in results.states
     end
     push!(Δstates, Δstate)
 end
-plot_reservoir(case.model, Δstates)
+plot_reservoir(case.model, Δstates; colormap = :seaborn_icefire_gradient, plot_args...)
 
-for n in timesteps
-    fig = Figure(size = (1200, 800))
-    ax = Axis3(fig[1, 1], zreversed = true)
+##
+T_min = minimum(Δstates[end][:Temperature])
+T_max = maximum(Δstates[1][:Temperature])
+fig = Figure(size = (1500, 600))
+for (i, n) in enumerate(timesteps)
+    ax = Axis3(fig[1, i];
+    title = "$(times[n]) years",
+    zreversed = true,
+    elevation = plot_args.elevation,
+    aspect = :data)
     ΔT = Δstates[n][:Temperature]
-    cells = ΔT .< -15.0 .&& geo.cell_centroids[2, :] .< 0.0
-    plot_cell_data!(ax, msh, ΔT; cells = cells, colormap = :seaborn_icefire_gradient)
-    plot_well!(ax, msh, wells[:Injector]; color = :black, linewidth = 4)
+    cells = geo.cell_centroids[1, :] .> -1000.0/2
+    cells = cells .&& geo.cell_centroids[2, :] .> 50.0
+
+    plot_cell_data!(ax, msh, ΔT; 
+        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max))
+    plot_well!(ax, msh, wells[:Injector]; color = :black, linewidth = 4, top_factor = 0.4, markersize = 0.0)
     plot_well!(ax, msh, wells[:Producer]; color = :black, linewidth = 4)
-    display(GLMakie.Screen(), fig)
+    hidedecorations!(ax)
 end
-
-##
-msh = physical_representation(reservoir_model(case.model).data_domain)
-fig = Figure(size = (1200, 800))
-ax = Axis3(fig[1, 1], zreversed = true)
-Jutul.plot_mesh_edges!(ax, msh, alpha = 1.0)
-wells = get_model_wells(case.model)
-for (k, w) in wells
-    plot_well!(ax, msh, w)
-end
+Colorbar(fig[2, 1:length(timesteps)]; 
+    colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 
+    label = "ΔT (C)", vertical = false)
 display(GLMakie.Screen(), fig)
-
-##
-
-cc = map(bc -> bc.cell, case.forces[:Reservoir].bc)
