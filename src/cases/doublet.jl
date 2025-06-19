@@ -14,7 +14,7 @@ function geothermal_doublet(;
     spacing_top = 100.0
     spacing_bottom = 1000.0
     depth_1 = 800.0
-    depth_2 = 2500.0
+    depth_2 = 2495.0
 
     trajectory_inj = [
         -spacing_top/2 0.0 0.0;
@@ -66,7 +66,7 @@ function geothermal_doublet(;
     mesh_layer = repeat(1:num_layers, metrics.nc_2d)
 
     trajectory_inj[:,2] .+= 0.5*metrics.hxy_min
-    cells_inj = Jutul.find_enclosing_cells(mesh, trajectory_inj, n = 100)
+    cells_inj = Jutul.find_enclosing_cells(mesh, trajectory_inj, n = 1000)
     ix = unique(i -> mesh_layer[cells_inj[i]], eachindex(cells_inj))
     cells_inj = cells_inj[ix]
     WI = map(c -> compute_peaceman_index(mesh, permeability[c], 0.1, c), cells_inj)
@@ -75,7 +75,7 @@ function geothermal_doublet(;
         name = :Injector, WI = WI, simple_well = false)
 
     trajectory_prod[:,2] .+= 0.5*metrics.hxy_min
-    cells_prod = Jutul.find_enclosing_cells(mesh, trajectory_prod, n = 100)
+    cells_prod = Jutul.find_enclosing_cells(mesh, trajectory_prod, n = 1000)
     ix = unique(i -> mesh_layer[cells_prod[i]], eachindex(cells_prod))
     cells_prod = cells_prod[ix]
     WI = map(c -> compute_peaceman_index(mesh, permeability[c], 0.1, c), cells_prod)

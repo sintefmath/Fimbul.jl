@@ -3,7 +3,7 @@ using HYPRE
 using GLMakie
 
 # ## Set up case
-case, plot_args = Fimbul.geothermal_doublet()
+case, plot_args = Fimbul.geothermal_doublet();
 
 # ## Inspect model
 # We first plot the computational mesh and wells. The mesh is refined around the
@@ -82,7 +82,7 @@ for (i, n) in enumerate(timesteps)
     ax = Axis3(fig[1, i];
     title = "$(times[n]) years",
     zreversed = true,
-    elevation = plot_args.elevation,
+    elevation = pi/12,
     aspect = :data)
     ΔT = Δstates[n][:Temperature]
     cells = geo.cell_centroids[1, :] .> -1000.0/2
@@ -91,7 +91,7 @@ for (i, n) in enumerate(timesteps)
     plot_cell_data!(ax, msh, ΔT; 
         cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max))
     plot_well!(ax, msh, wells[:Injector]; color = :black, linewidth = 4, top_factor = 0.4, markersize = 0.0)
-    plot_well!(ax, msh, wells[:Producer]; color = :black, linewidth = 4)
+    plot_well!(ax, msh, wells[:Producer]; color = :black, linewidth = 4, markersize = 0.0)
     hidedecorations!(ax)
 end
 Colorbar(fig[2, 1:length(timesteps)]; 
