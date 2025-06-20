@@ -4,7 +4,7 @@ darcy = si_unit(:darcy)
 
 function geothermal_doublet(;
     temperature_inj = convert_to_si(20.0, :Celsius),
-    rate = 250meter^3/hour,
+    rate = 300meter^3/hour,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 200,
     report_interval = si_unit(:year),
