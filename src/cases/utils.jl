@@ -57,6 +57,7 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
             start_month = "January"
         end
     end
+    println("Start month: ", start_month)
     start_monthno = findall(monthname.(1:12) .== start_month)[1]
     month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
     # Set up schedule for each year
@@ -92,11 +93,33 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
 
 end
 
-function set_dirichlet_bcs(model; 
+function make_production_schedule(forces_high, forces_low, forces_rest;
+        high_months::Union{Nothing, Vector{String}} = [
+            "January", "February", "March", "April", "May", "June",
+            "July", "August", "September", "October", "November", "December"],
+        low_months::Union{Nothing, Vector{String}} = nothing,
+        kwargs...
+    )
+
+    return make_utes_schedule(forces_high, forces_low, forces_rest;
+        charge_months = high_months,
+        discharge_months = low_months,
+        kwargs...
+    )
+
+end
+
+function set_dirichlet_bcs(model, subset = :all;
         pressure_surface = 1atm, 
         temperature_surface = convert_to_si(10.0, :Celsius),
-        geothermal_gradient = 0.03Kelvin/meter
+        geothermal_gradient = 0.03Kelvin/meter,
     )
+
+    if subset == :all
+        subset = [:top, :sides, :bottom]
+    elseif subset isa Symbol
+        subset = [subset]
+    end
 
     rmodel = reservoir_model(model)
     mesh = physical_representation(rmodel.data_domain)
@@ -109,14 +132,35 @@ function set_dirichlet_bcs(model;
     T = z -> temperature_surface .+ dTdz*z
 
     # Set boundary conditions
-    z_bc = geo.boundary_centroids[3, :]
-    z_hat = z_bc .- minimum(z_bc)
-    bc_cells = geo.boundary_neighbors
-    bc = flow_boundary_condition(bc_cells, rmodel.data_domain, p(z_hat), T(z_hat));
+    z_bdr = geo.boundary_centroids[3, :]
+    cells_bdr = geo.boundary_neighbors
+    z0 = minimum(z_bdr)
+
+    top = isapprox.(z_bdr, minimum(z_bdr))
+    bottom = isapprox.(z_bdr, maximum(z_bdr))
+    sides = .!top .&& .!bottom
+
+    cells_bc = Int64[]
+    z_bc = Float64[]
+    for s in subset
+        if s == :top
+            ix = top
+        elseif s == :bottom
+            ix = bottom
+        elseif s == :sides
+            ix = sides
+        else
+            @error "Unknown boundary condition subset: $s"
+        end
+        push!(cells_bc, cells_bdr[ix]...)
+        push!(z_bc, z_bdr[ix]...)
+    end
+    z_hat = z_bc .- z0
+    bc = flow_boundary_condition(cells_bc, rmodel.data_domain, p(z_hat), T(z_hat));
 
     # Set initial conditions
     z_cells = geo.cell_centroids[3, :]
-    z_hat = z_cells .- minimum(z_cells)
+    z_hat = z_cells .- z0
     state0 = setup_reservoir_state(model,
         Pressure = p(z_hat),
         Temperature = T(z_hat)

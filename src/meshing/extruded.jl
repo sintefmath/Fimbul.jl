@@ -108,7 +108,7 @@ function extruded_mesh(cell_constraints, depths;
     nc_2d = Int(number_of_cells(mesh)/nl)
     layers = repeat(layers, nc_2d)
 
-    metrics = (hxy_min = hxy_min, hxy_max = hxy_max, hz = hz, 
+    metrics = (nc_2d = nc_2d, hxy_min = hxy_min, hxy_max = hxy_max, hz = hz, 
         offset = offset, dist_min = dist_min, dist_max = dist_max, 
         boundary = xb_outer)
 
