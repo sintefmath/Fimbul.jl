@@ -34,9 +34,7 @@ module Fimbul
     export well_mismatch_thermal
     export calibrate_case
 
-    using GLMakie
-    include("visualization/well_data_plotting.jl")
-    
-    export plot_well_data
+    include("ext/ext.jl")
+    export plot_well_data, plot_mswell_values!
 
 end
