@@ -5,7 +5,6 @@ version = "1.0.0-DEV"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
-GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
 HYPRE = "b5ffcf37-a2bd-41ab-a3da-4bd9bc8ad771"
 Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
@@ -16,9 +15,14 @@ LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
 Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
 Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
+[weakdeps]
+GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+
+[extensions]
+FimbulGLMakieExt = "GLMakie"
+
 [compat]
 Dates = "1.11.0"
-GLMakie = "0.11.3, 0.12"
 Gmsh = "0.3.1"
 HYPRE = "1.7.0"
 Integrals = "4.5.0"
