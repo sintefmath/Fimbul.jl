@@ -38,44 +38,44 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 
 L = 100.0
 T_b = to_kelvin(10.0)
-T_0 = x -> to_kelvin(90.0).*sin(π*x/L) .+ T_b;
+T_0 = x -> to_kelvin(90.0) .* sin(π * x / L) .+ T_b;
 case, sol, x, t = analytical_1d(
-    L = L, temperature_boundary = T_b, initial_condition = T_0,
-    num_cells = 100, num_steps = 100);
+    L=L, temperature_boundary=T_b, initial_condition=T_0,
+    num_cells=100, num_steps=100);
 
-results = simulate_reservoir(case, info_level = 0)
+results = simulate_reservoir(case, info_level=0)
 
 ## Plot the temperature profile
 # We set up a simple function for plotting the numerical and analytical
 # temperature profiles at a selected number of timesteps from the initial time
 # up to a fraction of the total time.
 function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n)
-    fig = Figure(size = (800, 600), fontsize = 20)
-    ax = Axis(fig[1, 1]; xlabel = "Distance (m)", ylabel = "Temperature (°C)")
+    fig = Figure(size=(800, 600), fontsize=20)
+    ax = Axis(fig[1, 1]; xlabel="Distance (m)", ylabel="Temperature (°C)")
 
-    x_a = range(0, 100, length = 500)
+    x_a = range(0, 100, length=500)
 
     N = length(t_n)
-    α = (N^(1/(n-1)) - 1)
-    timesteps = Int.(round.((1 + α).^(1:n-1)))
+    α = (N^(1 / (n - 1)) - 1)
+    timesteps = Int.(round.((1 + α) .^ (1:n-1)))
     pushfirst!(timesteps, 0) # Add initial time
-    
-    colors = cgrad(:Spectral, n, categorical = true)
-    for (i,k) = enumerate(timesteps)
+
+    colors = cgrad(:Spectral, n, categorical=true)
+    for (i, k) = enumerate(timesteps)
         if k == 0
             T_n = to_celsius.(case.state0[:Reservoir][:Temperature])
-            lines!(ax, x_n, T_n, linestyle = (:dash, 1), linewidth = 6, 
-                color = colors[i], label = "Analytical")
-            lines!(ax, x_n, T_n, linewidth = 2, color = colors[i], label = "Numerical")
+            lines!(ax, x_n, T_n, linestyle=(:dash, 1), linewidth=6,
+                color=colors[i], label="Analytical")
+            lines!(ax, x_n, T_n, linewidth=2, color=colors[i], label="Numerical")
         else
             T_a = to_celsius.(sol_a(x_a, t_n[k]))
             T_n = to_celsius.(sol_n.states[k][:Temperature])
-            lines!(ax, x_a, T_a, linestyle = (:dash, 1), linewidth = 6, 
-                color = colors[i])
-            lines!(ax, x_n, T_n, linewidth = 2, color = colors[i])
+            lines!(ax, x_a, T_a, linestyle=(:dash, 1), linewidth=6,
+                color=colors[i])
+            lines!(ax, x_n, T_n, linewidth=2, color=colors[i])
         end
     end
-    Legend(fig[1,2], ax)
+    Legend(fig[1, 2], ax)
     fig
 end
 
@@ -85,20 +85,20 @@ plot_temperature_1d(case, results, sol, x, t, 10)
 # We now consider a more complex initial condition where the initial temperature
 # profile is piecewise constant, with four different constant values.
 T_0 = x ->
-    to_kelvin(100.0).*(x < 25) + 
-    to_kelvin(20.0).*(25 <= x < 50) +
-    to_kelvin(50.0).*(50 <= x < 75) +
-    to_kelvin(75.0).*(75 <= x);
+    to_kelvin(100.0) .* (x < 25) +
+    to_kelvin(20.0) .* (25 <= x < 50) +
+    to_kelvin(50.0) .* (50 <= x < 75) +
+    to_kelvin(75.0) .* (75 <= x);
 
 # We can still compute the analytical solution using the formula above, but the
 # sum will now be an infinite series. The function `analytical_1d` handles this
 # pragmatically by cutting off the series when the contribution of the next term
 # is less than a 1e-6.
 case, sol, x, t = analytical_1d(
-    L = L, temperature_boundary = T_b, initial_condition = T_0,
-    num_cells = 500, num_steps = 500);
+    L=L, temperature_boundary=T_b, initial_condition=T_0,
+    num_cells=500, num_steps=500);
 
-results = simulate_reservoir(case, info_level = 0)
+results = simulate_reservoir(case, info_level=0)
 plot_temperature_1d(case, results, sol, x, t, 10)
 
 ## ### Convergence study
@@ -110,12 +110,12 @@ plot_temperature_1d(case, results, sol, x, t, 10)
 # first order accurate in time.
 
 # We use the same initial conditions as in the first example above
-T_0 = x -> to_kelvin(90.0).*sin(π*x/L) .+ T_b;
+T_0 = x -> to_kelvin(90.0) .* sin(π * x / L) .+ T_b;
 setup_case = (nx, nt) -> analytical_1d(
-    L = L, temperature_boundary = T_b, initial_condition = T_0,
-    num_cells = nx, num_steps = nt);
+    L=L, temperature_boundary=T_b, initial_condition=T_0,
+    num_cells=nx, num_steps=nt);
 
-function convergence_1d(setup_fn, type = :space; Nx = 2 .^(range(3, 6)), Nt = 2 .^(range(3, 6)))
+function convergence_1d(setup_fn, type=:space; Nx=2 .^ (range(3, 6)), Nt=2 .^ (range(3, 6)))
     if type == :space
         Nt = 10000
     elseif type == :time
@@ -126,29 +126,29 @@ function convergence_1d(setup_fn, type = :space; Nx = 2 .^(range(3, 6)), Nt = 2 
     end
     Δx, Δt, err = [], [], []
     for nx in Nx
-        dx = L/nx
+        dx = L / nx
         push!(Δx, dx)
         for nt in Nt
             out = setup_fn(nx, nt)
             case, sol, x, t = out
             dt = t[2] - t[1]
             push!(Δt, dt)
-            
+
             sim, cfg = setup_reservoir_simulator(case;
                 relaxation=true,
                 tol_cnv=1e-8,
                 info_level=0,
-                max_timestep = Inf,
-                timesteps = :none
-            );
+                max_timestep=Inf,
+                timesteps=:none
+            )
             cfg[:tolerances][:Reservoir][:default] = 1e-8
 
-            results = simulate_reservoir(case, simulator = sim, config = cfg)
+            results = simulate_reservoir(case, simulator=sim, config=cfg)
             ϵ = 0.0
             for k = 1:nt
                 T_n = results.states[k][:Temperature]
                 T_a = sol(x, t[k])
-                ϵ += dt.*norm(dx.*(T_n .- T_a))
+                ϵ += dt .* norm(dx .* (T_n .- T_a), 2)
             end
 
             push!(err, ϵ)
@@ -169,13 +169,13 @@ end
 Δx, _, err_space = convergence_1d(setup_case, :space)
 
 Δx ./= Δx[1]
-opt = Δx.^2
-fig = Figure(size = (800, 600), fontsize = 20)
-ax = Axis(fig[1, 1]; xlabel = "Δx/Δx₀", ylabel = "Error", xscale = log2, yscale = log2)
-lines!(ax, Δx, opt, linewidth = 4, color = :black, linestyle = :dash, label = "2nd order")
-scatter!(ax, Δx, err_space, marker = :rect, markersize = 20, color = :black)
-lines!(ax, Δx, err_space, linewidth = 2, color = :black, label = "Numerical")
-Legend(fig[1,2], ax)
+opt = Δx .^ 2
+fig = Figure(size=(800, 600), fontsize=20)
+ax = Axis(fig[1, 1]; xlabel="Δx/Δx₀", ylabel="Error", xscale=log2, yscale=log2)
+lines!(ax, Δx, opt, linewidth=4, color=:black, linestyle=:dash, label="2nd order")
+scatter!(ax, Δx, err_space, marker=:rect, markersize=20, color=:black)
+lines!(ax, Δx, err_space, linewidth=2, color=:black, label="Numerical")
+Legend(fig[1, 2], ax)
 fig
 
 ## ### Convergence in time
@@ -186,10 +186,10 @@ _, Δt, err_time = convergence_1d(setup_case, :time)
 
 Δt ./= Δt[1]
 opt = copy(Δt)
-fig = Figure(size = (800, 600), fontsize = 20)
-ax = Axis(fig[1, 1]; xlabel = "Δt/Δt₀", ylabel = "Error", xscale = log2, yscale = log2)
-lines!(ax, Δt, opt, linewidth = 4, color = :black, linestyle = :dash, label = "1st order")
-scatter!(ax, Δt, err_time, marker = :rect, markersize = 20, color = :black, label = "Numerical")
-lines!(ax, Δt, err_time, linewidth = 2, color = :black)
-Legend(fig[1,2], ax)
+fig = Figure(size=(800, 600), fontsize=20)
+ax = Axis(fig[1, 1]; xlabel="Δt/Δt₀", ylabel="Error", xscale=log2, yscale=log2)
+lines!(ax, Δt, opt, linewidth=4, color=:black, linestyle=:dash, label="1st order")
+scatter!(ax, Δt, err_time, marker=:rect, markersize=20, color=:black, label="Numerical")
+lines!(ax, Δt, err_time, linewidth=2, color=:black)
+Legend(fig[1, 2], ax)
 fig
