@@ -25,7 +25,7 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 # ``T(x, t) = T_b + \sum_{k = 1}^{\infty} C_k \exp\big(-\alpha \frac{(k\pi}{L}\big^2 t\right) \sin\big(\frac{k\pi}{L} x)``
 #
 # where the coefficients $C_k$ are determined by the initial condition and
-# boundary conditions:xs
+# boundary conditions:
 #
 # ``C_k = \frac{2}{L} \int_0^L (T_0(x) - T_b) \sin\big(\frac{n\pi}{L} x) dx``
 #
@@ -49,13 +49,17 @@ results = simulate_reservoir(case, info_level = 0)
 # We set up a simple function for plotting the numerical and analytical
 # temperature profiles at a selected number of timesteps from the initial time
 # up to a fraction of the total time.
-function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n, frac)
+function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n)
     fig = Figure(size = (800, 600), fontsize = 20)
     ax = Axis(fig[1, 1]; xlabel = "Distance (m)", ylabel = "Temperature (°C)")
 
     x_a = range(0, 100, length = 500)
-    timesteps = Int.(round.(range(0,frac*length(t_n),n)))
 
+    N = length(t_n)
+    α = (N^(1/(n-1)) - 1)
+    timesteps = Int.(round.((1 + α).^(1:n-1)))
+    pushfirst!(timesteps, 0) # Add initial time
+    
     colors = cgrad(:Spectral, n, categorical = true)
     for (i,k) = enumerate(timesteps)
         if k == 0
@@ -75,7 +79,7 @@ function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n, frac)
     fig
 end
 
-plot_temperature_1d(case, results, sol, x, t, 10, 0.25)
+plot_temperature_1d(case, results, sol, x, t, 10)
 
 ## ## Piecewise constant initial conditions
 # We now consider a more complex initial condition where the initial temperature

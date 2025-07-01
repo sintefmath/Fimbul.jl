@@ -14,9 +14,9 @@ using GLMakie
 case, plot_args = Fimbul.geothermal_doublet();
 
 # ## Inspect model
-# We first plot the computational mesh and wells.  The mesh is
-# refined around the wells in the horizontal plane and vertically in and near
-# the target aquifer.
+# We first plot the computational mesh and wells. The mesh is refined around
+# the wells in the horizontal plane and vertically in and near the target
+# aquifer.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (1200, 800))
 ax = Axis3(fig[1, 1], zreversed = true, aspect = plot_args.aspect)
@@ -33,8 +33,9 @@ plot_reservoir(case.model; plot_args...)
 
 # ## Simulate geothermal energy production
 # We simulate the geothermal doublet for 200 years. The producer is set to
-# inject at a rate of 300 m^3/hour with a lower BHP limit of 1 bar, while the
-# injector is set to reinject the produced water at a temperature of 20 °C.
+# produce at a rate of 300 m^3/hour with a lower BHP limit of 1 bar, while the
+# injector is set to reinject the produced water, lowered to a temperature of 20
+# °C.
 results = simulate_reservoir(case; info_level = 0)
 
 # ## Visualize results
@@ -60,14 +61,14 @@ ax = Axis(fig[1, 1], xlabel = "Temperature (°C)", ylabel = "Depth (m)", yrevers
 colors = cgrad(:seaborn_icefire_gradient, length(states), categorical = true)
 for (n, state) in enumerate(states)
     T = convert_from_si.(state[:Producer][:Temperature], :Celsius)
-    Fimbul.plot_mswell_values!(ax, case.model, :Producer, T;
+    plot_mswell_values!(ax, case.model, :Producer, T;
     geo = geo, linewidth = 4, color = colors[n], alpha = 0.25)
 end
 
 timesteps = [7, 21, 65, 200]
 for n in timesteps
     T = convert_from_si.(states[n][:Producer][:Temperature], :Celsius)
-    Fimbul.plot_mswell_values!(ax, case.model, :Producer, T;
+    plot_mswell_values!(ax, case.model, :Producer, T;
     geo = geo, linewidth = 4, color = colors[n], label = "$(times[n]) years")
 end
 axislegend(ax; position = :lt, fontsize = 20)
