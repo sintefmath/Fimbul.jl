@@ -99,7 +99,7 @@ case, sol, x, t = analytical_1d(
     num_cells = 500, num_steps = 500);
 
 results = simulate_reservoir(case, info_level = 0)
-plot_temperature_1d(case, results, sol, x, t, 10, 0.1)
+plot_temperature_1d(case, results, sol, x, t, 10)
 
 ## ### Convergence study
 # Next, we perform a convergence study by simulating the same problem with
