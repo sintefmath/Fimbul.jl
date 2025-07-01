@@ -1,4 +1,4 @@
-function plot_well_data(time, reference, other; 
+function Fimbul.plot_well_data(time, reference, other; 
     wells = :all, 
     names = missing, 
     field = :energy, 
@@ -61,7 +61,7 @@ function get_field(data, well, field)
 
 end
 
-function plot_mswell_values!(ax, model, well, values; label = nothing, geo = missing, kwargs...)
+function Fimbul.plot_mswell_values!(ax, model, well, values; label = nothing, geo = missing, kwargs...)
 
     if ismissing(geo)
         rmodel = reservoir_model(model)
