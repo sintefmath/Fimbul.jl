@@ -4,7 +4,7 @@ function well_mismatch_thermal(
     states_f,
     state_c,
     dt,
-    step_no,
+    step_info,
     forces;
     w_bhp = 1/(10.0si_unit(:bar)),
     w_energy = 1/(si_unit(:mega)*si_unit(:watt)),
@@ -12,6 +12,7 @@ function well_mismatch_thermal(
     scale = 1.0
 )
 
+    step_no = step_info[:step]
     state_f = states_f[step_no]
     get_property = (state, well, prop) -> state[well][prop][1]
     mismatch = 0.0
