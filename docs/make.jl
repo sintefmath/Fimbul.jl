@@ -67,10 +67,9 @@ end
 
 function example_info_footer(subdir, exname)
     return "\n\n# ## Example on GitHub\n"*
-    "FIX THIS!"
-    # "# If you would like to run this example yourself, it can be downloaded from "*
-    # "the JutulDarcy.jl GitHub repository [as a script](https://github.com/sintefmath/JutulDarcy.jl/blob/main/examples/$subdir/$exname.jl), "*
-    # "or as a [Jupyter Notebook](https://github.com/sintefmath/JutulDarcy.jl/blob/gh-pages/dev/final_site/notebooks/$subdir/$exname.ipynb)"
+    "# If you would like to run this example yourself, it can be downloaded from "*
+    "the JutulDarcy.jl GitHub repository [as a script](https://github.com/sintefmath/JutulDarcy.jl/blob/main/examples/$subdir/$exname.jl), "*
+    "or as a [Jupyter Notebook](https://github.com/sintefmath/JutulDarcy.jl/blob/gh-pages/dev/final_site/notebooks/$subdir/$exname.ipynb)"
 end
 
 function update_footer(content, subdir, exname)
@@ -219,10 +218,10 @@ function build_fimbul_docs(
         #         ],
         #     ],
         "Examples" => examples_markdown,
-        "Validation" => [
-            "man/validation.md",
-            "Models" => validation_markdown,
-        ]
+        # "Validation" => [
+        #     "man/validation.md",
+        #     "Models" => validation_markdown,
+        # ]
     ]
     # for (k, subpages) in build_pages
     #     println("$k")
