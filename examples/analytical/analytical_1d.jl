@@ -1,4 +1,4 @@
-## # Heat equation in 1D
+# # Heat equation in 1D
 # This example goes through the the classical solution of the heat equation in
 # 1D, and compares the analytical solution to the numerical solution obtained
 # using JutulDary to verify the numerical scheme.
@@ -10,7 +10,7 @@ using GLMakie
 to_kelvin = T -> convert_to_si(T, :Celsius)
 to_celsius = T -> convert_from_si(T, :Celsius)
 
-## ## The 1D heat equation
+# ## The 1D heat equation
 # We consider a piece of solid rock with length $L$ and constant thermal
 # donductivity $\lambda$, and heat capacity $C_p$ and density $\rho$, for
 # which conservation of energy takes the form of the archetypical heat equation:
@@ -22,7 +22,7 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 # initial conditions T(0, x) = T_0(x), the solution to this equation can be
 # found in any textbook on partial differential equations, and is given by
 #
-# ``T(x, t) = T_b + \sum_{k = 1}^{\infty} C_k \exp\big(-\alpha \frac{(k\pi}{L}\big^2 t\right) \sin\big(\frac{k\pi}{L} x)``
+# ``T(x, t) = T_b + \sum_{k = 1}^{\infty} C_k \exp\left(-\alpha \big(\frac{(k\pi}{L}\big)^2 t\right) \sin\big(\frac{k\pi}{L} x\big)``
 #
 # where the coefficients $C_k$ are determined by the initial condition and
 # boundary conditions:
@@ -45,10 +45,10 @@ case, sol, x, t = analytical_1d(
 
 results = simulate_reservoir(case, info_level=0)
 
-## Plot the temperature profile
-# We set up a simple function for plotting the numerical and analytical
-# temperature profiles at a selected number of timesteps from the initial time
-# up to a fraction of the total time.
+# ### Plot the temperature profile
+# We set up a function for plotting the numerical and analytical temperature
+# profiles at a selected number of timesteps from the initial time up to a
+# fraction of the total time.
 function plot_temperature_1d(case, sol_n, sol_a, x_n, t_n, n)
     fig = Figure(size=(800, 600), fontsize=20)
     ax = Axis(fig[1, 1]; xlabel="Distance (m)", ylabel="Temperature (°C)")
@@ -81,7 +81,7 @@ end
 
 plot_temperature_1d(case, results, sol, x, t, 10)
 
-## ## Piecewise constant initial conditions
+# ## Piecewise constant initial conditions
 # We now consider a more complex initial condition where the initial temperature
 # profile is piecewise constant, with four different constant values.
 T_0 = x ->
@@ -101,7 +101,7 @@ case, sol, x, t = analytical_1d(
 results = simulate_reservoir(case, info_level=0)
 plot_temperature_1d(case, results, sol, x, t, 10)
 
-## ### Convergence study
+# ## Convergence study
 # Next, we perform a convergence study by simulating the same problem with
 # increasing number of cells and timesteps, and comparing the numerical and
 # analytical solutions. The default two-point flux apporximation (TPFA) scheme
@@ -159,7 +159,7 @@ function convergence_1d(setup_fn, type=:space; Nx=2 .^ (range(3, 6)), Nt=2 .^ (r
 
 end
 
-## ### Convergence in space
+# ### Convergence in space
 # We simulate the problem with increasing number of cells and compare the
 # numerical and analytical solutions. To eliminate the error contribution from
 # temporal discretization, we use a high number of timesteps (10 000). This
@@ -178,7 +178,7 @@ lines!(ax, Δx, err_space, linewidth=2, color=:black, label="Numerical")
 Legend(fig[1, 2], ax)
 fig
 
-## ### Convergence in time
+# ### Convergence in time
 # Next, we study convergene in time, this time setting the number of cells to 10
 # 000 to mitigate the spatial error. Again, the method converges as expected,
 # with first order accuracy in time.

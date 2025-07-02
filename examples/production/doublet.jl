@@ -25,7 +25,7 @@ wells = get_model_wells(case.model)
 for (k, w) in wells
     plot_well!(ax, msh, w)
 end
-display(GLMakie.Screen(), fig)
+fig
 
 # ### Plot reservoir properties
 # Next, we visualize the reservoir interactively.
@@ -72,7 +72,7 @@ for n in timesteps
     geo = geo, linewidth = 4, color = colors[n], label = "$(times[n]) years")
 end
 axislegend(ax; position = :lt, fontsize = 20)
-display(GLMakie.Screen(), fig)
+fig
 
 # We can clearly see the footprint of the cold front in the aquifer (2400-2500 m
 # depth) as it near the production well.
@@ -119,4 +119,4 @@ end
 Colorbar(fig[2, 1:length(timesteps)]; 
     colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 
     label = "ΔT (°C)", vertical = false)
-display(GLMakie.Screen(), fig)
+fig

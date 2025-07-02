@@ -18,7 +18,7 @@ using Fimbul # Fimbul module
 using HYPRE # Iterative linear solvers
 using GLMakie # Visualization
 
-## # Set up model
+# # Set up model
 # We use the first realization of the EGG benchmark model [cite], and place a
 # well doublet near the center of the domain. The fluid model is a single-phase
 # water system with PVT formulations taken from the NIST database [cite], which
@@ -35,26 +35,28 @@ using GLMakie # Visualization
 hifi = egg_ates(;
     use_bc = false, report_interval = si_unit(:year)/12/4)
 
-## ## Visualize the model
+# ## Visualize the model
 # We visualize the model interactively using `plot_reservoir`.
 plot_reservoir(hifi, reservoir_model(hifi.model).data_domain)
 
-## ## Simulate high-fidelity model
+# ## Simulate high-fidelity model
 # We set up a simulator for the high-fidelity model and simulate the system.
 results_hifi = simulate_reservoir(hifi)
 
-## ### Visualize the reservoir states
+# ### Visualize the reservoir states
 # We visualize the results of the high-fidelity simulation interactively using
 # `plot_reservoir`. We see that a hot thermal plume develops around the main
 # well, while a cold plume develops around the supporting well. After a few
 # cycles, the plumes start to interact slightly.
-plot_reservoir(hifi, results_hifi.states, step = length(hifi.dt))
+plot_reservoir(hifi, results_hifi.states;
+    key = :Temperature, step = length(hifi.dt),
+    colormap = :seaborn_icefire_gradient)
 
-## ### Inspect well output
+# ### Inspect well output
 # We can also inspect the well output using `plot_well_results`.
 plot_well_results(results_hifi.wells)
 
-## ## Construct proxy model
+# ## Construct proxy model
 # The high-fidelity model is posed on a logicaly Cartesian mesh with 60×60×7
 # cells. We construct a proxy models by coarsening the high-fidelity model to
 # 15×15×1 cells using the `coarsen_reservoir_case` function.
@@ -64,9 +66,11 @@ proxy = JutulDarcy.coarsen_reservoir_case(hifi, coarsening,
     setup_arg = (block_backend = true,);
 )
 results_proxy = simulate_reservoir(proxy, info_level=0)
-plot_reservoir(proxy, results_proxy.states, step = length(proxy.dt))
+plot_reservoir(proxy, results_proxy.states;
+    key = :Temperature, step = length(hifi.dt),
+    colormap = :seaborn_icefire_gradient)
 
-## ### Compare proxy models to high-fidelity model
+# ### Compare proxy models to high-fidelity model
 # We compare the well output of the proxy models to the high-fidelity model.
 plot_well_results([results_hifi.wells, results_proxy.wells],
     names = ["High-fidelity", "Proxy"])
@@ -103,7 +107,7 @@ obj0 = Jutul.evaluate_objective(
     proxy.dt[1:n_steps], proxy.forces[1:n_steps])
 println("Initial proxy mismatch: $obj0")
 
-## ## Set up optimization
+# ## Set up optimization
 # We start by declaring the parameters to be optimized and their bounds
 parameters = setup_parameters(proxy.model)
 opt_config = optimization_config(proxy.model, parameters,
@@ -146,7 +150,7 @@ for (k, v) in opt_config
     end
 end
 
-## ### Calibrate proxy model
+# ### Calibrate proxy model
 # Setting up the calibration requires a few steps, which has been conveniently
 # implemented in the `calibrate_case` utility function. We use the LBFGS
 # optimization algorithm, which has a number parameters that can be set,
@@ -164,15 +168,18 @@ obj = Jutul.evaluate_objective(
     proxy_cal.dt[1:n_steps], proxy_cal.forces[1:n_steps])
 println("Final proxy mismatch: $obj")
 
-## ### Plot the calibrated results
+# ### Plot the calibrated results
 # Finally, we plot the resulting prduction temperatures for the high-fidelity
 # and proxy model. The calibrated proxy does a good job of reproducing the
 # temperatures used for calibration, but the prediction for the remaining three
 # years of storage are not perfect, with the calibrated proxy model being
 # slightly worse that the initial proxy model for WellA in the final year.
+fig = Figure(size = (800, 1200), fontsize = 20)
 time_tot = results_hifi.wells.time/si_unit(:year)
-for well in well_symbols(hifi.model)
-    fig = plot_well_data(time_tot, states_hf, 
+for (wno, well) in enumerate(well_symbols(hifi.model))
+    ax = Axis(fig[wno, 1], xlabel = "Time (years)", ylabel = "Temperature (°C)",
+        title = "Well: $well")
+    plot_well_data!(ax, time_tot, states_hf, 
         vcat([states_proxy], [states_proxy_cal], [states_proxy_cal]);
         wells = [well],
         field = :Temperature,
@@ -184,7 +191,8 @@ for well in well_symbols(hifi.model)
             "High-fidelity", 
             "Proxy (initial)", 
             "Proxy (calibration)",
-            "Proxy (prediction)")
+            "Proxy (prediction)"),
+        legend = wno == 2
         )
-    display(GLMakie.Screen(), fig)
 end
+fig
