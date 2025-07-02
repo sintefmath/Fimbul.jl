@@ -132,13 +132,13 @@ for (k, v) in opt_config
             :RockThermalConductivities, :FluidThermalConductivities
             ]
             vi[:active] = k == :Reservoir
-            vi[:rel_min] = 1e-6
+            vi[:rel_min] = 1e-5
             vi[:rel_max] = 1e3
         elseif ki in [ # Well properties
             :WellIndices, :WellIndicesThermal
             ]
             vi[:active] = k in wells
-            vi[:rel_min] = 1e-3
+            vi[:rel_min] = 1e-5
             vi[:rel_max] = 1e2
         else
             vi[:active] = false
