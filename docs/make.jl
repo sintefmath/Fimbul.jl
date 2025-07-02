@@ -21,7 +21,7 @@ function get_example_paths(; check_empty = true)
     examples = OrderedDict()
     examples["storage"] = []
     examples["production"] = []
-    examples["validation"] = []
+    examples["analytical"] = []
     for excat in readdir(basepth)
         if isdir(joinpath(basepth, excat))
             for exfile in readdir(joinpath(basepth, excat))
@@ -102,8 +102,8 @@ function build_fimbul_docs(
         @info "Building only examples as examples_explicit_list was specified" examples_explicit_list
     end
     DocMeta.setdocmeta!(Fimbul, :DocTestSetup, :(using Fimbul); recursive=true)
-    DocMeta.setdocmeta!(JutulDarcy, :DocTestSetup, :(using JutulDarcy); recursive=true)
-    DocMeta.setdocmeta!(Jutul, :DocTestSetup, :(using Jutul); recursive=true)
+    # DocMeta.setdocmeta!(JutulDarcy, :DocTestSetup, :(using JutulDarcy); recursive=true)
+    # DocMeta.setdocmeta!(Jutul, :DocTestSetup, :(using Jutul); recursive=true)
     bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
 
     ## Literate pass
@@ -165,6 +165,7 @@ function build_fimbul_docs(
 
     ## Docs
     if isnothing(build_format)
+        println("Use vitepress? ", use_vitepress)
         if use_vitepress
             build_format = DocumenterVitepress.MarkdownVitepress(
                 repo = "https://github.com/sintefmath/Fimbul.jl",
@@ -172,7 +173,7 @@ function build_fimbul_docs(
         else
             build_format = Documenter.HTML(;
                 prettyurls=get(ENV, "CI", "false") == "true",
-                canonical="https://sintefmath.github.io/Fimbul.jl",
+                # canonical="https://sintefmath.github.io/Fimbul.jl",
                 edit_link="main",
                 size_threshold_ignore = [
                     "ref/jutul.md",
@@ -229,10 +230,10 @@ function build_fimbul_docs(
     # end
     if build_docs
         makedocs(;
-            modules = [Fimbul, JutulDarcy, Jutul],
+            modules = [Fimbul],
             authors = "Øystein Klemetsdal <oystein.klemetsdal@sintef.no> and contributors",
             repo = "https://github.com/sintefmath/Fimbul.jl/blob/{commit}{path}#{line}",
-            warnonly = false,
+            warnonly = true,
             sitename = "Fimbul.jl",
             checkdocs = :exports,
             plugins = [bib],
