@@ -2,8 +2,8 @@
 # This example goes through the the classical solution of the heat equation in
 # 1D, and compares the analytical solution to the numerical solution obtained
 # using JutulDary to verify the numerical scheme.
-using Jutul, JutulDarcy
-using Fimbul
+using Jutul, JutulDarcy, Fimbul
+using LinearAlgebra
 using HYPRE
 using GLMakie
 
