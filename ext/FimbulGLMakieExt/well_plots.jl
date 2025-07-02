@@ -1,17 +1,14 @@
-function Fimbul.plot_well_data(time, reference, other; 
+function Fimbul.plot_well_data!(ax, time, reference, other; 
     wells = :all, 
     names = missing, 
     field = :energy, 
     nan_ix = missing,
-    separate_legend = false,
+    legend = true,
     kwargs...)
 
     if wells == :all
         wells = setdiff(keys(reference[1]), [:Reservoir, :Facility])
     end
-
-    fig = Figure(size = (800, 400), fontsize = 20)
-    ax = Axis(fig[1, 1], xlabel = "Time (years)", ylabel = "Temperature (°C)")
 
     for well in wells
         vr = get_field(reference, well, field)
@@ -26,13 +23,8 @@ function Fimbul.plot_well_data(time, reference, other;
         end
     end
 
-    if separate_legend
-        fig_legend = Figure(size = (800, 400), fontsize = 20)
-        Legend(fig_legend[1, 1], ax, loc = :best)
-        return fig, fig_legend
-    else
-        Legend(fig[1, 2], ax, loc = :best)
-        return fig
+    if legend
+        axislegend(ax, loc = :best)
     end
 
 end

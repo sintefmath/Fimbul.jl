@@ -7,7 +7,7 @@ module Fimbul
     export make_utes_schedule
     export set_dirichlet_bcs
     # Visualization
-    export plot_well_data, plot_mswell_values!
+    export plot_well_data!, plot_mswell_values!
     # Optimization
     export well_mismatch_thermal
     export calibrate_case
