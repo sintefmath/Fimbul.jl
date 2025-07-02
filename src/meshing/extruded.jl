@@ -1,5 +1,5 @@
 function extruded_mesh(cell_constraints, depths;
-    offset = missing, offset_rel = 5,
+    boundary = missing, offset = missing, offset_rel = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
     interpolation = :default,
     dist_min_factor = 1.1, dist_max_factor = 0.75,
@@ -18,15 +18,22 @@ function extruded_mesh(cell_constraints, depths;
     x_cc = vcat(cell_constraints...)
 
     min_cc_distance, max_cc_distance = min_max_distance(x_cc)
-    if ismissing(offset)
-        @assert !ismissing(offset_rel)
-        offset = max_cc_distance/2*offset_rel
-    else
-        @assert ismissing(offset_rel)
-    end
 
-    xb_outer = offset_boundary(x_cc, offset; n = 12)
-    xb_outer = push!(xb_outer, xb_outer[1])
+    if ismissing(boundary)
+        if ismissing(offset)
+            @assert !ismissing(offset_rel)
+            offset = max_cc_distance/2*offset_rel
+        else
+            @assert ismissing(offset_rel)
+        end
+        xb_outer = offset_boundary(x_cc, offset; n = 12)
+    else
+        xb_outer = boundary
+        offset = min_distance(vcat(xb_outer, x_cc...))
+    end
+    if norm(xb_outer[1] .- xb_outer[end], 2) > 0.0
+        xb_outer = push!(xb_outer, xb_outer[1])
+    end
     perimeter = curve_measure(xb_outer)
 
     # Set mesh sizes
@@ -35,12 +42,11 @@ function extruded_mesh(cell_constraints, depths;
     end
     if ismissing(hxy_max)
         hxy_max = perimeter/6
-    end
-    
+    end    
     radius_outer = max_distance(xb_outer)/2
     depth = depths[end] - depths[1]
 
-    @assert 0.0 < hxy_min < hxy_max < perimeter/4 "Please ensure that "*
+    @assert 0.0 < hxy_min <= hxy_max < perimeter/4 "Please ensure that "*
         "0 < hxy_min = $hxy_min < hxy_max = $hxy_max < perimeter/4 = $(perimeter/4)"
     hz = ismissing(hz) ? depth/50 : hz
         
