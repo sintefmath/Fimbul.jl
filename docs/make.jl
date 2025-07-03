@@ -173,7 +173,7 @@ function build_fimbul_docs(
         else
             build_format = Documenter.HTML(;
                 prettyurls=get(ENV, "CI", "false") == "true",
-                # canonical="https://sintefmath.github.io/Fimbul.jl",
+                canonical="https://sintefmath.github.io/Fimbul.jl",
                 edit_link="main",
                 size_threshold_ignore = [
                     "ref/jutul.md",
