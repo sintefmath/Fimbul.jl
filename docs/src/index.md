@@ -37,7 +37,7 @@ cd fimbul-testing/
 - Start a Julia REPL in the project folder, activate an environment, and add Fimbul. As this is still in a pre-release state, you have to dev it,
 ```julia
 using Pkg; Pkg.activate(".");
-Pkg.dev("path/to/Fimbul/"); Pkg.instantiate()
+Pkg.dev(path="path/to/Fimbul/"); Pkg.instantiate()
 ```
 You are now ready to run your first simulation! Fimbul comes with a number of example cases for geothermal energy applications. To check that everything works, you can run a small geothermal doublet case:
 ```julia
