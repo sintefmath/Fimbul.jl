@@ -11,7 +11,7 @@ using GLMakie
 # The injector and producer wells are placed 100 m apart at the top, and runs
 # parallel down to 800 m before they diverge to a distance of 1000 m at 2500 m
 # depth.
-case, plot_args = Fimbul.geothermal_doublet();
+case, plot_args = geothermal_doublet();
 
 # ## Inspect model
 # We first plot the computational mesh and wells. The mesh is refined around

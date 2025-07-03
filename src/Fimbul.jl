@@ -15,6 +15,7 @@ module Fimbul
     export analytical_1d
     export btes
     export egg_geothermal, egg_geothermal_doublet, egg_ates
+    export geothermal_doublet
 
     # Load dependencies into namespace
     using Jutul, JutulDarcy
