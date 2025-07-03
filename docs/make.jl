@@ -68,8 +68,8 @@ end
 function example_info_footer(subdir, exname)
     return "\n\n# ## Example on GitHub\n"*
     "# If you would like to run this example yourself, it can be downloaded from "*
-    "the JutulDarcy.jl GitHub repository [as a script](https://github.com/sintefmath/JutulDarcy.jl/blob/main/examples/$subdir/$exname.jl), "*
-    "or as a [Jupyter Notebook](https://github.com/sintefmath/JutulDarcy.jl/blob/gh-pages/dev/final_site/notebooks/$subdir/$exname.ipynb)"
+    "the Fimbul.jl GitHub repository [as a script](https://github.com/sintefmath/Fimbul.jl/blob/main/examples/$subdir/$exname.jl), "*
+    "or as a [Jupyter Notebook](https://github.com/sintefmath/Fimbul.jl/blob/gh-pages/dev/final_site/notebooks/$subdir/$exname.ipynb)"
 end
 
 function update_footer(content, subdir, exname)
@@ -185,44 +185,16 @@ function build_fimbul_docs(
         end
     end
     build_pages = [
-        # "Manual" => [
-        #         "Introduction" => [
-        #             "JutulDarcy.jl" => "index.md",
-        #             "Getting started" =>"man/intro.md",
-        #             "Your first JutulDarcy.jl simulation" => "man/first_ex.md",
-        #             "FAQ" => "extras/faq.md",
-        #         ],
-        #         "Fundamentals" => [
-        #             "man/highlevel.md",
-        #             "man/basics/input_files.md",
-        #             "man/basics/systems.md",
-        #             "man/basics/solution.md",
-        #         ],
-        #         "Detailed API" => [
-        #             "man/basics/forces.md",
-        #             "man/basics/wells.md",
-        #             "man/basics/primary.md",
-        #             "man/basics/secondary.md",
-        #             "man/basics/parameters.md",
-        #             "man/basics/plotting.md",
-        #             "man/basics/utilities.md",
-        #         ],
-        #         "Parallelism and compilation" => [
-        #             "man/advanced/mpi.md",
-        #             "man/advanced/gpu.md",
-        #             "man/advanced/compiled.md"
-        #         ],
-        #         "References" => [
-        #             "man/basics/package.md",
-        #             "Jutul functions" => "ref/jutul.md",
-        #             "Bibliography" => "extras/refs.md"
-        #         ],
-        #     ],
+        "Manual" => [
+            "Introduction" => [
+                "Fimbul.jl" => "index.md",
+            ],
+            "Cases" => [
+                "man/cases/cases.md",
+                "man/cases/utils.md",
+            ],
+        ],
         "Examples" => examples_markdown,
-        # "Validation" => [
-        #     "man/validation.md",
-        #     "Models" => validation_markdown,
-        # ]
     ]
     # for (k, subpages) in build_pages
     #     println("$k")
