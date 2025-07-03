@@ -2,13 +2,32 @@ meter = si_unit(:meter)
 hour, day = si_units(:hour, :day)
 darcy = si_unit(:darcy)
 
+"""
+    geothermal_doublet(;
+    temperature_inj = convert_to_si(20.0, :Celsius),
+    rate = 300meter^3/hour,
+    temperature_surface = convert_to_si(10.0, :Celsius),
+    num_years = 200,
+    report_interval = si_unit(:year),
+    )
+
+Generic setup function for geothermal doublet case
+
+# Keyword arguments
+- `temperature_inj = convert_to_si(20.0, :Celsius)`: Injection temperature.
+- `rate = 300meter^3/hour`: Injection and production rate.
+- `temperature_surface = convert_to_si(10.0, :Celsius)`: Temperature at the
+  surface.
+- `num_years = 200`: Number of years to run the simulation.
+- `report_interval = si_unit(:year)`: Reporting interval for the simulation.
+
+"""
 function geothermal_doublet(;
     temperature_inj = convert_to_si(20.0, :Celsius),
     rate = 300meter^3/hour,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 200,
     report_interval = si_unit(:year),
-    kwargs...
     )
 
     spacing_top = 100.0

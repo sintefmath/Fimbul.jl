@@ -8,7 +8,9 @@ Kelvin, joule, watt, = si_units(:Kelvin, :joule, :watt)
 """
     analytical_1d(; <keyword arguments>)
 
-# Keuword arguments
+Setup function for conductive heat transfer in 1D, with analytical solution
+
+# Keyword arguments
 - `L = 100.0`: Length of the domain (m)
 - `thermal_conductivity = 2.0`: Thermal conductivity of the rock (W/(m K))
 - `heat_capacity = 900.0`: Heat capacity of the rock (J/(kg K))
@@ -17,6 +19,7 @@ Kelvin, joule, watt, = si_units(:Kelvin, :joule, :watt)
 - `initial_condition = missing`: Initial temperature profile. Set to sine curve if not provided
 - `num_cells = 100`: Number of cells in the mesh
 - `num_steps = 100`: Number of time steps
+
 """
 function analytical_1d(;
     L = 100.0,

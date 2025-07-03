@@ -1,4 +1,4 @@
-## # Borehole Thermal Energy Storage (BTES)
+# # Borehole Thermal Energy Storage (BTES)
 # NOTE: This example currently relies on a timestepper that is not yet part of
 # the main branch of JutulDarcy. To run the example, check out the
 # ´timestepping´ branch on JutulDarcy. The example will be updated once the
@@ -7,7 +7,7 @@ using Jutul, JutulDarcy
 using Fimbul
 using HYPRE
 
-## ## Set up simulation case
+# ## Set up simulation case
 # We consider a domain with 50 BTES wells that all reach 100 m depth. The BTES
 # wells are charged during the summer months and discharged during the winter
 # months. The simulation is run for 10 years.
@@ -39,13 +39,13 @@ for ws in well_symbols(case.model)
     config[:tolerances][ws][:default] = 1e-2
 end
 
-## ## Simulate the case
+# ## Simulate the case
 results = simulate_reservoir(case, simulator=simulator, config=config, info_level=2);
 
-## ## Visualize the results
+# ## Visualize the results
 
-## ### Interactive visualization of the reservoir state
+# ### Interactive visualization of the reservoir state
 plot_reservoir(case.model, results.states)
 
-## ### Interactive plot of the well output
+# ### Interactive plot of the well output
 plot_well_results(results.wells)
