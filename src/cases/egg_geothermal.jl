@@ -6,14 +6,14 @@
 - `include_wells = true`: Include wells in the model.
 - `wells_distance_ij = 20`: Distance (in cell numbers) between the wells in i
   and j directions.
-- simple_well = false: Use simple well model instead of the full well model.
-- geothermal_gradient = 0.03si_unit(:Kelvin)/si_unit(:meter): Geothermal
+- `simple_well = false`: Use simple well model instead of the full well model.
+- `geothermal_gradient = 0.03si_unit(:Kelvin)/si_unit(:meter)`: Geothermal
   gradient in the reservoir.
-- pressure_top = 50si_unit(:bar): Pressure at the top of the reservoir.
-- temperature_top = convert_to_si(50, :Celsius): Temperature at the top of the
+- `pressure_top = 50si_unit(:bar)`: Pressure at the top of the reservoir.
+- `temperature_top = convert_to_si(50, :Celsius)`: Temperature at the top of the
   reservoir.
-- use_bc = true: Use fixed Dirichlet pressure and temperature boundary
-  conditions at the reservioir sides.
+- `use_bc = true`: Use fixed Dirichlet pressure and temperature boundary
+  conditions at the reservoir sides.
 
 """
 function egg_geothermal(;
@@ -174,8 +174,8 @@ end
 
 """
     egg_ates(;
-    temperature_chare = convert_to_si(90.0, :Celsius),
-    temperature_dischare = convert_to_si(10.0, :Celsius),
+    temperature_charge = convert_to_si(90.0, :Celsius),
+    temperature_discharge = convert_to_si(10.0, :Celsius),
     rate_charge = 25si_unit(:litre)/si_unit(:second),
     rate_discharge = rate_charge,
     rate_observation = missing,
@@ -189,8 +189,8 @@ end
     )
 
 # Keyword arguments
-- `temperature_chare = convert_to_si(90.0, :Celsius)`: Charge temperature.
-- `temperature_dischare = convert_to_si(10.0, :Celsius)`: Discharge temperature.
+- `temperature_charge = convert_to_si(90.0, :Celsius)`: Charge temperature.
+- `temperature_discharge = convert_to_si(10.0, :Celsius)`: Discharge temperature.
 - `rate_charge = 25si_unit(:litre)/si_unit(:second)`: Charge rate.
 - `rate_discharge = rate_charge`: Discharge rate.
 - `rate_observation = missing`: Observation well rate. Set to
