@@ -30,7 +30,7 @@ To get started with Fimbul, install [Julia](https://julialang.org/) and follow t
 git clone https://github.com/sintefmath/JutulDarcy.jl.git
 git clone https://github.com/sintefmath/Fimbul.jl.git
 ```
-NOTE: Fimbul currently relies on the development version of JutulDarcy, and this repository therefore has to be cloned as well. This will likely change in a future release, so that the release version can be used.
+NOTE: Fimbul currently relies on the development version of JutulDarcy, and this repository therefore has to be cloned as well. This will likely change in a future release, so that the release version of JutulDarcy can be used instead.
 - Make a project folder in a suitable location and navigate to it
 ```bash
 mkdir fimbul-testing
