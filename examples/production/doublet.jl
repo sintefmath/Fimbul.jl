@@ -1,4 +1,4 @@
-# # Simulation of geothermal energy production from doublet
+# # Simulation of geothermal energy production from well doublet
 # This example demonstrates how to simulate and visualize the production of
 # geothermal energy from a doublet well system. The setup consists of a
 # producer well that extracts hot water from the reservoir, and an injector well
@@ -42,7 +42,7 @@ results = simulate_reservoir(case; info_level = 0)
 # We first plot the reservoir state interactively. You can notice how the
 # cold front propagates from the injector well by filtering out high values.
 plot_reservoir(case.model, results.states;
-colormap = :seaborn_icefire_gradient, plot_args...)
+colormap = :seaborn_icefire_gradient, key = :Temperature, plot_args...)
 
 # Next, we plot the well output
 plot_well_results(results.wells)
@@ -50,8 +50,8 @@ plot_well_results(results.wells)
 # ### Well temperature evolution
 # For a more detailed analysis of the preduction temperature evolution, we plot
 # the temperature inside the production well as a function of well depth for all
-# the 200 years of production. We also highlight a the temperature at
-# selected timesteps (7, 21, 65, and 200 years).
+# the 200 years of production. We also highlight the temperature at selected
+# timesteps (7, 21, 65, and 200 years).
 states = results.result.states
 times = convert_from_si.(cumsum(case.dt), :year)
 geo = tpfv_geometry(msh)
@@ -91,7 +91,8 @@ for state in results.states
     end
     push!(Δstates, Δstate)
 end
-plot_reservoir(case.model, Δstates; colormap = :seaborn_icefire_gradient, plot_args...)
+plot_reservoir(case.model, Δstates;
+colormap = :seaborn_icefire_gradient, key = :Temperature, plot_args...)
 
 # Finally, we plot the change in temperature at the same timesteps higlighted in
 # the production well temperature above. We cut away parts of the model for
@@ -101,9 +102,9 @@ T_max = maximum(Δstates[1][:Temperature])
 cells = geo.cell_centroids[1, :] .> -1000.0/2
 cells = cells .&& geo.cell_centroids[2, :] .> 50.0
 cells = cells .|| geo.cell_centroids[3, :] .> 2475.0
-fig = Figure(size = (1500, 600))
+fig = Figure(size = (800, 800))
 for (i, n) in enumerate(timesteps)
-    ax = Axis3(fig[1, i]; title = "$(times[n]) years",
+    ax = Axis3(fig[(i-1)÷2+1, (i-1)%2+1]; title = "$(times[n]) years",
     zreversed = true, elevation = pi/8, aspect = :data)
 
     ΔT = Δstates[n][:Temperature]
@@ -116,7 +117,7 @@ for (i, n) in enumerate(timesteps)
     color = :black, linewidth = 4, markersize = 0.0)
     hidedecorations!(ax)
 end
-Colorbar(fig[2, 1:length(timesteps)]; 
+Colorbar(fig[3, 1:2]; 
     colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 
     label = "ΔT (°C)", vertical = false)
 fig

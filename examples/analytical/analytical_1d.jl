@@ -15,7 +15,7 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 # donductivity $\lambda$, and heat capacity $C_p$ and density $\rho$, for
 # which conservation of energy takes the form of the archetypical heat equation:
 # 
-# ``\dot{T} = \alpha \Delta T``, \alpha = \frac{\lambda}{\rho C_p}``
+# ``\dot{T} = \alpha \Delta T``, ``\alpha = \frac{\lambda}{\rho C_p}``
 #
 # where $T$ is the temperature and $\alpha$ is called the thermal diffusivity.
 # Imposing equal and fixed boundary conditions $T(0, t) = T(L, t) = T_b$ and
