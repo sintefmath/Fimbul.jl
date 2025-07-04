@@ -7,6 +7,7 @@ darcy = si_unit(:darcy)
 
 function btes(;
     num_wells = 50,
+    num_sections = 8,
     well_spacing = 5.0,
     depths = [0.0, 0.5, 50, 65],
     well_layers = [1, 2],
@@ -100,29 +101,32 @@ function btes(;
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    # ## Set up controls
-    # Rate control for supply side
-    rate_target = TotalRateTarget(rate_charge)
-    ctrl_charge = InjectorControl(rate_target, [1.0], 
-        density=rho, temperature=temperature_charge)
-    rate_target = TotalRateTarget(rate_discharge)
-    ctrl_discharge = InjectorControl(rate_target, [1.0],
-        density=rho, temperature=temperature_discharge);
-    # BHP control for return side
-    bhp_target = BottomHolePressureTarget(p(0.0))
-    ctrl_prod = ProducerControl(bhp_target);
-    # Set up forces
-    control_charge = Dict()
-    control_discharge = Dict()
-    for well in well_models
-        if contains(String(well.name), "_supply")
-            control_charge[well.name] = ctrl_charge
-            control_discharge[well.name] = ctrl_discharge
-        else
-            control_charge[well.name] = ctrl_prod
-            control_discharge[well.name] = ctrl_prod
-        end
-    end
+    # # ## Set up controls
+    # # Rate control for supply side
+    # rate_target = TotalRateTarget(rate_charge)
+    # ctrl_charge = InjectorControl(rate_target, [1.0], 
+    #     density=rho, temperature=temperature_charge)
+    # rate_target = TotalRateTarget(rate_discharge)
+    # ctrl_discharge = InjectorControl(rate_target, [1.0],
+    #     density=rho, temperature=temperature_discharge);
+    # # BHP control for return side
+    # bhp_target = BottomHolePressureTarget(p(0.0))
+    # ctrl_prod = ProducerControl(bhp_target);
+    # # Set up forces
+    # control_charge = Dict()
+    # control_discharge = Dict()
+    # for well in well_models
+    #     if contains(String(well.name), "_supply")
+    #         control_charge[well.name] = ctrl_charge
+    #         control_discharge[well.name] = ctrl_discharge
+    #     else
+    #         control_charge[well.name] = ctrl_prod
+    #         control_discharge[well.name] = ctrl_prod
+    #     end
+    # end
+    control_charge, control_discharge = setup_controls(model, num_sections,
+        rate_charge, rate_discharge, temperature_charge, temperature_discharge);
+    println("Control charge: ", control_charge)
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
     forces_rest = setup_reservoir_forces(model, bc=bc)
@@ -139,5 +143,76 @@ function btes(;
     # ## Assemble and return model
     case = JutulCase(model, dt, forces, state0 = state0)
     return case
+
+end
+
+function setup_controls(model, number_of_sections, 
+    rate_charge, rate_discharge, temperature_charge, temperature_discharge)
+
+    rho = reservoir_model(model).system.rho_ref[1]
+    rate_target = TotalRateTarget(rate_charge)
+    ctrl_charge = InjectorControl(rate_target, [1.0], 
+        density=rho, temperature=temperature_charge)
+    rate_target = TotalRateTarget(rate_discharge)
+    ctrl_discharge = InjectorControl(rate_target, [1.0],
+        density=rho, temperature=temperature_discharge);
+    # BHP control for return side
+    bhp_target = BottomHolePressureTarget(5.0si_unit(:atm))
+    ctrl_prod = ProducerControl(bhp_target);
+    # Set up forces
+    control_charge = Dict()
+    control_discharge = Dict()
+
+    msh = physical_representation(reservoir_model(model).data_domain)
+    geo = tpfv_geometry(msh)
+    xy = geo.cell_centroids[1:2,:]
+    # map from (x,y) to polar coordiates
+    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
+    θ = atan.(xy[2,:], xy[1,:]) .+ π
+    assigned = []
+    wells = well_symbols(model)
+    filter!(well -> contains(String(well), "_supply"), wells)
+    get_return = (well) -> Symbol(replace(String(well), "_supply" => "_return"))
+    for sno in 1:number_of_sections
+        θ_min = (sno - 1)*2π/number_of_sections
+        θ_max = sno*2π/number_of_sections
+        in_section = θ_min .<= θ .<= θ_max
+        section_wells, well_radii = Symbol[], Float64[]
+        for well in wells
+            well in assigned ? continue : nothing
+            wmodel = model.models[well]
+            wc = wmodel.domain.representation.perforations.reservoir[1]
+            !in_section[wc] ? continue : nothing
+            push!(section_wells, well)
+            push!(well_radii, r[wc])
+        end
+        order = sortperm(well_radii)
+        println("Section $sno: ", section_wells)
+        for wno in order
+            well_sup = section_wells[wno]
+            well_ret = get_return(well_sup)
+            println("Assigned wells: $assigned")
+            @assert well_sup ∉ assigned
+            @assert well_ret ∉ assigned
+            if wno == 1 
+                control_charge[well_sup] = ctrl_charge
+                control_discharge[well_sup] = ctrl_discharge
+            else
+                well_prev = get_return(section_wells[wno-1])
+                target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
+                ctrl = InjectorControl(target, [1.0],
+                    density=rho, temperature=NaN; check=false)
+                control_charge[well_sup] = ctrl
+                control_discharge[well_sup] = ctrl
+            end
+            control_charge[well_ret] = ctrl_prod
+            control_discharge[well_ret] = ctrl_prod
+            push!(assigned, well_sup, well_ret)
+        end
+    end
+
+    @assert sort(assigned) == sort(well_symbols(model))
+
+    return control_charge, control_discharge
 
 end
