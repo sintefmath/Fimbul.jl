@@ -8,8 +8,8 @@
 #
 # The example demonstrates digital twinning of high-temperature aquifer thermal
 # energy storage (HT-ATES). We first set up and simulate  high-fidelity model of
-# the system, before we construct reduced-order models at several resolutions
-# and calibrate using adjoint-based optimization so that their output matches
+# the system, before we construct a reduced-order models at a lower resolution
+# and calibrate using adjoint-based optimization so that its output matches
 # that of the high-fidelity model.
 
 # Add modules to namespace
@@ -58,7 +58,7 @@ plot_well_results(results_hifi.wells)
 
 # ## Construct proxy model
 # The high-fidelity model is posed on a logicaly Cartesian mesh with 60×60×7
-# cells. We construct a proxy models by coarsening the high-fidelity model to
+# cells. We construct a proxy model by coarsening the high-fidelity model to
 # 15×15×1 cells using the `coarsen_reservoir_case` function.
 coarsening = (15,15,3)
 proxy = JutulDarcy.coarsen_reservoir_case(hifi, coarsening,
@@ -158,7 +158,7 @@ end
 # number of iterations (maxiter), both we set to 200 here. Increasing these
 # numbers will likely give a better match.
 proxy_cal = calibrate_case(objective, proxy, n_steps, opt_config; 
-    lbfgs_args = (maxfun = 200, maxiter = 200))
+    lbfgs_args = (maxfun = 200, maxiter = 200, factr = 1e-6))
 
 # ### Simulate the full schedule using the calibrated proxy
 results_proxy_cal = simulate_reservoir(proxy_cal)
