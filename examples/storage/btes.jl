@@ -21,10 +21,10 @@ case, sections = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
 # ### Visualize BTES system
 # The 48 BTES wells are placed in a pattern so that all wells are approximately
 # the same distance apart, and divided into 6 sections of 8 wells each. During
-# charging, water is injected into the inner-most well of each section at a
-# 0.5 l/s. In each section the water flows from the inner-most well to the
-# outer-most well. During discharging, water flows in the opposite direction,
-# from the outer-most well to the inner-most well.
+# charging, water is injected into the inner-most well of each section at 0.5
+# l/s, with water flowing from the inner-most well to the outer-most well.
+# During discharging, water flows in the opposite direction, from the outer-most
+# well to the inner-most well.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data,
@@ -35,7 +35,7 @@ lns, labels = [], String[]
 for (sno, (section, wells)) in enumerate(sections)
     for (wno, wname) in enumerate(wells)
         well = case.model.models[wname].domain.representation
-        l = plot_well!(ax, msh, well; color = colors[sno], fontsize = 10)
+        l = plot_well!(ax, msh, well; color = colors[sno], fontsize = 0)
         if wno == 1
             push!(lns, l)
             push!(labels, "Section $sno")
@@ -65,7 +65,8 @@ for ws in well_symbols(case.model)
 end
 
 # ## Simulate the case
-results = simulate_reservoir(case[1:24], simulator=simulator, config=config, info_level=2);
+results = simulate_reservoir(case;
+simulator=simulator, config=config, info_level=0);
 
 # ### Interactive visualization
 # We plot the reservoir state and the well output interactively.
@@ -116,7 +117,7 @@ T_ch = convert_to_si(90.0, :Celsius)
 is_charge = [f[:Facility].control[well].temperature == T_ch for f in case.forces]
 stop = findfirst(diff(is_charge) .< 0)
 ax = Axis(fig[1, 1]; title = "Temperature evolution, section $section (charging)",
-    xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
+xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
 plot_btes_temperature(ax, section, 1:stop)
 Legend(fig[1,2], ax; fontsize = 20)
 
@@ -127,7 +128,7 @@ is_discharge = [f[:Facility].control[well].temperature == T_dch for f in case.fo
 start = findfirst(diff(is_discharge) .> 0)+1
 stop = findfirst(diff(is_discharge) .< 0)
 ax = Axis(fig[2, 1]; title = "Temperature evolution, section $section (discharging)",
-    xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
+xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
 plot_btes_temperature(ax, section, start:stop)
 Legend(fig[2,2], ax; fontsize = 20)
 
