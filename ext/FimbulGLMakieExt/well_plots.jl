@@ -53,7 +53,7 @@ function get_field(data, well, field)
 
 end
 
-function Fimbul.plot_mswell_values!(ax, model, well, values; label = nothing, geo = missing, kwargs...)
+function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, label = nothing, geo = missing, kwargs...)
 
     if ismissing(geo)
         rmodel = reservoir_model(model)
@@ -64,6 +64,10 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; label = nothing, ge
     well_representation = model.models[well].domain.representation
     
     N = well_representation.neighborship
+    if !ismissing(nodes)
+        keep = [n[1] ∈ nodes && n[2] ∈ nodes for n in eachcol(N)]
+        N = N[:, keep]
+    end
 
     branches = dfs_branches(N)
     rcells = well_representation.perforations.reservoir
@@ -71,7 +75,6 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; label = nothing, ge
     z = vcat(well_representation.top.reference_depth, geo.cell_centroids[3, rcells])
     # Plot edges
     for (i, branch) in enumerate(branches)
-
         zb = z[branch]
         lbl = (i == 1) ? label : nothing
         if size(values, 2) == 1
