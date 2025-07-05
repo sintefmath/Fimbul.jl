@@ -5,9 +5,45 @@ litre = si_unit(:litre)
 Kelvin = si_unit(:Kelvin)
 darcy = si_unit(:darcy)
 
+"""
+    btes(; <keyword arguments>)
+
+Setup function for borehole thermal energy storage (BTES) system.
+
+# Keyword arguments
+- `num_wells = 48`: Number of wells in the BTES system.
+- `num_sections = 6`: Number of sections in the BTES system. The system is
+  divided into equal circle sectors, and all wells in each sector are coupled in
+  series.
+- `well_spacing = 5.0`: Horizontal spacing between wells in meters.
+- `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers in meters.
+- `well_layers = [1, 2]`: Layers in which the wells are placed
+- `density = [30, 2580, 2580]*kilogram/meter^3`: Rock density in the layers.
+- `thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin`: Thermal
+  conductivity in the layers.
+- `heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin`: Heat capacity in the
+  layers.
+- `geothermal_gradient = 0.03Kelvin/meter`: Geothermal gradient.
+- `temperature_charge = to_kelvin(90.0)`: Injection temperature during charging.
+- `temperature_discharge = to_kelvin(10.0)`: Injection temperature during
+  discharging.
+- `rate_charge = 0.5litre/second`: Injection rate during charging.
+- `rate_discharge = rate_charge`: Injection rate during discharging.
+- `temperature_surface = to_kelvin(10.0)`: Temperature at the surface.
+- `num_years = 5`: Number of years to run the simulation.
+- `charge_months = ["June", "July", "August", "September"]`: Months during which
+  the system is charged.
+- `discharge_months = ["December", "January", "February", "March"]`: Months during which
+  the system is discharged.
+- `report_interval = 14day`: Reporting interval for the simulation.
+- `utes_schedule_args = NamedTuple()`: Additional arguments for the UTES schedule.
+- `n_z = [3, 8, 3]`: Number of layers in the vertical direction for each layer.
+- `n_xy = 3`: Number of layers in the horizontal direction for each layer.
+- `mesh_args = NamedTuple()`: Additional arguments for the mesh generation.
+"""
 function btes(;
     num_wells = 48,
-    num_sections = 6,
+    num_sectors = 6,
     well_spacing = 5.0,
     depths = [0.0, 0.5, 50, 65],
     well_layers = [1, 2],
@@ -20,11 +56,11 @@ function btes(;
     rate_charge = 0.5litre/second,
     rate_discharge = rate_charge,
     temperature_surface = to_kelvin(10.0),
-    num_years = 5,
-    years = missing,
+    num_years = 4,
     charge_months = ["June", "July", "August", "September"],
     discharge_months = ["December", "January", "February", "March"],
     report_interval = 14day,
+    utes_schedule_args = NamedTuple(),
     n_z = [3, 8, 3],
     n_xy = 3,
     mesh_args = NamedTuple(),
@@ -100,7 +136,7 @@ function btes(;
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    control_charge, control_discharge, sections = setup_controls(model, num_sections,
+    control_charge, control_discharge, sections = setup_controls(model, num_sectors,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge);
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
@@ -111,8 +147,8 @@ function btes(;
         charge_months = charge_months,
         discharge_months = discharge_months,
         num_years = num_years,
-        years = years,
-        report_interval = report_interval
+        report_interval = report_interval,
+        utes_schedule_args...,
     )
 
     # ## Assemble and return model
