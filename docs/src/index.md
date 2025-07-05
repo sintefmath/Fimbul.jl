@@ -7,7 +7,7 @@ hero:
   name: Fimbul
   text: Geothermal simulation in Julia
   image:
-    src: logo.png
+    src: logo_no_text.png
     alt: Fimbul.jl
   tagline: High-performance geothermal simulation toolbox based on automatic differentiation
   actions:
