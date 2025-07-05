@@ -9,13 +9,12 @@ using GLMakie
 
 # ## Set up simulation case
 # We consider a domain with 48 BTES wells that all reach 100 m depth. The BTES
-# wells are charged during the summer at temperature of 90 °C and discharged
-# during the winter months at a temperature of 10 °C. The simulation is run for
-# 5 years.
+# wells are charged during the summer at 90 °C and discharged during the winter
+# months at 10 °C. This cycle is simulated for 4 years.
 case, sections = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
     charge_months = ["April", "May", "June", "July", "August", "September"],
     discharge_months = ["October", "November", "December", "January", "February", "March"],
-    num_years = 5,
+    num_years = 4,
 );
 
 # ### Visualize BTES system
@@ -76,9 +75,35 @@ colormap = :seaborn_icefire_gradient)
 
 plot_well_results(results.wells, field = :temperature)
 
-# ## Plot temperature evolution
+# ## Temperature evolution in the reservoir
+# We plot the temperature evolution in the reservoir after each of the four
+# charging stages. To enhance the visualization, we only plot the cells below 50
+# m depth that have a temperature above 15 °C.
+dstep = Int64.(length(case.dt)/(4*2))
+steps = dstep:2*dstep:length(case.dt)
+fig = Figure(size = (1000, 750))
+geo = tpfv_geometry(msh)
+bottom = geo.cell_centroids[3,:] .>= 50.0
+T_min, T_max = Inf, -Inf
+for (sno, step) in enumerate(steps)
+    ax = Axis3(fig[(sno-1)÷2+1, (sno-1)%2+1];
+    limits = (-50, 50, -50, 50, 40, 125),
+    title = "Charge $sno", zreversed = true, aspect = :data)
+    T = convert_from_si.(results.states[step][:Temperature], :Celsius)
+    cells = bottom .& (T .>= 15.0)
+    T_min = min(T_min, minimum(T[cells]))
+    T_max = max(T_max, maximum(T[cells]))
+    plot_cell_data!(ax, msh, T; cells = cells, colormap = :seaborn_icefire_gradient)
+    hidedecorations!(ax)
+end
+Colorbar(fig[1:2, 3]; 
+colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 
+label = "T ≥ 15.0 °C", vertical = true)
+fig
+
+# ## Temperature evolution in the wells
 # Designing a BTES system requires in-depth understanding of how the temperature
-# evolves as water runs through the system. We plot the temperature in the first
+# evolves as water runs through the pipes. We plot the temperature in the first
 # section for each report step during the first charge and discharge stages.
 # This kind of visualization can be used when designing a BTES system to
 # determine e.g., how many wells are needed for a given depth, and how wells
