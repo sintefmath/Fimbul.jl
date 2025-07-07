@@ -57,7 +57,6 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
             start_month = "January"
         end
     end
-    println("Start month: ", start_month)
     start_monthno = findall(monthname.(1:12) .== start_month)[1]
     month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
     # Set up schedule for each year

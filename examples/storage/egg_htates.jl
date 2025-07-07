@@ -7,9 +7,9 @@
 #   Differentiable Programming"
 #
 # The example demonstrates digital twinning of high-temperature aquifer thermal
-# energy storage (HT-ATES). We first set up and simulate  high-fidelity model of
-# the system, before we construct reduced-order models at several resolutions
-# and calibrate using adjoint-based optimization so that their output matches
+# energy storage (HT-ATES). We first set up and simulate a high-fidelity model of
+# the system, before we construct reduced-order models at a lower resolution
+# and calibrate using adjoint-based optimization so that its output matches
 # that of the high-fidelity model.
 
 # Add modules to namespace
@@ -57,9 +57,9 @@ plot_reservoir(hifi, results_hifi.states;
 plot_well_results(results_hifi.wells)
 
 # ## Construct proxy model
-# The high-fidelity model is posed on a logicaly Cartesian mesh with 60×60×7
-# cells. We construct a proxy models by coarsening the high-fidelity model to
-# 15×15×1 cells using the `coarsen_reservoir_case` function.
+# The high-fidelity model is posed on a logically Cartesian mesh with 60×60×7
+# cells. We construct a proxy model by coarsening the high-fidelity model to
+# 15×15×3 cells using the `coarsen_reservoir_case` function.
 coarsening = (15,15,3)
 proxy = JutulDarcy.coarsen_reservoir_case(hifi, coarsening,
     method=:ijk,
@@ -86,7 +86,7 @@ plot_well_results([results_hifi.wells, results_proxy.wells],
 states_hf = results_hifi.result.states
 states_proxy = results_proxy.result.states
 # We calibrate against the first two years. Since we have defined report steps
-# of 1/4 month, this corresponts to the first 12*4*2 steps. To see the effect of
+# of 1/4 month, this corresponds to the first 12*4*2 steps. To see the effect of
 # more or less data used for calibration, and to exclude data from one or more
 # of the wells and WellObs, you can change num_years_cal and wells_cal below.
 num_years_cal = 2
@@ -115,7 +115,7 @@ opt_config = optimization_config(proxy.model, parameters,
     rel_min = 1e-3,
     rel_max = 1e3
 )
-# We will only cosider a subset of all the model parameters
+# We will only consider a subset of all the model parameters
 wells = well_symbols(proxy.model)
 for (k, v) in opt_config
     for (ki, vi) in v
@@ -153,12 +153,12 @@ end
 # ### Calibrate proxy model
 # Setting up the calibration requires a few steps, which has been conveniently
 # implemented in the `calibrate_case` utility function. We use the LBFGS
-# optimization algorithm, which has a number parameters that can be set,
+# optimization algorithm, which has a number of parameters that can be set,
 # including the maximum number of function evaluations (maxfun), and the maximum
 # number of iterations (maxiter), both we set to 200 here. Increasing these
 # numbers will likely give a better match.
 proxy_cal = calibrate_case(objective, proxy, n_steps, opt_config; 
-    lbfgs_args = (maxfun = 200, maxiter = 200))
+    lbfgs_args = (maxfun = 200, maxiter = 200, factr = 1e-6))
 
 # ### Simulate the full schedule using the calibrated proxy
 results_proxy_cal = simulate_reservoir(proxy_cal)
@@ -169,11 +169,12 @@ obj = Jutul.evaluate_objective(
 println("Final proxy mismatch: $obj")
 
 # ### Plot the calibrated results
-# Finally, we plot the resulting prduction temperatures for the high-fidelity
+# Finally, we plot the resulting production temperatures for the high-fidelity
 # and proxy model. The calibrated proxy does a good job of reproducing the
 # temperatures used for calibration, but the prediction for the remaining three
-# years of storage are not perfect, with the calibrated proxy model being
-# slightly worse that the initial proxy model for WellA in the final year.
+# years of storage are not perfect, with the calibrated proxy model showing
+# mismatch comparable to the initial proxy model for WellA in the final year.
+# The match in the observation well is almost perfect.
 fig = Figure(size = (800, 1200), fontsize = 20)
 time_tot = results_hifi.wells.time/si_unit(:year)
 for (wno, well) in enumerate(well_symbols(hifi.model))

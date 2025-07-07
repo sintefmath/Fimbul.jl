@@ -3,17 +3,22 @@ hour, day = si_units(:hour, :day)
 darcy = si_unit(:darcy)
 
 """
-    geothermal_doublet(;
-    temperature_inj = convert_to_si(20.0, :Celsius),
-    rate = 300meter^3/hour,
-    temperature_surface = convert_to_si(10.0, :Celsius),
-    num_years = 200,
-    report_interval = si_unit(:year),
-    )
+    geothermal_doublet(;  <keyword arguments>)
 
 Generic setup function for geothermal doublet case
 
 # Keyword arguments
+- `depths = [0.0, 500.0, 2400.0, 2500.0, 3000.0]`: Depths delineating geological layers.
+- `permeability = [1e-3, 5e-2, 1.0, 1e-3]*darcy`: Permeability of the layers.
+- `porosity = [0.01, 0.2, 0.35, 0.01]`: Porosity of the layers.
+- `density = [2000, 2580, 2600, 2400]*kilogram/meter^3`: Rock density in the layers.
+- `thermal_conductivity = [2.0, 2.8, 3.5, 1.9]*watt/meter/Kelvin`: Thermal conductivity in the layers.
+- `heat_capacity = [1500, 900, 900, 1500]*joule/kilogram/Kelvin`: Heat capacity in the layers.
+- `aquifer_layer = 3`: Index of the aquifer layer.
+- `spacing_top = 100.0`: Horizontal well spacing at the surface
+- `spacing_bottom = 1000.0`: Horizontal well spacing in the aquifer
+- `depth_1 = 800.0`: Depth at which well starts to deviate.
+- `depth_2 = 2500.0`: Depth of wells
 - `temperature_inj = convert_to_si(20.0, :Celsius)`: Injection temperature.
 - `rate = 300meter^3/hour`: Injection and production rate.
 - `temperature_surface = convert_to_si(10.0, :Celsius)`: Temperature at the
@@ -23,17 +28,23 @@ Generic setup function for geothermal doublet case
 
 """
 function geothermal_doublet(;
+    depths = [0.0, 500.0, 2400.0, 2500.0, 3000.0],
+    permeability = [1e-3, 5e-2, 1.0, 1e-3]*darcy,
+    porosity = [0.01, 0.2, 0.35, 0.01],
+    density = [2000, 2580, 2600, 2400]*kilogram/meter^3,
+    thermal_conductivity = [2.0, 2.8, 3.5, 1.9]*watt/meter/Kelvin,
+    heat_capacity = [1500, 900, 900, 1500]*joule/kilogram/Kelvin,
+    aquifer_layer = 3,
+    spacing_top = 100.0,
+    spacing_bottom = 1000.0,
+    depth_1 = 800.0,
+    depth_2 = depths[aquifer_layer+1],
     temperature_inj = convert_to_si(20.0, :Celsius),
     rate = 300meter^3/hour,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 200,
     report_interval = si_unit(:year),
     )
-
-    spacing_top = 100.0
-    spacing_bottom = 1000.0
-    depth_1 = 800.0
-    depth_2 = 2495.0
 
     trajectory_inj = [
         -spacing_top/2 0.0 0.0;
@@ -51,19 +62,11 @@ function geothermal_doublet(;
     xw_prod = [Tuple(x) for x in eachrow(unique(trajectory_prod[:, 1:2], dims=1))]
     xw = vcat([xw_inj], [xw_prod])
 
-    depths = [0.0, 500.0, 2400.0, 2500.0, 3000.0]
-
     # Create the mesh
     thickness = diff(depths)
     nz = [4,10,20,4]
     mesh, layers, metrics = extruded_mesh(xw, depths;
     hxy_min = 100/3, hxy_max = 750, hz = thickness./nz, dist_min_factor = 3.0, offset_rel = 2.5)
-
-    permeability = [1e-3, 5e-2, 1.0, 1e-3]*darcy
-    porosity = [0.01, 0.2, 0.35, 0.01]
-    density = [2000, 2580, 2600, 2400]*kilogram/meter^3
-    thermal_conductivity = [2.0, 2.8, 3.5, 1.9]*watt/meter/Kelvin
-    heat_capacity = [1500, 900, 900, 1500]*joule/kilogram/Kelvin
 
     permeability = permeability[layers]
     # permeability = repeat(permeability', 3, 1)
