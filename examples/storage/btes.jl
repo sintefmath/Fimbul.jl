@@ -70,8 +70,11 @@ end
 
 # ## Simulate the BTES system
 # Run the full 4-year simulation with the configured solver settings.
+
+# Note that this simulation can take a few minutes to run. Setting `info_level =
+# 0` will show a progress bar while the simulation runs.`
 results = simulate_reservoir(case;
-simulator=simulator, config=config, info_level=0);
+simulator=simulator, config=config, info_level=-1);
 
 # ### Interactive visualization of results
 # We first plot the final temperature distribution in the reservoir and well
