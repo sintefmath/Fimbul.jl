@@ -86,15 +86,15 @@ geo = tpfv_geometry(msh)
 bottom = geo.cell_centroids[3,:] .>= 50.0
 T_min, T_max = Inf, -Inf
 for (sno, step) in enumerate(steps)
-    ax = Axis3(fig[(sno-1)÷2+1, (sno-1)%2+1];
+    ax_sno = Axis3(fig[(sno-1)÷2+1, (sno-1)%2+1];
     limits = (-50, 50, -50, 50, 40, 125),
     title = "Charge $sno", zreversed = true, aspect = :data)
     T = convert_from_si.(results.states[step][:Temperature], :Celsius)
     cells = bottom .& (T .>= 15.0)
-    T_min = min(T_min, minimum(T[cells]))
-    T_max = max(T_max, maximum(T[cells]))
-    plot_cell_data!(ax, msh, T; cells = cells, colormap = :seaborn_icefire_gradient)
-    hidedecorations!(ax)
+    global T_min = min(T_min, minimum(T[cells]))
+    global T_max = max(T_max, maximum(T[cells]))
+    plot_cell_data!(ax_sno, msh, T; cells = cells, colormap = :seaborn_icefire_gradient)
+    hidedecorations!(ax_sno)
 end
 Colorbar(fig[1:2, 3]; 
 colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 

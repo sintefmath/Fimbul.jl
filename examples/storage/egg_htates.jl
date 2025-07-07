@@ -19,10 +19,11 @@ using HYPRE # Iterative linear solvers
 using GLMakie # Visualization
 
 # # Set up model
-# We use the first realization of the EGG benchmark model [cite], and place a
-# well doublet near the center of the domain. The fluid model is a single-phase
-# water system with PVT formulations taken from the NIST database [cite], which
-# can be conveniently set up with the :geothermal keyword.
+# We use the first realization of the EGG benchmark model [egg](@cite), and
+# place a well doublet near the center of the domain. The fluid model is a
+# single-phase water system with PVT formulations taken from the
+# [NIST](https://webbook.nist.gov/chemistry/fluid/) database, which can be
+# conveniently set up with the :geothermal keyword.
 #
 # The HT-ATES system is operated by charging the aquifer through the main well
 # (labelled "Hot" in this setup) with water at 25 l/s and 90°C from June to

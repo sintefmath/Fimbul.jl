@@ -1,4 +1,4 @@
-[![Fimbul logo](https://github.com/sintefmath/Fimbul.jl/raw/main/docs/src/assets/logo_wide.png)](https://sintefmath.github.io/Fimbul.jl/dev/)
+[![Fimbul logo](https://github.com/sintefmath/Fimbul.jl/raw/main/docs/src/assets/logo_text_wide.png)](https://sintefmath.github.io/Fimbul.jl/dev/)
 
 > [!TIP]
 > Visit the docs at https://sintefmath.github.io/Fimbul.jl/dev/
