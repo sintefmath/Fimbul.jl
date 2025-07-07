@@ -26,7 +26,7 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 # boundary value problem can be found in any textbook on partial differential
 # equations, and is given by the Fourier series:
 #
-# ``T(x, t) = T_b + \sum_{k = 1}^{\infty} C_k \exp\left(-\alpha \big(\frac{(k\pi}{L}\big)^2 t\right) \sin\big(\frac{k\pi}{L} x\big)``
+# ``T(x, t) = T_b + \sum_{k = 1}^{\infty} C_k \exp\left(-\alpha \big(\frac{k\pi}{L}\big)^2 t\right) \sin\big(\frac{k\pi}{L} x\big)``
 #
 # where the Fourier coefficients $C_k$ are determined by the initial condition
 # and boundary conditions through the orthogonality of sine functions:
@@ -38,7 +38,7 @@ to_celsius = T -> convert_from_si(T, :Celsius)
 # We first consider a simple initial condition where the initial temperature
 # profile takes the form of a sine curve,
 #
-# ``T_0(x) = T_\max\sin\big(\frac{2\pi}{L} x\big)``
+# ``T_0(x) = T_\max\sin\big(\frac{\pi}{L} x\big)``
 
 L = 100.0
 T_b = to_kelvin(10.0)
