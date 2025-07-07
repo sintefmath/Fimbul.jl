@@ -1,6 +1,6 @@
 # # Borehole Thermal Energy Storage (BTES)
-# This example demonstrates how to set up and simulate a Borehole Thermal Energy
-# Storage (BTES) system using Fimbul. The BTES system consists of multiple
+# This example demonstrates how to set up and simulate seasonal Borehole Thermal
+# Energy Storage (BTES) using Fimbul. The BTES system consists of multiple
 # boreholes coupled in series and parallel.
 using Jutul, JutulDarcy
 using Fimbul
@@ -8,22 +8,24 @@ using HYPRE
 using GLMakie
 
 # ## Set up simulation case
-# We consider a domain with 48 BTES wells that all reach 100 m depth. The BTES
-# wells are charged during the summer at 90 °C and discharged during the winter
-# months at 10 °C. This cycle is simulated for 4 years.
+# We create a BTES system with 48 wells that extend to 100 m depth. The system
+# operates on a seasonal cycle: wells are charged during summer months (April
+# to September) with hot water at 90°C, and discharged during winter months
+# (October to March) with cold water at 10°C. This seasonal operation is
+# simulated over a 4-year period to study the thermal energy storage performance.
 case, sections = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
     charge_months = ["April", "May", "June", "July", "August", "September"],
     discharge_months = ["October", "November", "December", "January", "February", "March"],
     num_years = 4,
 );
 
-# ### Visualize BTES system
-# The 48 BTES wells are placed in a pattern so that all wells are approximately
-# the same distance apart, and divided into 6 sections of 8 wells each. During
-# charging, water is injected into the inner-most well of each section at 0.5
-# l/s, with water flowing from the inner-most well to the outer-most well.
-# During discharging, water flows in the opposite direction, from the outer-most
-# well to the inner-most well.
+# ### Visualize BTES system layout
+# The 48 BTES wells are arranged in a pattern that ensures approximately equal
+# spacing between wells. The wells are organized into 6 sections of 8 wells
+# each. During charging, water is injected at 0.5 l/s into the innermost well of
+# each section and flows sequentially through all wells in series to the
+# outermost well. During discharging, the flow direction reverses, with water
+# flowing from the outermost well back to the innermost well.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data,
@@ -45,6 +47,8 @@ Legend(fig[1, 2], lns, labels);
 fig
 
 # ## Set up reservoir simulator
+# We configure the simulator with specific tolerances and timestep controls to
+# handle the challenging thermal transients in the BTES system.
 simulator, config = setup_reservoir_simulator(case;
     tol_cnv = 1e-2,
     tol_mb = 1e-6,
@@ -52,9 +56,10 @@ simulator, config = setup_reservoir_simulator(case;
     initial_dt = 5.0,
     relaxation = true);
 
-# Changing from charging to discharging results in a thermal shock that is
-# challenging to resolve for the nonlinear solver. We therefore use a timestep
-# selector that reduces the timestep to 5 seconds when the control changes.
+# The transition from charging to discharging creates a thermal shock that is
+# numerically challenging for the nonlinear solver. We use a specialized
+# timestep selector that reduces the timestep to 5 seconds during control
+# changes to maintain numerical stability and convergence.
 sel = JutulDarcy.ControlChangeTimestepSelector(
     case.model, 0.0, convert_to_si(5.0, :second))
 push!(config[:timestep_selectors], sel)
@@ -63,12 +68,16 @@ for ws in well_symbols(case.model)
     config[:tolerances][ws][:default] = 1e-2
 end
 
-# ## Simulate the case
+# ## Simulate the BTES system
+# Run the full 4-year simulation with the configured solver settings.
 results = simulate_reservoir(case;
 simulator=simulator, config=config, info_level=0);
 
-# ### Interactive visualization
-# We plot the reservoir state and the well output interactively.
+# ### Interactive visualization of results
+# We first plot the final temperature distribution in the reservoir and well
+# performance over time. The reservoir plot shows the thermal plumes developed
+# around each well section, while the well results show the temperature and flow
+# rate evolution throughout the simulation.
 plot_reservoir(case.model, results.states;
 well_fontsize = 0, key = :Temperature, step = length(case.dt),
 colormap = :seaborn_icefire_gradient)
@@ -76,9 +85,11 @@ colormap = :seaborn_icefire_gradient)
 plot_well_results(results.wells, field = :temperature)
 
 # ## Temperature evolution in the reservoir
-# We plot the temperature evolution in the reservoir after each of the four
-# charging stages. To enhance the visualization, we only plot the cells below 50
-# m depth that have a temperature above 15 °C.
+# Next, we visualize how thermal energy storage develops in the subsurface over
+# time. We examine the temperature distribution after each of the four charging
+# cycles to see how the thermal plume grows. For better visualization, we only
+# display cells below 50 m depth with temperatures above 15°C (warmer than the
+# natural ground temperature).
 dstep = Int64.(length(case.dt)/(4*2))
 steps = dstep:2*dstep:length(case.dt)
 fig = Figure(size = (1000, 750))
@@ -101,17 +112,18 @@ colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max),
 label = "T ≥ 15.0 °C", vertical = true)
 fig
 
-# ## Temperature evolution in the wells
-# Designing a BTES system requires in-depth understanding of how the temperature
-# evolves as water runs through the pipes. We plot the temperature in the first
-# section for each report step during the first charge and discharge stages.
-# This kind of visualization can be used when designing a BTES system to
-# determine e.g., how many wells are needed for a given depth, and how wells
-# should be coupled in series/parallel.
+# ## Temperature evolution within the boreholes
+# Understanding the temperature profiles within individual boreholes is crucial
+# for BTES system design. We analyze how temperature varies with depth along the
+# wellbore during both charging and discharging phases. This information can
+# help determine optimal well depth, number of wells needed, and the most
+# effective series/parallel coupling configuration for a given thermal storage
+# capacity requirement.
 
-# We set up a function that plots the temperature evolution in a given section
-# of the BTES system for a given set of timesteps. The function plots the
-# temperature as a function of well depth for all wells in the section.
+# To this end, we define a utility function to plot temperature evolution in a
+# BTES section. This function visualizes temperature as a function of well depth
+# for all wells in a given section at specified timesteps, helping to understand
+# thermal propagation through the wellbore network.
 function plot_btes_temperature(ax, section, timesteps)
     colors = cgrad(:ice, length(timesteps), categorical = true)
     msh = physical_representation(reservoir_model(case.model).data_domain)
@@ -134,9 +146,10 @@ end
 
 fig = Figure(size = (1000, 750))
 section = 1
-time = convert_from_si.(cumsum(case.dt), :year)
 
-# Temperature evolution during the first charging
+# ### Temperature evolution during the first charging cycle
+# We first visualize how thermal energy propagates through the wellbore network
+# as hot water flows from the innermost to the outermost well in the section.
 well = sections[Symbol("S$section")][1]
 T_ch = convert_to_si(90.0, :Celsius)
 is_charge = [f[:Facility].control[well].temperature == T_ch for f in case.forces]
@@ -146,7 +159,9 @@ xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
 plot_btes_temperature(ax, section, 1:stop)
 Legend(fig[1,2], ax; fontsize = 20)
 
-# Temperature evolution during the first discharging
+# ### Temperature evolution during the first discharging cycle
+# Next, we show how stored thermal energy is extracted as flow direction
+# reverses, with water flowing from the outermost to the innermost well.
 well = sections[Symbol("S$section")][end-1]
 T_dch = convert_to_si(10.0, :Celsius)
 is_discharge = [f[:Facility].control[well].temperature == T_dch for f in case.forces]
