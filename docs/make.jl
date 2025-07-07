@@ -68,8 +68,7 @@ end
 function example_info_footer(subdir, exname)
     return "\n\n# ## Example on GitHub\n"*
     "# If you would like to run this example yourself, it can be downloaded from "*
-    "the Fimbul.jl GitHub repository [as a script](https://github.com/sintefmath/Fimbul.jl/blob/main/examples/$subdir/$exname.jl), "*
-    "or as a [Jupyter Notebook](https://github.com/sintefmath/Fimbul.jl/blob/gh-pages/dev/final_site/notebooks/$subdir/$exname.ipynb)"
+    "the Fimbul.jl GitHub repository [as a script](https://github.com/sintefmath/Fimbul.jl/blob/main/examples/$subdir/$exname.jl)."
 end
 
 function update_footer(content, subdir, exname)
@@ -193,8 +192,12 @@ function build_fimbul_docs(
                 "man/cases/cases.md",
                 "man/cases/utils.md",
             ],
+            "References" => [
+                "Bibliography" => "extras/refs.md"
+            ],
         ],
         "Examples" => examples_markdown,
+        
     ]
     # for (k, subpages) in build_pages
     #     println("$k")
