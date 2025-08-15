@@ -39,3 +39,9 @@ plot_reservoir(case, result.states;
 colormap = :seaborn_icefire_gradient, key = :Temperature)
 ```
 Note that interactive plotting requires `GLMakie`, which may not work if you are running Julia over SSH.
+
+## License
+
+Fimbul.jl is licensed under the MIT License. See [LICENSE](LICENSE) for details.
+
+Copyright (c) 2025 SINTEF Digital
