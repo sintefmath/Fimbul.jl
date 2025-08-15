@@ -20,27 +20,6 @@ function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
 
 end
 
-function centroid(x)
-
-    ptset = PointSet(x)
-    xc = Meshes.centroid(ptset)
-    
-    return Tuple(xc.coords)
-
-end
-
-# function get_convex_hull(x)
-
-#     ptset = PointSet(x)
-#     println(ptset)
-#     poly = convexhull(ptset)
-#     x = map(p -> Tuple(p.coords), vertices(poly))
-#     x = vcat(x...)
-
-#     return x
-
-# end
-
 function get_convex_hull(points)
     # Ensure there are at least 3 points
     @assert length(points) ≥ 3 "At least 3 points are required to compute a convex hull."
