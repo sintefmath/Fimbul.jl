@@ -21,6 +21,8 @@ FimbulGLMakieExt = "GLMakie"
 Dates = "1.11.0"
 Gmsh = "0.3.1"
 Integrals = "4.5.0"
+Jutul = "0.4.5"
+JutulDarcy = "0.2.46"
 LinearAlgebra = "1.11.0"
 julia = "1.7"
 
