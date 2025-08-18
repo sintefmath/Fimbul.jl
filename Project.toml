@@ -1,19 +1,15 @@
 name = "Fimbul"
 uuid = "cac51d78-27de-4708-bd2b-bd13a82f652b"
 authors = ["Øystein Klemetsdal"]
-version = "1.0.0-DEV"
+version = "0.1.0"
 
 [deps]
 Dates = "ade2ca70-3891-5945-98fb-dc099432e06a"
 Gmsh = "705231aa-382f-11e9-3f0c-b7cb4346fdeb"
-HYPRE = "b5ffcf37-a2bd-41ab-a3da-4bd9bc8ad771"
 Integrals = "de52edbc-65ea-441a-8357-d3a637375a31"
 Jutul = "2b460a1a-8a2b-45b2-b125-b5c536396eb9"
 JutulDarcy = "82210473-ab04-4dce-b31b-11573c4f8e0a"
-LBFGSB = "5be7bae1-8223-5378-bac3-9e7378a2f6e6"
 LinearAlgebra = "37e2e46d-f89d-539d-b4ee-838fcccc9c8e"
-Meshes = "eacbb407-ea5a-433e-ab97-5258b1ca43fa"
-Revise = "295af30f-e4ad-537b-8983-00126c2a3abe"
 
 [weakdeps]
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
@@ -24,17 +20,15 @@ FimbulGLMakieExt = "GLMakie"
 [compat]
 Dates = "1.11.0"
 Gmsh = "0.3.1"
-HYPRE = "1.7.0"
 Integrals = "4.5.0"
-LBFGSB = "0.4.1"
+Jutul = "0.4.5"
+JutulDarcy = "0.2.46"
 LinearAlgebra = "1.11.0"
-Meshes = "0.32.3"
-Revise = "3.7.2"
 julia = "1.7"
 
 [extras]
-Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
+Test = "8dfed614-e22c-5e08-85e1-65c5234f0b40"
 
 [targets]
 test = ["Test"]

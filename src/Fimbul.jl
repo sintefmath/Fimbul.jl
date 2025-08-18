@@ -21,10 +21,8 @@ module Fimbul
     using Jutul, JutulDarcy
     using LinearAlgebra
     using Gmsh
-    using Meshes
     using Dates
     using Integrals
-    using LBFGSB
 
     # Meshing
     include("meshing/extruded.jl")
