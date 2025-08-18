@@ -25,22 +25,16 @@ Fimbul.jl is a [Julia](https://julialang.org/)-based toolbox for geothermal simu
 ## Getting started
 
 To get started with Fimbul, install [Julia](https://julialang.org/) and follow these steps:
-- Clone JutulDarcy and Fimbul
-```bash
-git clone https://github.com/sintefmath/JutulDarcy.jl.git
-git clone https://github.com/sintefmath/Fimbul.jl.git
-```
-NOTE: Fimbul currently relies on the development version of JutulDarcy, and this repository therefore has to be cloned as well. This will likely change in a future release, so that the release version of JutulDarcy can be used instead.
 - Make a project folder in a suitable location and navigate to it
 ```bash
 mkdir fimbul-testing
 cd fimbul-testing/
 ```
-- Start a Julia REPL in the project folder, activate an environment, and add Fimbul and JutulDarcy. We will use the development versions that we just cloned.
+- Start a Julia REPL in the project folder, activate an environment, and add Fimbul and JutulDarcy. We will also add GLMakie for plotting.
 ```julia
 using Pkg; Pkg.activate(".");
-Pkg.develop(path="path/to/JutulDarcy/");
-Pkg.develop(path="path/to/Fimbul/");
+Pkg.add("Fimbul");
+Pkg.add("GLMakie");
 Pkg.instantiate()
 ```
 
