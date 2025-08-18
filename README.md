@@ -18,7 +18,6 @@ cd fimbul-testing/
 - Start a Julia REPL in the project folder, activate an environment, and add Fimbul and JutulDarcy. We will also add GLMakie for plotting.
 ```julia
 using Pkg; Pkg.activate(".");
-Pkg.add("JutulDarcy");
 Pkg.add("Fimbul");
 Pkg.add("GLMakie");
 Pkg.instantiate()
