@@ -38,4 +38,4 @@ Note that interactive plotting requires `GLMakie`, which may not work if you are
 
 Fimbul.jl is licensed under the MIT License. See [LICENSE](LICENSE) for details.
 
-Copyright (c) 2025 SINTEF Digital
+Copyright (c) 2025 Øystein Klemetsdal, SINTEF Digital and Contributors
