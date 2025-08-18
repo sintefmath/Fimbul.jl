@@ -34,6 +34,7 @@ module Fimbul
     include("cases/doublet.jl")
     include("cases/btes.jl")
     include("cases/egg_geothermal.jl")
+    include("cases/fimbul_logo.jl")
     # Optimization
     include("optimization/objectives.jl")
     include("optimization/utils.jl")
