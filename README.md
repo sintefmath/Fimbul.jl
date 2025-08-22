@@ -35,8 +35,8 @@ colormap = :seaborn_icefire_gradient, key = :Temperature)
 ```
 The first time you run this code, Julia will compile the packages, which may take a few minutes. Subsequent runs will be much faster.
 
-[!NOTE]
-Interactive plotting requires `GLMakie`, which may not work if you are running Julia over SSH.
+>[!NOTE]
+>Interactive plotting requires `GLMakie`, which may not work if you are running Julia over SSH.
 
 ## License
 
