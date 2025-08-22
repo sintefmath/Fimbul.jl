@@ -49,7 +49,8 @@ colormap = :seaborn_icefire_gradient, key = :Temperature)
 ```
 The first time you run this code, Julia will compile the packages, which may take a few minutes. Subsequent runs will be much faster.
 
-[!NOTE] Interactive plotting requires `GLMakie`, which may not work if you are running Julia over SSH.
+>[!NOTE]
+>Interactive plotting requires `GLMakie`, which may not work if you are running Julia over SSH.
 
 ## Working with Fimbul
 If you plan to use Fimbul extensively in your work, we strongly recommend that you read the documentation of [JutulDarcy](https://sintefmath.github.io/JutulDarcy.jl/dev/), in particular on [getting started](https://sintefmath.github.io/JutulDarcy.jl/dev/man/intro). This also covers the basics of installing Julia and creating a Julia environments, written for users who may not already be familiar with Julia package management.
