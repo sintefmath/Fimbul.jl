@@ -1,0 +1,8 @@
+[deps]
+Base64 = "2a0f44e3-6c83-55bd-87e4-b1978d98bd5f"
+CairoMakie = "13f3f980-e62b-5c42-98c6-ff1f3baf88f0"
+DataFrames = "a93c6f00-e57d-5684-b7b6-d8193f3e46c0"
+GenieFramework = "a59fdf5c-6bf0-4f5d-949c-a137c9e2f353"
+HYPRE = "b5ffcf37-a2bd-41ab-a3da-4bd9bc8ad771"
+Jutul = "2b460a1a-8a2b-45b2-b125-b5c536396eb9"
+JutulDarcy = "82210473-ab04-4dce-b31b-11573c4f8e0a"
