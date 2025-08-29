@@ -13,9 +13,12 @@ module Fimbul
     export calibrate_case
     # Cases
     export analytical_1d
+    export geothermal_doublet
+    export ates
     export btes
     export egg_geothermal, egg_geothermal_doublet, egg_ates
-    export geothermal_doublet
+    # Other utilities
+    export thermal_radius_aquifer
 
     # Load dependencies into namespace
     using Jutul, JutulDarcy
@@ -32,11 +35,14 @@ module Fimbul
     include("cases/utils.jl")
     include("cases/analytical.jl")
     include("cases/doublet.jl")
+    include("cases/ates.jl")
     include("cases/btes.jl")
     include("cases/egg_geothermal.jl")
     # Optimization
     include("optimization/objectives.jl")
     include("optimization/utils.jl")
+    # Other utilities
+    include("utils.jl")
     # Externals
     include("ext/ext.jl")
 
