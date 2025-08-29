@@ -21,74 +21,198 @@ discharge -- rest.
 - `report_interval = 14si_unit(:day)`: Interval at which the simulation output
   is reported.
 """
-function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
-    charge_months::Union{Nothing, Vector{String}} = ["June", "July", "August", "September"],
-    discharge_months::Union{Nothing, Vector{String}} = ["December", "January", "February", "March"],
-    start_month::Union{Missing, String} = missing,
+# function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
+#     charge_period::Union{Nothing, Vector{String}} = [6, 9],
+#     discharge_period::Union{Nothing, Vector{String}} = [12, 3],
+#     # charge_months::Union{Nothing, Vector{String}} = ["June", "July", "August", "September"],
+#     # discharge_months::Union{Nothing, Vector{String}} = ["December", "January", "February", "March"],
+#     start_month::Union{Missing, String} = missing,
+#     num_years = 5,
+#     years = missing,
+#     report_interval = 14day
+#     )
+
+#     # Process years/number of cycles
+#     if ismissing(years)
+#         years = 2025:2025+num_years-1
+#     else
+#         @assert ismissing(num_years) "Please provide either num_years or years"
+#     end
+#     @assert all(diff(years) .== 1) "Years must be consecutive"
+
+#     start_year = years[1]
+    
+#     start_month = monthname(start_monthno)
+
+#     # ## Process input
+#     # Validate months
+#     charge_periods = isnothing(charge_periods) ? [] : charge_periods
+#     discharge_periods = isnothing(discharge_periods) ? [] : discharge_periods
+
+#     @assert intersect(charge_periods, discharge_periods) == []
+#         "Charge and discharge months must be disjoint"
+#     # TODO add more month checks
+  
+
+#     # ## Construct schedule
+#     # Set month order
+#     dt_vec, forces = Float64[], []
+#     if ismissing(start_month)
+#         if !isempty(charge_months)
+#             start_month = charge_months[1]
+#         elseif !isempty(discharge_months)
+#             start_month = discharge_months[1]
+#         else
+#             start_month = "January"
+#         end
+#     end
+#     start_monthno = findall(monthname.(1:12) .== start_month)[1]
+#     month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
+#     # Set up schedule for each year
+#     for year in years
+#         for mno in month_ix
+#             mname = monthname(mno)
+#             # Determine report step length
+#             num_days = daysinmonth(year, mno)
+#             time = num_days*day
+#             if  report_interval > time
+#                 @warn "Report intervall $report_interval is larger than "*
+#                 "the length of $mname. Adjusting to $num_days days"
+#                 n_steps = 1
+#             else
+#                 n_steps = max(Int(round(time/report_interval)), 1)
+#             end
+#             dt = fill(time/n_steps, n_steps)
+#             # Set forces
+#             if mname in charge_months
+#                 push!(dt_vec, dt...)
+#                 push!(forces, fill(forces_charge, n_steps)...)
+#             elseif mname in discharge_months
+#                 push!(dt_vec, dt...)
+#                 push!(forces, fill(forces_discharge, n_steps)...)
+#             else
+#                 push!(dt_vec, dt...)
+#                 push!(forces, fill(forces_rest, n_steps)...)
+#             end
+#         end
+#     end
+
+#     return forces, dt_vec
+
+# end
+
+function make_utes_schedule(forces_charge, forces_discharge, forces_rest, 
+    charge_periods = [["June", "September"]],
+    discharge_periods = [["December", "March"]],
+    start_year = missing,
     num_years = 5,
-    years = missing,
+    kwargs...
+    )
+
+    start_year = ismissing(start_year) ? Dates.year(now()) : start_year
+    periods = []
+    is_charge = true
+    cp, dp = nothing, nothing
+    while !isempty(charge_periods) && !isempty(discharge_periods)
+        
+        cp = pop!(charge_periods)
+        dp = pop!(discharge_periods)
+        println("Charge period: $cp")
+        println("Discharge period: $dp")
+        println("Periods: $(vcat(cp, dp))")
+        p = process_periods(start_year, vcat(cp, dp))
+        ix = unique(k -> p[k], eachindex(p))
+
+        forces = [forces_charge, forces_rest, forces_discharge, forces_rest]
+
+        println("Forces: $forces")
+        println("Periods processed: $p")
+        println("Periods unique: $ix")
+        println("Unique periods: $(p[ix])")
+        println("Unique forces: $(forces[ix])")
+    end
+    forces = [forces_charge, forces_rest, forces_discharge, forces_rest]
+
+    return make_schedule(forces, periods; start_year = start_year, kwargs...)
+end
+
+function make_schedule(forces, periods;
+    start_year = missing,
+    num_years = 1,
     report_interval = 14day
     )
 
-    # ## Process input
-    # Validate months
-    charge_months = isnothing(charge_months) ? [] : charge_months
-    discharge_months = isnothing(discharge_months) ? [] : discharge_months
-    @assert intersect(charge_months, discharge_months) == []
-        "Charge and discharge months must be disjoint"
-    # TODO add more month checks
-    # Porcess years/number of cycles
-    if ismissing(years)
-        years = 2025:2025+num_years-1
-    else
-        @assert ismissing(num_years) "Please provide either num_years or years"
-    end
-    @assert all(diff(years) .== 1) "Years must be consecutive"
+    start_year = ismissing(start_year) ? Dates.year(now()) : start_year
+    years = (0:num_years-1) .+ start_year
 
-    # ## Construct schedule
-    # Set month order
-    dt_vec, forces = Float64[], []
-    if ismissing(start_month)
-        if !isempty(charge_months)
-            start_month = charge_months[1]
-        elseif !isempty(discharge_months)
-            start_month = discharge_months[1]
-        else
-            start_month = "January"
-        end
+    num_periods = length(periods)-1
+    @assert num_periods > 0 "At least one periods are required"
+    @assert length(forces) == num_periods "Number of forces must match number of periods"
+
+    if length(report_interval) == 1
+        report_interval = fill(report_interval, num_periods)
     end
-    start_monthno = findall(monthname.(1:12) .== start_month)[1]
-    month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
-    # Set up schedule for each year
+
+    dt, force_vec = Float64[], []
     for year in years
-        for mno in month_ix
-            mname = monthname(mno)
-            # Determine report step length
-            num_days = daysinmonth(year, mno)
-            time = num_days*day
-            if  report_interval > time
-                @warn "Report intervall $report_interval is larger than "*
-                "the length of $mname. Adjusting to $num_days days"
-                n_steps = 1
-            else
-                n_steps = max(Int(round(time/report_interval)), 1)
-            end
-            dt = fill(time/n_steps, n_steps)
-            # Set forces
-            if mname in charge_months
-                push!(dt_vec, dt...)
-                push!(forces, fill(forces_charge, n_steps)...)
-            elseif mname in discharge_months
-                push!(dt_vec, dt...)
-                push!(forces, fill(forces_discharge, n_steps)...)
-            else
-                push!(dt_vec, dt...)
-                push!(forces, fill(forces_rest, n_steps)...)
-            end
+        periods_year = Fimbul.process_periods(year, periods)
+        for k in eachindex(periods_year)[1:end-1]
+            start_time, end_time = periods_year[k], periods_year[k+1]
+            println("Year $year: From $start_time to $end_time")
+            Δt = Dates.value(end_time - start_time)*1e-3
+            println("Duration: $Δt")
+            dt_k = report_interval[k]
+            n_step = max(1, Int(round(Δt/dt_k)))
+            dt_k = Δt/n_step
+            dt_k, forces_k = fill(dt_k, n_step), fill(forces[k], n_step)
+            push!(dt, dt_k...)
+            push!(force_vec, forces_k...)
         end
     end
 
-    return forces, dt_vec
+    return dt, force_vec
+
+end
+
+function process_periods(year, periods)
+
+    println("Periods: $periods")
+    periods_proc = Vector{DateTime}(undef, length(periods))
+    for (pno, period) in enumerate(periods)
+        time = process_time(year, periods[pno], false)
+        if pno > 1
+            time < periods_proc[pno-1] ? time += Dates.Year(1) : nothing
+        end
+        periods_proc[pno] = time
+    end
+
+    return periods_proc
+
+end
+
+function process_time(year, time, is_end)
+
+    if time isa String
+        time = Dates.monthname_to_value(time, Dates.ENGLISH)
+        println("Converted month name to month number: $time")
+    end
+    n = length(time)
+
+    @assert time isa Int || time isa Tuple{Int,Int} || time isa Tuple{Int,Int,Int} "Time must be an Int (month), Tuple{Int,Int} (month, day) or Tuple{Int,Int,Int} (month, day, hour)"
+
+    time = DateTime(year, time...)
+
+    !is_end ? (return time) : nothing;
+
+    if n == 1
+        time += Dates.Month(1)
+    elseif n == 2
+        time += Dates.Day(1)
+    else
+        error("Invalid time specification")
+    end
+
+    return time
 
 end
 
