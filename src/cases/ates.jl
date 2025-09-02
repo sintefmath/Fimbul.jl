@@ -84,12 +84,6 @@ function ates(;
     )
 
     subset = use_2d ? [:top, :bottom] : :all
-    # bc, state0 = set_dirichlet_bcs(
-    #     model, subset;
-    #     pressure_surface = 1atm,
-    #     temperature_surface = convert_to_si(10.0, :Celsius),
-    #     geothermal_gradient = 0.03Kelvin/meter,
-    # )
     
     rho = reservoir_model(model).system.rho_ref[1]
 
@@ -122,19 +116,6 @@ function ates(;
     else
         subset = top .|| bottom .|| south .|| north .|| west .|| east
     end
-    # for s in subset
-    #     if s == :top
-    #         ix = top
-    #     elseif s == :bottom
-    #         ix = bottom
-    #     elseif s == :sides
-    #         ix = sides
-    #     else
-    #         @error "Unknown boundary condition subset: $s"
-    #     end
-    #     push!(cells_bc, cells_bdr[ix]...)
-    #     push!(z_bc, z_bdr[ix]...)
-    # end
     cells_bc = cells_bdr[subset]
     z_bc = z_bdr[subset]
     z_hat = z_bc .- z0
