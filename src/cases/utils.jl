@@ -101,41 +101,6 @@ discharge -- rest.
 
 # end
 
-function make_utes_schedule(forces_charge, forces_discharge, forces_rest, 
-    charge_periods = [["June", "September"]],
-    discharge_periods = [["December", "March"]],
-    start_year = missing,
-    num_years = 5,
-    kwargs...
-    )
-
-    start_year = ismissing(start_year) ? Dates.year(now()) : start_year
-    periods = []
-    is_charge = true
-    cp, dp = nothing, nothing
-    while !isempty(charge_periods) && !isempty(discharge_periods)
-        
-        cp = pop!(charge_periods)
-        dp = pop!(discharge_periods)
-        println("Charge period: $cp")
-        println("Discharge period: $dp")
-        println("Periods: $(vcat(cp, dp))")
-        p = process_periods(start_year, vcat(cp, dp))
-        ix = unique(k -> p[k], eachindex(p))
-
-        forces = [forces_charge, forces_rest, forces_discharge, forces_rest]
-
-        println("Forces: $forces")
-        println("Periods processed: $p")
-        println("Periods unique: $ix")
-        println("Unique periods: $(p[ix])")
-        println("Unique forces: $(forces[ix])")
-    end
-    forces = [forces_charge, forces_rest, forces_discharge, forces_rest]
-
-    return make_schedule(forces, periods; start_year = start_year, kwargs...)
-end
-
 function make_schedule(forces, periods;
     start_year = missing,
     num_years = 1,
@@ -146,31 +111,68 @@ function make_schedule(forces, periods;
     years = (0:num_years-1) .+ start_year
 
     num_periods = length(periods)-1
-    @assert num_periods > 0 "At least one periods are required"
+    @assert num_periods > 0 "At least one period is required"
     @assert length(forces) == num_periods "Number of forces must match number of periods"
 
     if length(report_interval) == 1
         report_interval = fill(report_interval, num_periods)
     end
 
-    dt, force_vec = Float64[], []
+    dt, force_vec, timestamps = Float64[], [], DateTime[]
     for year in years
         periods_year = Fimbul.process_periods(year, periods)
         for k in eachindex(periods_year)[1:end-1]
             start_time, end_time = periods_year[k], periods_year[k+1]
-            println("Year $year: From $start_time to $end_time")
             Δt = Dates.value(end_time - start_time)*1e-3
-            println("Duration: $Δt")
             dt_k = report_interval[k]
             n_step = max(1, Int(round(Δt/dt_k)))
             dt_k = Δt/n_step
             dt_k, forces_k = fill(dt_k, n_step), fill(forces[k], n_step)
+            dts = Dates.Millisecond(Int(round(Δt/n_step*1e3)))
+            ts = start_time:dts:(end_time - dts)
             push!(dt, dt_k...)
             push!(force_vec, forces_k...)
+            push!(timestamps, ts...)
+        end
+        if year == years[end]
+            push!(timestamps, periods_year[end])
         end
     end
 
-    return dt, force_vec
+    return dt, force_vec, timestamps
+
+end
+
+function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"],
+    start_year = missing,
+    num_years = 5,
+    kwargs...
+    )
+
+    start_year = ismissing(start_year) ? Dates.year(now()) : start_year
+    
+    ch_start = process_time(start_year, charge_period[1])
+    ch_end = process_time(start_year, charge_period[2], true)
+    dch_start = process_time(start_year, discharge_period[1])
+    dch_end = process_time(start_year, discharge_period[2], true)
+
+    periods = [ch_start, ch_end, dch_start, dch_end, ch_start + Dates.Year(1)]
+    periods = process_periods(start_year, periods)
+    keep = diff(periods) .> Dates.Second(0)
+    println("Periods: $periods")
+    println("Keep: $keep")
+
+    periods = periods[[keep; true]]
+
+    periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
+    forces = [forces_charge; forces_rest; forces_discharge; forces_rest][keep]
+
+    dt, forces, timestamps = make_schedule(forces, periods;
+        start_year = start_year, num_years = num_years, kwargs...)
+
+    return dt, forces, timestamps
 
 end
 
@@ -179,7 +181,7 @@ function process_periods(year, periods)
     println("Periods: $periods")
     periods_proc = Vector{DateTime}(undef, length(periods))
     for (pno, period) in enumerate(periods)
-        time = process_time(year, periods[pno], false)
+        time = process_time(year, period)
         if pno > 1
             time < periods_proc[pno-1] ? time += Dates.Year(1) : nothing
         end
@@ -190,11 +192,12 @@ function process_periods(year, periods)
 
 end
 
-function process_time(year, time, is_end)
+function process_time(year, time, is_end=false)
 
-    if time isa String
+    if time isa DateTime
+        return time
+    elseif time isa String
         time = Dates.monthname_to_value(time, Dates.ENGLISH)
-        println("Converted month name to month number: $time")
     end
     n = length(time)
 
