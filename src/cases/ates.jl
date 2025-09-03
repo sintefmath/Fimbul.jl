@@ -274,11 +274,11 @@ case = ates_simple(
 ```
 """
 function ates_simple(;
-    well_distance = 500.0,
+    well_distance = missing,
     aquifer_thickness = 100.0,
     depth = 1000.0,
-    porosity = [0.2, 0.01],
-    permeability = [1000.0, 1.0].*1e-3.*si_unit(:darcy),
+    porosity = [0.35, 0.05],
+    permeability = [1000.0, 5.0].*1e-3.*si_unit(:darcy),
     rock_thermal_conductivity = [2.0, 2.0].*watt/(meter*Kelvin),
     rock_heat_capacity = [900.0, 900.0]*joule/(kilogram*Kelvin),
     kwargs...
