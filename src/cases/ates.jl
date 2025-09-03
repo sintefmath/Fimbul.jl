@@ -279,7 +279,7 @@ function ates_simple(;
     depth = 1000.0,
     porosity = [0.2, 0.01],
     permeability = [1000.0, 1.0].*1e-3.*si_unit(:darcy),
-    thermal_conductivity = [2.0, 2.0].*watt/(meter*Kelvin),
+    rock_thermal_conductivity = [2.0, 2.0].*watt/(meter*Kelvin),
     rock_heat_capacity = [900.0, 900.0]*joule/(kilogram*Kelvin),
     kwargs...
 )
@@ -294,7 +294,7 @@ function ates_simple(;
     make_prop = prop -> [prop[2], prop[1], prop[2]]  # [cap, aquifer, basement]
     porosity = make_prop(porosity)
     permeability = make_prop(permeability)
-    thermal_conductivity = make_prop(thermal_conductivity)
+    rock_thermal_conductivity = make_prop(rock_thermal_conductivity)
     rock_heat_capacity = make_prop(rock_heat_capacity)
     # Call main ates function
     return Fimbul.ates(;
@@ -302,7 +302,7 @@ function ates_simple(;
         depths=depths,
         porosity=porosity,
         permeability=permeability,
-        thermal_conductivity=thermal_conductivity,
+        rock_thermal_conductivity=rock_thermal_conductivity,
         rock_heat_capacity=rock_heat_capacity,
         aquifer_layer=aquifer_layer,
         kwargs...
