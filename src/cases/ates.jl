@@ -19,40 +19,26 @@ Create an Aquifer Thermal Energy Storage (ATES) simulation case.
 - `rock_heat_capacity`: Rock heat capacity [J/(kg·K)]
 
 ## Thermal Parameters
-- `temperature_charge = 95°C`: Temperature of injected water during charging [K]
-- `temperature_discharge = 25°C`: Temperature of injected water during discharging [K]
 - `temperature_surface = 10°C`: Surface temperature [K]
 - `thermal_gradient = 0.03`: Geothermal gradient [K/m]
 
 ## Operational Parameters
-- `rate_charge = missing`: Injection/production rate during charging [m³/s]. 
-  If missing, calculated based on thermal_radius
+- `temperature_charge = 95°C`: Temperature of injected water during charging [K]
+- `temperature_discharge = 25°C`: Temperature of injected water during discharging [K]
+- `rate_charge = missing`: Injection/production rate during charging [m³/s]. If
+  missing, calculated based on a target thermal_radius = well_distance/2 or, if
+  well_distance missing, 250 m
 - `rate_discharge = rate_charge`: Rate during discharging [m³/s]
-- `balanced_injection = true`: If true, uses reinjection target for mass balance
+- `balanced_injection = true`: If true, the injection well target will be set
+  equal to the production rate
 
 ## Advanced Options
-- `utes_schedule_args = NamedTuple()`: Additional arguments for UTES scheduling
-- `mesh_args = NamedTuple()`: Additional arguments for mesh generation
+- `utes_schedule_args = NamedTuple()`: Additional arguments passed to
+  make_utes_schedule
+- `mesh_args = NamedTuple()`: Additional arguments passed to make_ates_cart_mesh
 
 # Returns
-A `JutulCase` object ready for reservoir simulation with:
-- Configured geothermal model with two wells
-- Initial state with hydrostatic pressure and geothermal temperature
-- Boundary conditions for thermal and flow processes
-- UTES operational schedule
-
-# Example
-```julia
-# Basic ATES case
-case = ates(use_2d = true)
-
-# Custom case with specific parameters
-case = ates(
-    well_distance = 600.0,
-    temperature_charge = convert_to_si(80, :Celsius),
-    aquifer_layer = 2,
-    use_2d = true
-)
+A `JutulCase` for ATES
 ```
 """
 function ates(;
@@ -61,7 +47,7 @@ function ates(;
     porosity = [0.01, 0.05, 0.35, 0.05, 0.01],
     permeability = [1.0, 5.0, 1000.0, 5.0, 1.0].*1e-3.*si_unit(:darcy),
     rock_thermal_conductivity = [2.5, 2.0, 1.5, 2.0, 2.5].*watt/(meter*Kelvin),
-    rock_heat_capacity = fill(900.0*joule/(kilogram*Kelvin), length(depths)-1),
+    rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
     aquifer_layer = 3,
     temperature_charge = convert_to_si(95, :Celsius),
     temperature_discharge = convert_to_si(25, :Celsius),
@@ -70,21 +56,32 @@ function ates(;
     balanced_injection = true,
     temperature_surface = convert_to_si(10.0, :Celsius),
     thermal_gradient = 0.03Kelvin/meter,
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"],
     utes_schedule_args = NamedTuple(),
     use_2d = false,
     mesh_args = NamedTuple(),
 )
 
     # ## Process input and set defaults
+    # Fill layer properties given as scalars
+    layer_thickness = diff(depths)
+    process_value = v -> v isa Number ? fill(v, length(depths)-1) : v
+    porosity = process_value(porosity)
+    permeability = process_value(permeability)
+    rock_thermal_conductivity = process_value(rock_thermal_conductivity)
+    rock_heat_capacity = process_value(rock_heat_capacity)
     # Calculate thermal properties for the aquifer layer
     Cf, Cr = 4184.0, rock_heat_capacity[aquifer_layer]
     ϕ = porosity[aquifer_layer]
     Caq = Cf*ϕ + Cr*(1 - ϕ)
-    layer_thickness = diff(depths)
     Haq = layer_thickness[aquifer_layer]
     # Default charging duration (6 months)
     # TODO: Use charge duration from input
     charge_duration = 0.5si_unit(:year)
+    ch_start = Fimbul.process_time(2025, charge_period[1])
+    ch_end = Fimbul.process_time(2025, charge_period[2], true)
+    charge_duration = (ch_end - ch_start).value*1e-3
     thermal_radius = missing
     # Calculate rate based on a target 250 m thermal radius if not provided
     if ismissing(rate_charge)
@@ -111,8 +108,9 @@ function ates(;
 
     # ## Create reservoir domain
     # Create mesh
+    nearwell_radius = 0.5*min(thermal_radius, well_distance/2)
     msh, layers = make_ates_cart_mesh(well_distance, depths, aquifer_layer;
-        thermal_radius = thermal_radius,
+        nearwell_radius = nearwell_radius,
         use_2d = use_2d,
         mesh_args...
     )
@@ -164,7 +162,7 @@ function ates(;
     # Geothermal temperature gradient
     dTdz = thermal_gradient
     # Pressure and temperature as functions of depth
-    p = z -> 1atm .+ dpdz.*z
+    p = z -> 10atm .+ dpdz.*z
     T = z -> temperature_surface .+ dTdz*z
     # Set boundary conditions
     z_bdr = geo.boundary_centroids[3, :]
@@ -235,6 +233,8 @@ function ates(;
     # Create UTES operational schedule
     dt, forces = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest,
+        charge_period = charge_period,
+        discharge_period = discharge_period,
         utes_schedule_args...
     )
 
@@ -289,7 +289,7 @@ function ates_simple(;
     # Create simple three-layer system: cap rock - aquifer - basement
     # TODO: Add back-of-the-envelope calculation for thermal plume spread
     # downwards to set basement thickness
-    depths = [0.0, depth, depth + aquifer_thickness, (depth + aquifer_thickness)*1.1]
+    depths = [0.0, depth, depth + aquifer_thickness, (depth + aquifer_thickness)*1.25]
     # Map properties to three layers
     make_prop = prop -> [prop[2], prop[1], prop[2]]  # [cap, aquifer, basement]
     porosity = make_prop(porosity)
@@ -347,65 +347,77 @@ function make_ates_cart_mesh(well_distance, depths, aquifer_layer;
     hxy_max = missing,
     hz_min = missing,
     hz_max = missing,
-    thermal_radius = missing,
+    nearwell_radius = missing,
     offset_rel = 1.0,
     use_2d = false,
 )
 
     # ## Process input
     # Set default thermal radius if not provided
-    thermal_radius = ismissing(thermal_radius) ? well_distance/2 : thermal_radius
+    nearwell_radius = ismissing(nearwell_radius) ? well_distance/2 : nearwell_radius
+    println(nearwell_radius)
+    println(well_distance)
     # Calculate domain offset to minimize boundary effects
-    offset = offset_rel*maximum([well_distance, 2*thermal_radius])
+    offset = offset_rel*maximum([well_distance, 2*nearwell_radius])
     # Well coordinates
     xy_hot = (-well_distance/2, 0.0)
     xy_cold = (well_distance/2, 0.0)
     # Set default horizontal grid spacing
-    hxy_min = ismissing(hxy_min) ? well_distance/25 : hxy_min
-    hxy_max = ismissing(hxy_max) ? hxy_min*10 : hxy_max
+    hxy_min = ismissing(hxy_min) ? nearwell_radius/6 : hxy_min
+    hxy_max = ismissing(hxy_max) ? (offset - nearwell_radius)/5 : hxy_max
     @assert hxy_max ≥ hxy_min "hxy_max must be greater than or equal to hxy_min"
     # Set vertical grid spacing
     layer_thickness = diff(depths)
     hz_min = ismissing(hz_min) ? layer_thickness[aquifer_layer]/10 : hz_min
-    hz_max = ismissing(hz_max) ? hz_min*10 : hz_max
+    hz_max = ismissing(hz_max) ? maximum(layer_thickness)/5 : hz_max
     @assert hz_max ≥ hz_min "hz_max must be greater than or equal to hz_min"
 
     # ## Create coordinate arrays with refinement
-    # Grid spacing array: coarse-fine-fine-fine-fine-fine-coarse
-    hxy = [hxy_max, hxy_min, hxy_min, hxy_min, hxy_min, hxy_min, hxy_max];
-    # Create coordinates for each horizontal dimension
-    dims = use_2d ? 1 : 1:2 # Only x-direction for 2D, x and y for 3D
-    xy = []
-    for dim in dims
-        # Key x or y coordinates for grid refinement
-        xy_d = [
-            xy_hot[dim]-offset,         # Left boundary
-            xy_hot[dim]-thermal_radius, # Left thermal boundary
-            xy_hot[dim]-hxy_min/2,      # Near hot well
-            xy_hot[dim]+thermal_radius, # Between wells
-            xy_cold[dim]-thermal_radius,# Between wells  
-            xy_cold[dim]-hxy_min/2,     # Near cold well
-            xy_cold[dim]+thermal_radius,# Right thermal boundary
-            xy_cold[dim]+offset         # Right boundary
+    # Create coordinates for x dimension
+    x = [
+        xy_hot[1]-offset,          # Left boundary
+        xy_hot[1]-nearwell_radius, # Left thermal boundary
+        xy_hot[1]-hxy_min/2,       # Near hot well
+        xy_hot[1]+nearwell_radius, # Between wells
+        xy_cold[1]-nearwell_radius,# Between wells  
+        xy_cold[1]-hxy_min/2,      # Near cold well
+        xy_cold[1]+nearwell_radius,# Right thermal boundary
+        xy_cold[1]+offset          # Right boundary
+    ]
+    # Grid spacing array: coarse-fine-fine-coarse-fine-fine-coarse
+    hx = [hxy_max, hxy_min, hxy_min, hxy_max, hxy_min, hxy_min, hxy_max];
+    dx = diff(x)
+    hx[dx .< hxy_max] .= hxy_min
+    nx = round.(dx./hx)
+    hx[nx .< 5] .= dx[nx .< 5]./5
+    x, _ = Fimbul.interpolate_z(x, hx)
+    # Create coordinates for y dimension
+    if !use_2d
+        y = [
+            xy_hot[2]-offset,
+            xy_hot[2]-nearwell_radius,
+            xy_hot[2]-hxy_min/2,
+            xy_hot[2]+nearwell_radius,
+            xy_hot[2]+offset
         ]
-        # Interpolate coordinates with specified grid spacing
-        xy_d, _ = Fimbul.interpolate_z(xy_d, hxy)
-        push!(xy, xy_d)
-    end
-    # For 2D, add minimal y-dimension
-    if use_2d
-        push!(xy, [-0.5, 0.5])
+        hy = [hxy_max, hxy_min, hxy_min, hxy_max]
+        hy[diff(y) .< hxy_max] .= hxy_min
+        y, _ = Fimbul.interpolate_z(y, hy)
+    else
+        y = [-0.5, 0.5]
     end
     # Create coordinates in vertical dimension
     hz = fill(hz_max, length(layer_thickness))
-    hz[[-1, 0, 1] .+ aquifer_layer] .= hz_min
+    hz[aquifer_layer] = hz_min
+    hz[layer_thickness .< hz_max] .= hz_min
+    nz = round.(layer_thickness./hz)
+    hz[nz .< 5] .= layer_thickness[nz .< 5]./5
     z, layers = Fimbul.interpolate_z(depths, hz)
-
     # ## Create Cartesian mesh
-    x = (xy[1], xy[2], z)
-    sizes = map(x->diff(x), (xy[1], xy[2], z))
+    xyz = (x, y, z)
+    sizes = map(x->diff(x), xyz)
     dims = Tuple([length(s) for s in sizes])
-    msh = CartesianMesh(dims, sizes, origin = minimum.(x))
+    msh = CartesianMesh(dims, sizes, origin = minimum.(xyz))
     # Map layers to all cells (repeat for each horizontal cell)
     layers = repeat(layers, inner = dims[1]*dims[2])
 
