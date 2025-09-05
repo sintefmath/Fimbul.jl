@@ -17,6 +17,7 @@ using Jutul, JutulDarcy # Jutul and JutulDarcy modules
 using Fimbul # Fimbul module
 using HYPRE # Iterative linear solvers
 using GLMakie # Visualization
+using LBFGSB # Optimization
 
 # # Set up model
 # We use the first realization of the EGG benchmark model [egg](@cite), and
@@ -143,7 +144,7 @@ for (k, v) in opt_config
             :WellIndices, :WellIndicesThermal
             ]
             vi[:active] = k in wells
-            vi[:rel_min] = 1e-5
+            vi[:rel_min] = 1e-3
             vi[:rel_max] = 1e2
         else
             vi[:active] = false
@@ -152,12 +153,71 @@ for (k, v) in opt_config
 end
 
 # ### Calibrate proxy model
-# Setting up the calibration requires a few steps, which has been conveniently
-# implemented in the `calibrate_case` utility function. We use the LBFGS
-# optimization algorithm, which has a number of parameters that can be set,
-# including the maximum number of function evaluations (maxfun), and the maximum
-# number of iterations (maxiter), both we set to 200 here. Increasing these
-# numbers will likely give a better match.
+# Setting up the calibration requires a few steps, which we conveniently
+# implement in the `calibrate_case` utility functions.
+function run_optimization(opt_setup; 
+    factr = 1e8, maxfun = 200, maxiter = 200, m = 100)
+
+    lower = opt_setup.limits.min
+    upper = opt_setup.limits.max
+    x0 = opt_setup.x0
+    n = length(x0)
+    setup = Dict(:lower => lower, :upper => upper, :x0 => copy(x0))
+
+    prt = 1
+    f! = (x) -> opt_setup.F_and_dF!(NaN, nothing, x)
+    g! = (dFdx, x) -> opt_setup.F_and_dF!(NaN, dFdx, x)
+    results, x_opt = LBFGSB.lbfgsb(f!, g!, x0, lb=lower, ub=upper,
+        iprint = prt,
+        factr = factr,
+        maxfun = maxfun,
+        maxiter = maxiter,
+        m = m
+    )
+
+    return (x_opt, results, setup)
+
+end
+
+function calibrate_case(objective, case, n_steps, opt_config; lbfgs_args = NamedTuple())
+
+    case = deepcopy(case)
+    _, cfg = setup_reservoir_simulator(case;
+        relaxation=true,
+        tol_cnv=1e-6,
+        tol_cnv_well=1e-5,
+        info_level=-1,
+    );
+    cfg[:tolerances][:Reservoir][:default] = 1e-6
+    for well in well_symbols(case.model)
+        cfg[:tolerances][well][:default] = 1e-6
+    end
+
+    case_cal = case[1:n_steps]
+    parameters = setup_parameters(case_cal.model)
+    opt_setup = setup_parameter_optimization(
+        case_cal.model, case_cal.state0, parameters, case_cal.dt, 
+        case_cal.forces, objective, opt_config);
+
+    x_opt, _, _ = run_optimization(opt_setup; lbfgs_args...);
+
+    case_cal = deepcopy(opt_setup.data[:case])
+    params = case_cal.parameters
+    data = opt_setup.data
+    params = devectorize_variables!(
+        params, case_cal.model, x_opt, data[:mapper], config = data[:config])
+
+    case_cal = JutulCase(case_cal.model, case.dt, case.forces; 
+        state0 = case.state0, parameters = case_cal.parameters)
+
+    return case_cal
+
+end
+
+# We use the LBFGS optimization algorithm, which has a number of parameters that
+# can be set, including the maximum number of function evaluations (maxfun), and
+# the maximum number of iterations (maxiter), both we set to 200 here.
+# Increasing these numbers will likely give a better match.
 proxy_cal = calibrate_case(objective, proxy, n_steps, opt_config; 
     lbfgs_args = (maxfun = 200, maxiter = 200, factr = 1e-6))
 

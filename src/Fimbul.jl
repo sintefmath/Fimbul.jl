@@ -10,7 +10,6 @@ module Fimbul
     export plot_well_data!, plot_mswell_values!
     # Optimization
     export well_mismatch_thermal
-    export calibrate_case
     # Cases
     export analytical_1d
     export geothermal_doublet
@@ -40,7 +39,6 @@ module Fimbul
     include("cases/egg_geothermal.jl")
     # Optimization
     include("optimization/objectives.jl")
-    include("optimization/utils.jl")
     # Other utilities
     include("utils.jl")
     # Externals
