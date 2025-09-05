@@ -31,9 +31,9 @@ Setup function for borehole thermal energy storage (BTES) system.
 - `rate_discharge = rate_charge`: Injection rate during discharging.
 - `temperature_surface = to_kelvin(10.0)`: Temperature at the surface.
 - `num_years = 5`: Number of years to run the simulation.
-- `charge_months = ["June", "July", "August", "September"]`: Months during which
+- `charge_period = ["June", "September"]`: Period during which
   the system is charged.
-- `discharge_months = ["December", "January", "February", "March"]`: Months during which
+- `discharge_period = ["December", "March"]`: Period during which
   the system is discharged.
 - `report_interval = 14day`: Reporting interval for the simulation.
 - `utes_schedule_args = NamedTuple()`: Additional arguments for the UTES schedule.
@@ -57,8 +57,8 @@ function btes(;
     rate_discharge = rate_charge,
     temperature_surface = to_kelvin(10.0),
     num_years = 4,
-    charge_months = ["June", "July", "August", "September"],
-    discharge_months = ["December", "January", "February", "March"],
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"],
     report_interval = 14day,
     utes_schedule_args = NamedTuple(),
     n_z = [3, 8, 3],
@@ -142,10 +142,10 @@ function btes(;
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
     forces_rest = setup_reservoir_forces(model, bc=bc)
     # Make schedule
-    forces, dt = make_utes_schedule(
+    dt, forces = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest;
-        charge_months = charge_months,
-        discharge_months = discharge_months,
+        charge_period = charge_period,
+        discharge_period = discharge_period,
         num_years = num_years,
         report_interval = report_interval,
         utes_schedule_args...,
