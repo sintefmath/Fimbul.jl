@@ -1,106 +1,47 @@
 atm = si_unit(:atm)
 year, day = si_units(:year, :day)
+
 """
-    make_utes_schedule(forces_charge, forces_discharge, forces_rest; <keyword arguments>...)
+    make_schedule(forces, periods; start_year=missing, num_years=1, report_interval=14day)
 
-Construct a schedule for a UTES system with a cycle of charge -- rest --
-discharge -- rest.
+Create a simulation schedule with time steps and forces for multi-period
+reservoir simulations.
 
-# Keyword arguments
+This function generates a detailed schedule based on user-defined periods and
+associated forcing conditions. It automatically handles multi-year simulations
+with periodic patterns and provides flexible time step control within each
+period.
 
-- `charge_months::Vector{String} = ["June", "July", "August", "September"]`:
-  Months in which the system is charged.
-- `discharge_months::Vector{String} = ["December", "January", "February",
-  "March"]`: Months in which the system is discharged.
-- `start_month::Union{Missing, String}`: Month in which the schedule starts.
-  Defaults to the first month of charging.
-- `num_years::Int`: Number of years the schedule is repeated (starting from
-  2025). If provided, keyword argument `years` must be missing.
-- `years::Vector{Int}`: Years in which the schedule is repeated. Defaults to
-  `2025:num_years`. If provided, keyword argument `num_years` must be missing.
-- `report_interval = 14si_unit(:day)`: Interval at which the simulation output
-  is reported.
+# Arguments
+- `forces`: Vector of forcing conditions, one for each period. Each element
+  should contain well controls, boundary conditions, or other simulation drivers
+  for the corresponding period.
+- `periods`: Vector of time period definitions. Length should be one more than
+  `forces` to define period boundaries. Periods can be specified as month
+  numbers, (month, day) tuples, (month, day, hour) tuples, or month name
+  strings.
+
+# Keyword Arguments
+- `start_year::Union{Int,Missing}=missing`: Starting year for the simulation. If
+  `missing`, uses the current year.
+- `num_years::Int=1`: Number of years to simulate with the periodic schedule.
+- `report_interval::Union{Real,Vector}=14day`: Time step size within each
+  period. Can be a single value applied to all periods or a vector with specific
+  intervals for each period.
+
+# Returns
+- `dt`: Vector of time step sizes in seconds for the entire simulation
+- `force_vec`: Vector of forcing conditions corresponding to each time step
+- `timestamps`: Vector of DateTime objects marking the time points
+
+# Example
+```julia
+# Define seasonal operations: charge in summer, rest in winter
+forces = [charge_controls, rest_controls]
+periods = ["June", "September", "December"]  # June-Sep charge, Sep-Dec rest
+dt, forces, times = make_schedule(forces, periods;num_years=3, report_interval=7day)
+```
 """
-# function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
-#     charge_period::Union{Nothing, Vector{String}} = [6, 9],
-#     discharge_period::Union{Nothing, Vector{String}} = [12, 3],
-#     # charge_months::Union{Nothing, Vector{String}} = ["June", "July", "August", "September"],
-#     # discharge_months::Union{Nothing, Vector{String}} = ["December", "January", "February", "March"],
-#     start_month::Union{Missing, String} = missing,
-#     num_years = 5,
-#     years = missing,
-#     report_interval = 14day
-#     )
-
-#     # Process years/number of cycles
-#     if ismissing(years)
-#         years = 2025:2025+num_years-1
-#     else
-#         @assert ismissing(num_years) "Please provide either num_years or years"
-#     end
-#     @assert all(diff(years) .== 1) "Years must be consecutive"
-
-#     start_year = years[1]
-    
-#     start_month = monthname(start_monthno)
-
-#     # ## Process input
-#     # Validate months
-#     charge_periods = isnothing(charge_periods) ? [] : charge_periods
-#     discharge_periods = isnothing(discharge_periods) ? [] : discharge_periods
-
-#     @assert intersect(charge_periods, discharge_periods) == []
-#         "Charge and discharge months must be disjoint"
-#     # TODO add more month checks
-  
-
-#     # ## Construct schedule
-#     # Set month order
-#     dt_vec, forces = Float64[], []
-#     if ismissing(start_month)
-#         if !isempty(charge_months)
-#             start_month = charge_months[1]
-#         elseif !isempty(discharge_months)
-#             start_month = discharge_months[1]
-#         else
-#             start_month = "January"
-#         end
-#     end
-#     start_monthno = findall(monthname.(1:12) .== start_month)[1]
-#     month_ix = ((0:11).+start_monthno.-1).%12 .+ 1
-#     # Set up schedule for each year
-#     for year in years
-#         for mno in month_ix
-#             mname = monthname(mno)
-#             # Determine report step length
-#             num_days = daysinmonth(year, mno)
-#             time = num_days*day
-#             if  report_interval > time
-#                 @warn "Report intervall $report_interval is larger than "*
-#                 "the length of $mname. Adjusting to $num_days days"
-#                 n_steps = 1
-#             else
-#                 n_steps = max(Int(round(time/report_interval)), 1)
-#             end
-#             dt = fill(time/n_steps, n_steps)
-#             # Set forces
-#             if mname in charge_months
-#                 push!(dt_vec, dt...)
-#                 push!(forces, fill(forces_charge, n_steps)...)
-#             elseif mname in discharge_months
-#                 push!(dt_vec, dt...)
-#                 push!(forces, fill(forces_discharge, n_steps)...)
-#             else
-#                 push!(dt_vec, dt...)
-#                 push!(forces, fill(forces_rest, n_steps)...)
-#             end
-#         end
-#     end
-
-#     return forces, dt_vec
-
-# end
-
 function make_schedule(forces, periods;
     start_year = missing,
     num_years = 1,
@@ -143,6 +84,60 @@ function make_schedule(forces, periods;
 
 end
 
+"""
+    make_utes_schedule(forces_charge, forces_discharge, forces_rest; kwargs...)
+
+Create a specialized schedule for Underground Thermal Energy Storage (UTES)
+systems including ATES (Aquifer Thermal Energy Storage) and BTES (Borehole
+Thermal Energy Storage).
+
+This function generates a three-phase operational schedule typical for thermal energy storage:
+1. **Charging phase**: Inject hot water to store thermal energy
+2. **Rest phase**: No well activity 
+3. **Discharging phase**: Extract stored thermal energy for heating applications
+
+The schedule automatically handles seasonal operations with user-defined charge
+and discharge periods, typically aligned with energy availability (summer
+charging) and demand (winter discharging).
+
+# Arguments
+- `forces_charge`: Forcing conditions during charging phase (hot water injection)
+- `forces_discharge`: Forcing conditions during discharging phase (thermal energy extraction)  
+- `forces_rest`: Forcing conditions during rest periods (no activity well activity)
+
+# Keyword Arguments
+- `charge_period::Vector{String}=["June", "September"]`: Start and end months
+  for charging. Can be month names (strings) or month numbers.
+- `discharge_period::Vector{String}=["December", "March"]`: Start and end months
+  for discharging.
+- `start_year::Union{Int,Missing}=missing`: Starting year for simulation.
+  Defaults to current year.
+- `num_years::Int=5`: Number of operational years to simulate.
+- `kwargs...`: Additional arguments passed to `make_schedule()` (e.g.,
+  `report_interval`).
+
+# Returns
+- `dt`: Vector of time step sizes in seconds
+- `forces`: Vector of forcing conditions for each time step
+- `timestamps`: Vector of DateTime objects for temporal tracking
+
+# Example
+```julia
+# Standard ATES schedule: charge Jun-Sep, discharge Dec-Mar
+dt, forces, times = make_utes_schedule(
+    charge_forces, discharge_forces, rest_forces;
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"], 
+    num_years = 5,
+    report_interval = 7day
+)
+```
+
+# Notes
+- Rest periods are automatically inserted between charge and discharge phases
+- The function handles year transitions and ensures chronological ordering
+- Periods with zero duration are automatically filtered out
+"""
 function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     charge_period = ["June", "September"],
     discharge_period = ["December", "March"],
@@ -161,9 +156,7 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     periods = [ch_start, ch_end, dch_start, dch_end, ch_start + Dates.Year(1)]
     periods = process_periods(start_year, periods)
     keep = diff(periods) .> Dates.Second(0)
-    println("Periods: $periods")
-    println("Keep: $keep")
-
+    
     periods = periods[[keep; true]]
 
     periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
@@ -178,7 +171,6 @@ end
 
 function process_periods(year, periods)
 
-    println("Periods: $periods")
     periods_proc = Vector{DateTime}(undef, length(periods))
     for (pno, period) in enumerate(periods)
         time = process_time(year, period)
@@ -216,22 +208,6 @@ function process_time(year, time, is_end=false)
     end
 
     return time
-
-end
-
-function make_production_schedule(forces_high, forces_low, forces_rest;
-        high_months::Union{Nothing, Vector{String}} = [
-            "January", "February", "March", "April", "May", "June",
-            "July", "August", "September", "October", "November", "December"],
-        low_months::Union{Nothing, Vector{String}} = nothing,
-        kwargs...
-    )
-
-    return make_utes_schedule(forces_high, forces_low, forces_rest;
-        charge_months = high_months,
-        discharge_months = low_months,
-        kwargs...
-    )
 
 end
 
