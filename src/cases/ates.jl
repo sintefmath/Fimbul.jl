@@ -234,13 +234,14 @@ function ates(;
     dt, forces = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest,
         charge_period = charge_period,
-        discharge_period = discharge_period,
+        discharge_period = discharge_period;
         utes_schedule_args...
     )
 
     # ## Create and return the complete simulation case
     case = JutulCase(model, dt, forces; state0 = state0)
-    return case
+    return case, layers
+
 end
 
 """
