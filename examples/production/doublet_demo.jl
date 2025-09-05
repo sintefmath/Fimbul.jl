@@ -41,7 +41,7 @@ plot_reservoir(case.model; plot_args...)
 
 # Note: this simulation can take a few minutes to run. Setting `info_level =
 # 0` will show a progress bar while the simulation runs.
-results = simulate_reservoir(case; info_level = -1)
+results = simulate_reservoir(case; info_level = 0)
 
 # ## Visualize results
 # We first plot the reservoir state interactively. You can notice how the
