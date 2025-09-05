@@ -1,10 +1,14 @@
 # # Aquifer Thermal Energy Storage (ATES) System Simulation
-# This example demonstrates how to simulate and visualize an Aquifer Thermal 
-# Energy Storage (ATES) system. ATES systems store thermal energy by injecting
-# hot water into an aquifer during charging periods and extracting it during
-# discharging periods. The setup consists of two wells: a "hot" well for 
-# injecting/producing hot water and a "cold" well for pressure support and
-# cold water injection.
+# This example demonstrates comprehensive simulation and analysis of an Aquifer
+# Thermal Energy Storage (ATES) system using Fimbul.jl. ATES systems store
+# thermal energy by injecting hot water into subsurface aquifers during charging
+# periods and extracting the heated water during discharge periods for heating
+# applications.
+# 
+# The simulation models a two-well ATES system operating over multiple annual
+# cycles, examining thermal efficiency, energy recovery rates, and aquifer
+# temperature evolution. Key performance metrics include energy recovery
+# efficiency and thermal plume propagation within the confined aquifer system.
 
 # Add required modules to namespace 
 using Jutul, JutulDarcy, Fimbul
@@ -12,266 +16,280 @@ using HYPRE
 using Statistics
 using GLMakie
 # Useful SI units
-watt = si_unit(:watt)
-joule = si_unit(:joule)
+Kelvin, joule, watt = si_units(:Kelvin, :joule, :watt)
 kilogram = si_unit(:kilogram)
 meter = si_unit(:meter)
-Kelvin = si_unit(:Kelvin)
+darcy = si_unit(:darcy)
 
-# ## Set up ATES case
-# We create a full 3D ATES case with the default five-layer system consisting of
-# multiple geological layers. The aquifer layer (layer 3) is where thermal energy
-# is stored through cyclic injection and production operations.
+# ## Geological setup and model configuration
+# We first define the subsurface model with a layered aquifer system suitable
+# for ATES operations. The model includes multiple geological layers with
+# varying permeability and a confined aquifer target zone for thermal storage.
+#
+# **ATES Operational Modes:**
+# - **Charging**: Inject hot water through hot well, produce through cold well
+# - **Discharging**: Produce hot water through hot well, inject cold water
+#   through cold well  
+# - **Rest**: No well activity to allow thermal equilibration
+#
+# The operational schedule includes charging from June to September, rest
+# periods from October to November, and discharging from December to March. We
+# simulate five years of operation with balanced injection/production rates to
+# maintain stable aquifer pressure throughout the thermal storage cycles.
+# Configure ATES system parameters and create simulation case The system uses
+# realistic geological and operational parameters for a medium-scale ATES
+# installation with 400m well spacing
 num_years = 5
-case = Fimbul.ates(;
-    well_distance = 400.0,                    # Distance between wells [m]
+case, layers = Fimbul.ates(;
+    well_distance = 400.0, # Distance between wells [m]
     temperature_charge = convert_to_si(85, :Celsius),   # Hot injection temperature
     temperature_discharge = convert_to_si(20, :Celsius), # Cold injection temperature
-    depths = [0.0, 850.0, 900.0, 1000.0, 1050.0, 1300.0], # Depths delineating layers
-    porosity = [0.01, 0.05, 0.35, 0.05, 0.01], # Layer porosities
-    permeability = [1.0, 5.0, 1000.0, 5.0, 1.0].*1e-3.*si_unit(:darcy), # Layer permeabilities
-    rock_thermal_conductivity = [2.5, 2.0, 1.9, 2.0, 2.5].*watt/(meter*Kelvin), # Layer thermal conductivities
-    rock_heat_capacity = 900.0*joule/(kilogram*Kelvin), # Heat capacities
-    aquifer_layer = 3, # Target aquifer for thermal storage (layer 3)
+    depths = [0.0, 850.0, 900.0, 1000.0, 1050.0, 1300.0], # Layer boundaries [m]
+    porosity = [0.01, 0.05, 0.35, 0.05, 0.01], # Layer porosities [-]
+    permeability = [1.0, 5.0, 1000.0, 5.0, 1.0].*1e-3.*darcy, # Layer permeabilities
+    rock_thermal_conductivity = [2.5, 2.0, 1.9, 2.0, 2.5].*watt/(meter*Kelvin),
+    rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),   # Rock heat capacity
+    aquifer_layer = 3, # Primary aquifer for thermal storage (high permeability)
     utes_schedule_args = (num_years = num_years,)
 );
 
 # ## Inspect the ATES model
-# First, we visualize the computational mesh and well locations. The mesh is
-# refined around the wells and in the aquifer layer to accurately capture
-# thermal transport processes.
+# We first visualize the computational mesh, well locations, and geological
+# structure. The mesh is strategically refined around wells and within the
+# aquifer layer to capture thermal and hydraulic interactions accurately.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (1200, 600))
-ax = Axis3(fig[1, 1], zreversed = true, aspect = :data, 
-    title = "ATES Mesh and Wells")
+ax = Axis3(fig[1, 1], zreversed = true, aspect = :data,
+    title = "ATES system: mesh structure and well configuration")
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 wells = get_model_wells(case.model)
 colors = [:red, :blue]  # Hot well = red, Cold well = blue
 for (i, (k, w)) in enumerate(wells)
     plot_well!(ax, msh, w, color = colors[i], linewidth = 6)
 end
+plot_cell_data!(ax, msh, layers,
+    colormap = :rainbow,
+    alpha = 0.3)
 fig
 
 # ### Visualize reservoir properties
-# Plot the reservoir properties interactively to understand the geological setup
-plot_reservoir(case.model, key = :porosity, aspect = :data)
-
-# ## ATES operational schedule
-# ATES systems operate in cycles with distinct phases:
-# - **Charging**: Inject hot water through hot well, produce through cold well
-# - **Discharging**: Produce hot water through hot well, inject cold water through cold well  
-# - **Rest**: No well activity, allows thermal equilibration
-# 
+# Next, we examine the geological heterogeneity and porosity distribution that
+# controls fluid flow and thermal transport within the aquifer system
+plot_reservoir(case.model, key = :porosity, aspect = :data, colormap = :bilbao100)
 
 # ## Simulate the ATES system
-# We set up a simulator with appropriate tolerances for thermal problems and
-# add a control change timestep selector to handle the transitions between
-# operational phases smoothly.
-sim, cfg = setup_reservoir_simulator(case; 
-    info_level = 1,
-    max_nonlinear_iterations = 15
-);
-
-# Add timestep selector for control changes (critical for ATES stability)
+# Transitions between injection and production modes are numerically challenging,
+# requiring small time steps to ensure convergence and physical consistency.
+sim, cfg = setup_reservoir_simulator(case; info_level = 0);
 sel = JutulDarcy.ControlChangeTimestepSelector(case.model)
 push!(cfg[:timestep_selectors], sel)
-cfg[:timestep_max_decrease] = 1e-3
-
-# Run the simulation (this may take several minutes for 3D case)
-println("Starting ATES simulation...")
+cfg[:timestep_max_decrease] = 1e-3 # Prevent excessive timestep reduction
+# Execute simulation (computation time: several minutes depending on system)
 results = simulate_reservoir(case, simulator = sim, config = cfg)
-println("Simulation completed successfully!")
 
 # ## Visualize ATES results
-# Plot the reservoir state evolution interactively. You can see how thermal
-# plumes develop around each well during different operational phases.
+# We examine the temperature field evolution throughout the simulation timeline.
+# Interactive visualization allows exploration of thermal plume development
+# and migration patterns around the well doublet system.
 plot_reservoir(case, results.states, 
     key = :Temperature, 
     aspect = :data,
     colormap = :seaborn_icefire_gradient)
 
-# ### Plot well performance
-# Examine the well responses including rates, pressures, and temperatures
-plot_well_results(results.wells)
+# ### Visualize thermal plume
+# We plot temperature deviation away from initialstate around the wells after
+# the first and last charge and discharge stage, respectively.
 
-# ### Temperature evolution analysis
-# Create a detailed analysis of temperature changes in the aquifer during
-# different operational phases
-states = results.states
-times = convert_from_si.(cumsum(case.dt), :year)
-geo = tpfv_geometry(msh)
-
-# Extract aquifer temperatures over time based on layer information
-domain = reservoir_model(case.model).data_domain
-porosity = domain[:porosity]
-aquifer_cells = porosity .> 0.3  # High porosity indicates aquifer layer
-
-aquifer_temps = []
-for state in states
-    T_aquifer = state[:Temperature][aquifer_cells]
-    push!(aquifer_temps, T_aquifer)
-end
-
-# Calculate thermal storage efficiency metrics
-initial_temp = convert_from_si(states[1][:Temperature][aquifer_cells][1], :Celsius)
-max_temp = maximum([maximum(convert_from_si.(T, :Celsius)) for T in aquifer_temps])
-min_temp = minimum([minimum(convert_from_si.(T, :Celsius)) for T in aquifer_temps])
-
-println("Aquifer temperature analysis:")
-println("  Initial temperature: $(round(initial_temp, digits=1))°C")
-println("  Maximum temperature: $(round(max_temp, digits=1))°C")
-println("  Minimum temperature: $(round(min_temp, digits=1))°C")
-println("  Temperature swing: $(round(max_temp - min_temp, digits=1))°C")
-
-# ### Well temperature profiles over depth
-# Plot temperature evolution in both wells as a function of depth
-fig = Figure(size = (1400, 600))
-
-# Temperature profiles in wells over time
-
-# Plot temperature profiles for selected timesteps
+# We analyze the well control changes throughout the simulation to determine
+# when charging (injection) and discharging (production) phases begin and end
 states = results.result.states
 n_steps = length(states)
-ch_start = findall([true; diff([f[:Facility].control[:Hot] isa InjectorControl for f in case.forces]) .> 0])
-ch_stop = findall([false; diff([f[:Facility].control[:Hot] isa InjectorControl for f in case.forces]) .< 0]).-1
-dch_start = findall([false; diff([f[:Facility].control[:Hot] isa ProducerControl for f in case.forces]) .> 0])
-dch_stop = findall([false; diff([f[:Facility].control[:Hot] isa ProducerControl for f in case.forces]) .< 0]).-1
+is_control = (f, ctrl) -> f[:Facility].control[:Hot] isa ctrl
+ch_start = findall([true; diff([is_control(f, InjectorControl) for f in case.forces]) .> 0])
+ch_stop = findall([false; diff([is_control(f, InjectorControl) for f in case.forces]) .< 0]).-1
+dch_start = findall([false; diff([is_control(f, ProducerControl) for f in case.forces]) .> 0])
+dch_stop = findall([false; diff([is_control(f, ProducerControl) for f in case.forces]) .< 0]).-1
 
-key_steps = sort(vcat(ch_start, dch_stop))
-colors = cgrad(:seaborn_icefire_gradient, 10, categorical = true)
-color_hot = colors[8]
-color_cold = colors[3]
+# Calculate temperature changes for visualization
+# We focus on cells in the aquifer layer that show significant temperature changes (>1°C)
+# to visualize the thermal plume evolution during different operational phases
+geo = tpfv_geometry(msh)
+cell_mask = geo.cell_centroids[2,:] .> 0 .&& geo.cell_centroids[3,:] .> 900.0
+T0 = case.state0[:Reservoir][:Temperature]
+steps = vcat(ch_stop[1], dch_stop[1], ch_stop[end], dch_stop[end])
+ΔT, cells_to_show = [], []
+for (n, step) in enumerate(steps)
+    ΔT_n = states[step][:Reservoir][:Temperature] .- T0
+    # Only visualize cells with significant temperature change (>1°C)
+    cells = cell_mask .&& abs.(ΔT_n) .> 1.0
+    push!(cells_to_show, findall(cells))
+    ΔT = push!(ΔT, ΔT_n[cells])
+end
+# Set up consistent visualization parameters for all subplots
+# Ensures proper axis limits and color scaling across different time steps
+limits = extrema(geo.cell_centroids[:, vcat(cells_to_show...)], dims=2)
+Δx = [xd[2] - xd[1] for xd in limits]
+limits = tuple((l .+ (-0.1*dx, 0.1*dx) for (l, dx) in zip(limits, Δx))...)
+colorrange = extrema(vcat(ΔT...))
 
-# for (i, step) in enumerate(key_steps)
-#     if step <= length(states)
-#         T_hot = convert_from_si.(states[step][:Hot][:Temperature], :Celsius)
-#         T_cold = convert_from_si.(states[step][:Cold][:Temperature], :Celsius)
-        
-#         plot_mswell_values!(ax1, case.model, :Hot, T_hot;
-#             geo = geo, linewidth = 3, color = colors[i], 
-#             label = "Hot ($(round(times[step], digits=1)) yr)")
-#         plot_mswell_values!(ax1, case.model, :Cold, T_cold;
-#             geo = geo, linewidth = 3, color = colors[i], linestyle = :dash,
-#             label = "Cold ($(round(times[step], digits=1)) yr)")
-#     end
-# end
+# Plot temperature change for the first and last ATES operational cycle
+fig = Figure(size = (1200, 600))
+for (n, ΔT_n) in enumerate(ΔT)
+    # Create subplot for each operational stage
+    row, col = (n-1) ÷ 2 + 1, (n-1) % 2 + 1
+    stage = col == 1 ? "Charge" : "Discharge"
+    ax = Axis3(fig[row, col], 
+        title = "$stage, $(round(times[steps[n]], digits=1)) years",
+        limits = limits, zreversed = true, azimuth = -1.1*pi/2, aspect = :data)
+    # Visualize temperature changes with ice-fire colormap (blue=cold, red=hot)
+    plot_cell_data!(ax, msh, ΔT_n, 
+        cells = cells_to_show[n],
+        colorrange = colorrange,
+        colormap = :seaborn_icefire_gradient)
+    hidedecorations!(ax)
+end
+# Add shared colorbar for temperature scale reference
+Colorbar(fig[Int(length(steps)/2+1), 1:2], 
+    colormap = :seaborn_icefire_gradient, 
+    colorrange = colorrange,
+    label = "Temperature Change (°C)", 
+    vertical = false)
+fig
 
-ax_rate = Axis(fig[1, 1], 
+# ## Analyze ATES performance
+# Examine the well responses including flow rates, pressures, and temperatures
+# interactively to understand operational behavior
+plot_well_results(results.wells)
+
+# ### Analyze derived ATES performance metrics
+# We examine key performance indicators for the ATES system: flow rate,
+# temperature, thermal effect, and energy recovery efficiency. The efficiency
+# (recovery factor) is the most critical metric, defined as the ratio of energy
+# extracted during discharge to energy injected during charge phases.
+states = results.states
+times = convert_from_si.(cumsum(case.dt), :year)
+
+# Set up plotting utilities for performance metrics
+# Creates consistent subplot formatting for multi-panel performance analysis
+fig = Figure(size = (800, 1000))
+lcolor = cgrad(:seaborn_icefire_gradient, 10, categorical = true)[8]
+make_axis = (n, name) ->
+Axis(fig[n, 1], 
     xlabel = "Time (years)", 
-    ylabel = "Rate (m³/h)",
+    ylabel = name,
     limits = ((times[1], times[end]), nothing),
 )
+function plot_well_value!(ax, val, x=times)
+    lines!(ax, x, val, color = lcolor, linewidth = 3)
+end
 
+# Plot volumetric flow rate in the hot well
 rate = abs.(results.wells[:Hot][:rate]*si_unit(:hour))
-lines!(ax_rate, times, rate, 
-    color = color_hot, linewidth = 3, label = "Hot well")
+ax_rate = make_axis(1, "Rate (m³/h)")
+plot_well_value!(ax_rate, rate)
 
-ax_temp = Axis(fig[2, 1], 
-    xlabel = "Time (years)", 
-    ylabel = "Temperature (°C)",
-    limits = ((times[1], times[end]), nothing),
-)
-
+# Plot water temperature at the hot well
 temp = convert_from_si.(results.wells[:Hot][:temperature], :Celsius)
+ax_temp = make_axis(2, "Temperature (°C)")
+plot_well_value!(ax_temp, temp)
 
-lines!(ax_temp, times, temp, 
-    color = color_hot, linewidth = 3, label = "Hot well")
-
+# Plot thermal power (effect) delivered by the system
 mrate = results.wells[:Hot][:mass_rate]
 Cp = mean(reservoir_model(case.model).data_domain[:component_heat_capacity])
 effect = mrate.*Cp.*temp
 effect_mwh = abs.(effect).*1e-6  # Convert to MW
+ax_effect = make_axis(3, "Effect (MW)")
+plot_well_value!(ax_effect, effect_mwh)
 
-ax_effect = Axis(fig[3, 1], 
-    xlabel = "Time (years)", 
-    ylabel = "Effect (MW)",
-    limits = ((times[1], times[end]), nothing),
-)
-
-lines!(ax_effect, times, effect_mwh,  
-    color = color_hot, linewidth = 3, label = "Hot well")
-
-ax_eta = Axis(fig[4, 1], 
-    xlabel = "Time (years)", 
-    ylabel = "Efficiency (–)",
-    limits = ((times[1], times[end]), nothing),
-)
+# Plot energy recovery efficiency over discharge cycles
+ax_eta = make_axis(4, "Efficiency (–)")
 energy = effect.*case.dt
 for k in eachindex(ch_start)
-    # start = ch_start[k]
-    # stop = dch_end[k]
     energy_ch = sum(energy[ch_start[k]:ch_stop[k]])
     energy_dch = abs.(cumsum(energy[dch_start[k]:dch_stop[k]]))
     η = energy_dch./energy_ch
-    lines!(ax_eta, times[dch_start[k]:dch_stop[k]], η, 
-        color = color_hot, linewidth = 3, label = "Cumulative charge")
+    plot_well_value!(ax_eta, η, times[dch_start[k]:dch_stop[k]])
 end
-
 fig
 
-# ### 3D thermal plume evolution
-# Show how thermal plumes develop and interact during different phases
-# We'll plot temperature changes from initial state at key time points
+# ### Aquifer temperature evolution
+# Examine the spatial and temporal temperature distribution in the aquifer to
+# understand thermal plume propagation. We analyze temperature profiles along
+# a horizontal transect between wells and track aquifer-wide temperature statistics.
 
-# Calculate temperature changes from initial state
-Δstates = []
-T0 = case.state0[:Reservoir][:Temperature]
-for state in results.states
-    ΔT = state[:Temperature] .- T0
-    push!(Δstates, Dict(:Temperature => ΔT))
-end
+# Extract temperature along a horizontal line in the aquifer layer
+# This transect passes through the center of the aquifer between the two wells
+ijk = [cell_ijk(msh, c) for c in 1:number_of_cells(msh)]
+j = div(maximum(getindex.(ijk, 2)) + minimum(getindex.(ijk, 2)), 2)
+k = div(maximum(getindex.(ijk[layers.==3], 3)) + minimum(getindex.(ijk[layers.==3], 3)), 2)
+cells = [ix[2] == j .&& ix[3] == k for ix in ijk]
+T_line = [state[:Temperature][cells] for state in results.states]
 
-# Create 3D visualization of thermal plume evolution
-fig = Figure(size = (1200, 800))
-T_range = (Inf, -Inf)  # Temperature change range for consistent colorscale
-
-geo = tpfv_geometry(msh)
-cells_back = geo.cell_centroids[2,:] .> 0
-
-for (i, step) in enumerate(key_steps[end-1:end])
-    ΔT = Δstates[step][:Temperature]
-    # Create a mask to show only significant temperature changes
-    cells_to_show = cells_back .&& abs.(ΔT) .> 2.0  # Only show cells with >2°C change
-    T_range = (
-        min(T_range[1], minimum(ΔT[cells_to_show])),
-        max(T_range[2], maximum(ΔT[cells_to_show]))
+# Temperature profile plotting utilities
+x = geo.cell_centroids[1, cells]
+function plot_aquifer_temperature!(fig, T_line, stage, cycle)
+    # Create subplot for specific operational stage and cycle
+    row, col = cycle, stage == "Charging" ? 1 : 2
+    ax = Axis(fig[row, col],
+        ylabel = "T, cycle $cycle (°C)",
+        xlabel = "x (m)",
+        title = cycle == 1 ? stage : "",
+        limits = (nothing, (15.0, 90.0))
     )
+    # Plot temperature profiles throughout the operational stage
+    if stage == "Charging"
+        steps = ch_start[cycle]:ch_stop[cycle]
+    else
+        steps = dch_start[cycle]:dch_stop[cycle]
+    end
+    colors = cgrad(:seaborn_icefire_gradient, length(steps), categorical = true)
+    for (n, T_n) in enumerate(T_line[steps])
+        T_n = convert_from_si.(T_n, :Celsius)
+        lines!(ax, x, T_n, color = colors[n], linewidth = 3, 
+        label = "Year $(round(times[n], digits=1))")
+    end
+    return ax
 end
 
-for (i, step) in enumerate(key_steps[end-1:end])
-    row = (i-1) ÷ 2 + 1
-    col = (i-1) % 2 + 1
-    
-    ax = Axis3(fig[row, col], 
-        title = "Year $(round(times[step], digits=1))",
-        zreversed = true, 
-        azimuth = -1.1*pi/2,
-        aspect = :data)
-    
-    ΔT = Δstates[step][:Temperature]
-    
-    # Create a mask to show only significant temperature changes
-    cells_to_show = cells_back .&& abs.(ΔT) .> 2.0  # Only show cells with >2°C change
-    
-    plot_cell_data!(ax, msh, ΔT, 
-        cells = cells_to_show,
-        colorrange = T_range,
-        colormap = :seaborn_icefire_gradient)
-    
-    # Plot wells
-    plot_well!(ax, msh, wells[:Hot], color = :black, linewidth = 4)
-    plot_well!(ax, msh, wells[:Cold], color = :black, linewidth = 4)
-    
-    hidedecorations!(ax)
-
-
+# Plot temperature profiles during charge and discharge stages for all cycles
+# Shows thermal plume evolution and migration patterns over multiple years
+fig = Figure(size = (800, 1000))
+for cycle in 1:num_years
+    # Plot charging stage temperatures (thermal plume development)
+    ax = plot_aquifer_temperature!(fig, T_line, "Charging", cycle)
+    if cycle < num_years
+        hidexdecorations!(ax; grid=false)
+    end
+    # Plot discharging stage temperatures (thermal recovery and cooling)
+    ax = plot_aquifer_temperature!(fig, T_line, "Discharging", cycle)
+    if cycle < num_years
+        hidedecorations!(ax; grid=false)
+    else
+        hideydecorations!(ax; grid=false)
+    end
 end
-
-# Add colorbar
-Colorbar(fig[2, 1:2], 
-    colormap = :seaborn_icefire_gradient, 
-    colorrange = T_range,
-    label = "Temperature Change (°C)", 
-    vertical = false)
-
 fig
+
+# ### Plot aquifer temperature statistics over time
+# Many regions operate with legal regulations limiting the maximum allowable
+# temperature increase in the aquifer to protect groundwater resources. This is
+# typically defined as the mean temperature increase across the entire aquifer
+# volume. We monitor the overall thermal state of the aquifer throughout the
+# simulation to assess system-wide temperature impacts and thermal equilibrium.
+cells = layers .== 3
+T_aquifer = [state[:Temperature][cells] for state in results.states]
+T_mean = [mean(convert_from_si.(T, :Celsius)) for T in T_aquifer]
+fig = Figure(size = (800, 400))
+ax = Axis(fig[1, 1], 
+    title = "Mean aquifer temperature evolution",
+    xlabel = "Time (years)", 
+    ylabel = "Temperature (°C)",
+    limits = ((times[1], times[end]), nothing),
+)
+lines!(ax, times, T_mean, color = lcolor, linewidth = 3)
+fig
+
+# The proposed setup results in a maximum increase in the mean aquifer
+# temperature of approximately 1°C due to charging. However, the setup also
+# results in a higher rate during discharging compared to charging, leading to a
+# net cooling effect.
