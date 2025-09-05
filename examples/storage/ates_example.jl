@@ -36,9 +36,9 @@ darcy = si_unit(:darcy)
 # periods from October to November, and discharging from December to March. We
 # simulate five years of operation with balanced injection/production rates to
 # maintain stable aquifer pressure throughout the thermal storage cycles.
-# Configure ATES system parameters and create simulation case The system uses
+# Configure ATES system parameters and create simulation case. The system uses
 # realistic geological and operational parameters for a medium-scale ATES
-# installation with 400m well spacing
+# installation with 400m well spacing.
 num_years = 5
 case, layers = Fimbul.ates(;
     well_distance = 400.0, # Distance between wells [m]
@@ -97,10 +97,10 @@ plot_reservoir(case, results.states,
     colormap = :seaborn_icefire_gradient)
 
 # ### Visualize thermal plume
-# We plot temperature deviation away from initialstate around the wells after
-# the first and last charge and discharge stage, respectively.
+# We plot temperature deviation from the initial state around the wells after
+# the first and last charge and discharge stages, respectively.
 
-# We analyze the well control changes throughout the simulation to determine
+# Identify time steps for charge/discharge start and stop from the well controls
 # when charging (injection) and discharging (production) phases begin and end
 states = results.result.states
 n_steps = length(states)
@@ -132,7 +132,7 @@ limits = extrema(geo.cell_centroids[:, vcat(cells_to_show...)], dims=2)
 limits = tuple((l .+ (-0.1*dx, 0.1*dx) for (l, dx) in zip(limits, Δx))...)
 colorrange = extrema(vcat(ΔT...))
 
-# Plot temperature change for the first and last ATES operational cycle
+# Plot temperature change after the first and last ATES operational cycles
 fig = Figure(size = (1200, 600))
 for (n, ΔT_n) in enumerate(ΔT)
     # Create subplot for each operational stage
@@ -271,7 +271,7 @@ end
 fig
 
 # ### Plot aquifer temperature statistics over time
-# Many regions operate with legal regulations limiting the maximum allowable
+# Many regions operate under legal regulations limiting the maximum allowable
 # temperature increase in the aquifer to protect groundwater resources. This is
 # typically defined as the mean temperature increase across the entire aquifer
 # volume. We monitor the overall thermal state of the aquifer throughout the
