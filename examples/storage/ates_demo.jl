@@ -101,7 +101,8 @@ plot_reservoir(case, results.states,
 # the first and last charge and discharge stages, respectively.
 
 # Identify time steps for charge/discharge start and stop from the well controls
-# when charging (injection) and discharging (production) phases begin and end
+# when charging (injection) and discharging (production) phases begin and e
+times = convert_from_si.(cumsum(case.dt), :year)
 states = results.result.states
 n_steps = length(states)
 is_control = (f, ctrl) -> f[:Facility].control[:Hot] isa ctrl
@@ -123,7 +124,7 @@ for (n, step) in enumerate(steps)
     # Only visualize cells with significant temperature change (>1°C)
     cells = cell_mask .&& abs.(ΔT_n) .> 1.0
     push!(cells_to_show, findall(cells))
-    ΔT = push!(ΔT, ΔT_n[cells])
+    global ΔT = push!(ΔT, ΔT_n[cells])
 end
 # Set up consistent visualization parameters for all subplots
 # Ensures proper axis limits and color scaling across different time steps
@@ -135,13 +136,13 @@ colorrange = extrema(vcat(ΔT...))
 # Plot temperature change after the first and last ATES operational cycles
 fig = Figure(size = (1200, 600))
 for (n, ΔT_n) in enumerate(ΔT)
-    # Create subplot for each operational stage
+    ## Create subplot for each operational stage
     row, col = (n-1) ÷ 2 + 1, (n-1) % 2 + 1
     stage = col == 1 ? "Charge" : "Discharge"
     ax = Axis3(fig[row, col], 
         title = "$stage, $(round(times[steps[n]], digits=1)) years",
         limits = limits, zreversed = true, azimuth = -1.1*pi/2, aspect = :data)
-    # Visualize temperature changes with ice-fire colormap (blue=cold, red=hot)
+    ## Visualize temperature changes with ice-fire colormap (blue=cold, red=hot)
     plot_cell_data!(ax, msh, ΔT_n, 
         cells = cells_to_show[n],
         colorrange = colorrange,
@@ -167,42 +168,60 @@ plot_well_results(results.wells)
 # (recovery factor) is the most critical metric, defined as the ratio of energy
 # extracted during discharge to energy injected during charge phases.
 states = results.states
-times = convert_from_si.(cumsum(case.dt), :year)
 
 # Set up plotting utilities for performance metrics
-# Creates consistent subplot formatting for multi-panel performance analysis
-fig = Figure(size = (800, 1000))
+fig_wells = Figure(size = (800, 1000))
 lcolor = cgrad(:seaborn_icefire_gradient, 10, categorical = true)[8]
-make_axis = (n, name) ->
-Axis(fig[n, 1], 
-    xlabel = "Time (years)", 
-    ylabel = name,
-    limits = ((times[1], times[end]), nothing),
-)
+function make_axis(n, val, name)
+    vmin, vmax = minimum(val), maximum(val)
+    dv = vmax - vmin
+    pad = 0.1*dv
+    Axis(fig_wells[n, 1],
+        xlabel = "Time (years)", 
+        ylabel = name,
+        limits = ((times[1], times[end]), (vmin - pad, vmax + pad)),
+    )
+end
 function plot_well_value!(ax, val, x=times)
     lines!(ax, x, val, color = lcolor, linewidth = 3)
+end
+function color_stages!(ax)
+    ylim = ax.yaxis.attributes.limits[]
+    for k in eachindex(ch_start)
+        poly!(ax, [(times[ch_start[k]], ylim[1]), (times[ch_stop[k]], ylim[1]),
+            (times[ch_stop[k]], ylim[2]), (times[ch_start[k]], ylim[2])],
+            color = (:red, 0.1))
+    end
+    for k in eachindex(dch_start)
+        poly!(ax, [(times[dch_start[k]], ylim[1]), (times[dch_stop[k]], ylim[1]),
+            (times[dch_stop[k]], ylim[2]), (times[dch_start[k]], ylim[2])],
+            color = (:blue, 0.1))
+    end
 end
 
 # Plot volumetric flow rate in the hot well
 rate = abs.(results.wells[:Hot][:rate]*si_unit(:hour))
-ax_rate = make_axis(1, "Rate (m³/h)")
+ax_rate = make_axis(1, rate, "Rate (m³/h)")
 plot_well_value!(ax_rate, rate)
+color_stages!(ax_rate)
 
 # Plot water temperature at the hot well
 temp = convert_from_si.(results.wells[:Hot][:temperature], :Celsius)
-ax_temp = make_axis(2, "Temperature (°C)")
+ax_temp = make_axis(2, temp, "Temperature (°C)")
 plot_well_value!(ax_temp, temp)
+color_stages!(ax_temp)
 
 # Plot thermal power (effect) delivered by the system
 mrate = results.wells[:Hot][:mass_rate]
 Cp = mean(reservoir_model(case.model).data_domain[:component_heat_capacity])
 effect = mrate.*Cp.*temp
 effect_mwh = abs.(effect).*1e-6  # Convert to MW
-ax_effect = make_axis(3, "Effect (MW)")
+ax_effect = make_axis(3, effect_mwh, "Effect (MW)")
 plot_well_value!(ax_effect, effect_mwh)
+color_stages!(ax_effect)
 
 # Plot energy recovery efficiency over discharge cycles
-ax_eta = make_axis(4, "Efficiency (–)")
+ax_eta = make_axis(4, [-0.05,1.05], "Efficiency (–)")
 energy = effect.*case.dt
 for k in eachindex(ch_start)
     energy_ch = sum(energy[ch_start[k]:ch_stop[k]])
@@ -210,7 +229,16 @@ for k in eachindex(ch_start)
     η = energy_dch./energy_ch
     plot_well_value!(ax_eta, η, times[dch_start[k]:dch_stop[k]])
 end
-fig
+color_stages!(ax_eta)
+fig_wells
+
+# The efficiency improves with each cycle as the thermal plume matures and
+# losses decrease. Notably, efficiency exceeds 100% after the second year
+# because the hot well produces at higher rates than the cold well injects due
+# to lower viscosity of heated water. This rate imbalance extracts more energy
+# than stored, causing progressive aquifer cooling as shown below. While
+# beneficial for energy recovery in the short term, this trend requires
+# monitoring for system sustainability.
 
 # ### Aquifer temperature evolution
 # Examine the spatial and temporal temperature distribution in the aquifer to
@@ -228,7 +256,7 @@ T_line = [state[:Temperature][cells] for state in results.states]
 # Temperature profile plotting utilities
 x = geo.cell_centroids[1, cells]
 function plot_aquifer_temperature!(fig, T_line, stage, cycle)
-    # Create subplot for specific operational stage and cycle
+    ## Create subplot for specific operational stage and cycle
     row, col = cycle, stage == "Charging" ? 1 : 2
     ax = Axis(fig[row, col],
         ylabel = "T, cycle $cycle (°C)",
@@ -236,7 +264,7 @@ function plot_aquifer_temperature!(fig, T_line, stage, cycle)
         title = cycle == 1 ? stage : "",
         limits = (nothing, (15.0, 90.0))
     )
-    # Plot temperature profiles throughout the operational stage
+    ## Plot temperature profiles throughout the operational stage
     if stage == "Charging"
         steps = ch_start[cycle]:ch_stop[cycle]
     else
