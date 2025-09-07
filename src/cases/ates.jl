@@ -356,8 +356,6 @@ function make_ates_cart_mesh(well_distance, depths, aquifer_layer;
     # ## Process input
     # Set default thermal radius if not provided
     nearwell_radius = ismissing(nearwell_radius) ? well_distance/2 : nearwell_radius
-    println(nearwell_radius)
-    println(well_distance)
     # Calculate domain offset to minimize boundary effects
     offset = offset_rel*maximum([well_distance, 2*nearwell_radius])
     # Well coordinates
