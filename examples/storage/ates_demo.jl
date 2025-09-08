@@ -121,7 +121,7 @@ steps = vcat(ch_stop[1], dch_stop[1], ch_stop[end], dch_stop[end])
 ΔT, cells_to_show = [], []
 for (n, step) in enumerate(steps)
     ΔT_n = states[step][:Reservoir][:Temperature] .- T0
-    # Only visualize cells with significant temperature change (>1°C)
+    ## Only visualize cells with significant temperature change (>1°C)
     cells = cell_mask .&& abs.(ΔT_n) .> 1.0
     push!(cells_to_show, findall(cells))
     global ΔT = push!(ΔT, ΔT_n[cells])
