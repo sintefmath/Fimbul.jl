@@ -86,7 +86,7 @@ plot_well_results([results_hifi.wells, results_proxy.wells],
 # objective function is also scaled by the total time simulated in the
 # high-fidelity model.
 states_hf = results_hifi.result.states
-states_proxy = results_proxy.result.states
+states_proxy = results_proxy.result.states;
 # We calibrate against the first two years. Since we have defined report steps
 # of 1/4 month, this corresponds to the first 12*4*2 steps. To see the effect of
 # more or less data used for calibration, and to exclude data from one or more
@@ -101,7 +101,7 @@ objective = (model, state, dt, step_no, forces) ->
         w_bhp = 0.0,
         w_temp = 1.0/si_unit(:Kelvin), 
         w_energy = 0.0,
-    )
+    );
 
 # ### Compute mismatch for initial proxy model
 obj0 = Jutul.evaluate_objective(
@@ -116,7 +116,7 @@ opt_config = optimization_config(proxy.model, parameters,
     use_scaling = true,
     rel_min = 1e-3,
     rel_max = 1e3
-)
+);
 # We will only consider a subset of all the model parameters
 wells = well_symbols(proxy.model)
 for (k, v) in opt_config
@@ -212,7 +212,7 @@ function calibrate_case(objective, case, n_steps, opt_config; lbfgs_args = Named
 
     return case_cal
 
-end
+end;
 
 # We use the LBFGS optimization algorithm, which has a number of parameters that
 # can be set, including the maximum number of function evaluations (maxfun), and
