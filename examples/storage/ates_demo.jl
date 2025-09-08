@@ -19,7 +19,7 @@ using GLMakie
 Kelvin, joule, watt = si_units(:Kelvin, :joule, :watt)
 kilogram = si_unit(:kilogram)
 meter = si_unit(:meter)
-darcy = si_unit(:darcy)
+darcy = si_unit(:darcy);
 
 # ## Geological setup and model configuration
 # We first define the subsurface model with a layered aquifer system suitable
@@ -58,7 +58,7 @@ case, layers = Fimbul.ates(;
 # structure. The mesh is strategically refined around wells and within the
 # aquifer layer to capture thermal and hydraulic interactions accurately.
 msh = physical_representation(reservoir_model(case.model).data_domain)
-fig = Figure(size = (1200, 600))
+fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1], zreversed = true, aspect = :data,
     title = "ATES system: mesh structure and well configuration")
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
@@ -83,7 +83,7 @@ plot_reservoir(case.model, key = :porosity, aspect = :data, colormap = :bilbao10
 sim, cfg = setup_reservoir_simulator(case; info_level = 0);
 sel = JutulDarcy.ControlChangeTimestepSelector(case.model)
 push!(cfg[:timestep_selectors], sel)
-cfg[:timestep_max_decrease] = 1e-3 # Prevent excessive timestep reduction
+cfg[:timestep_max_decrease] = 1e-3; # Prevent excessive timestep reduction
 # Execute simulation (computation time: several minutes depending on system)
 results = simulate_reservoir(case, simulator = sim, config = cfg)
 
@@ -109,7 +109,7 @@ is_control = (f, ctrl) -> f[:Facility].control[:Hot] isa ctrl
 ch_start = findall([true; diff([is_control(f, InjectorControl) for f in case.forces]) .> 0])
 ch_stop = findall([false; diff([is_control(f, InjectorControl) for f in case.forces]) .< 0]).-1
 dch_start = findall([false; diff([is_control(f, ProducerControl) for f in case.forces]) .> 0])
-dch_stop = findall([false; diff([is_control(f, ProducerControl) for f in case.forces]) .< 0]).-1
+dch_stop = findall([false; diff([is_control(f, ProducerControl) for f in case.forces]) .< 0]).-1;
 
 # Calculate temperature changes for visualization
 # We focus on cells in the aquifer layer that show significant temperature changes (>1°C)
@@ -131,7 +131,7 @@ end
 limits = extrema(geo.cell_centroids[:, vcat(cells_to_show...)], dims=2)
 Δx = [xd[2] - xd[1] for xd in limits]
 limits = tuple((l .+ (-0.1*dx, 0.1*dx) for (l, dx) in zip(limits, Δx))...)
-colorrange = extrema(vcat(ΔT...))
+colorrange = extrema(vcat(ΔT...));
 
 # Plot temperature change after the first and last ATES operational cycles
 fig = Figure(size = (1200, 600))
@@ -139,15 +139,15 @@ for (n, ΔT_n) in enumerate(ΔT)
     ## Create subplot for each operational stage
     row, col = (n-1) ÷ 2 + 1, (n-1) % 2 + 1
     stage = col == 1 ? "Charge" : "Discharge"
-    ax = Axis3(fig[row, col], 
+    ax_n = Axis3(fig[row, col], 
         title = "$stage, $(round(times[steps[n]], digits=1)) years",
         limits = limits, zreversed = true, azimuth = -1.1*pi/2, aspect = :data)
     ## Visualize temperature changes with ice-fire colormap (blue=cold, red=hot)
-    plot_cell_data!(ax, msh, ΔT_n, 
+    plot_cell_data!(ax_n, msh, ΔT_n, 
         cells = cells_to_show[n],
         colorrange = colorrange,
         colormap = :seaborn_icefire_gradient)
-    hidedecorations!(ax)
+    hidedecorations!(ax_n)
 end
 # Add shared colorbar for temperature scale reference
 Colorbar(fig[Int(length(steps)/2+1), 1:2], 
@@ -167,7 +167,7 @@ plot_well_results(results.wells)
 # temperature, thermal effect, and energy recovery efficiency. The efficiency
 # (recovery factor) is the most critical metric, defined as the ratio of energy
 # extracted during discharge to energy injected during charge phases.
-states = results.states
+states = results.states;
 
 # Set up plotting utilities for performance metrics
 fig_wells = Figure(size = (800, 1000))
@@ -197,7 +197,7 @@ function color_stages!(ax)
             (times[dch_stop[k]], ylim[2]), (times[dch_start[k]], ylim[2])],
             color = (:blue, 0.1))
     end
-end
+end;
 
 # Plot volumetric flow rate in the hot well
 rate = abs.(results.wells[:Hot][:rate]*si_unit(:hour))
@@ -251,7 +251,7 @@ ijk = [cell_ijk(msh, c) for c in 1:number_of_cells(msh)]
 j = div(maximum(getindex.(ijk, 2)) + minimum(getindex.(ijk, 2)), 2)
 k = div(maximum(getindex.(ijk[layers.==3], 3)) + minimum(getindex.(ijk[layers.==3], 3)), 2)
 cells = [ix[2] == j .&& ix[3] == k for ix in ijk]
-T_line = [state[:Temperature][cells] for state in results.states]
+T_line = [state[:Temperature][cells] for state in results.states];
 
 # Temperature profile plotting utilities
 x = geo.cell_centroids[1, cells]
@@ -277,7 +277,7 @@ function plot_aquifer_temperature!(fig, T_line, stage, cycle)
         label = "Year $(round(times[n], digits=1))")
     end
     return ax
-end
+end;
 
 # Plot temperature profiles during charge and discharge stages for all cycles
 # Shows thermal plume evolution and migration patterns over multiple years
