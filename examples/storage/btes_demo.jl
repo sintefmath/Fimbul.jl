@@ -14,8 +14,8 @@ using GLMakie
 # (October to March) with cold water at 10°C. This seasonal operation is
 # simulated over a 4-year period to study the thermal energy storage performance.
 case, sections = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
-    charge_months = ["April", "May", "June", "July", "August", "September"],
-    discharge_months = ["October", "November", "December", "January", "February", "March"],
+    charge_period = ["April", "September"],
+    discharge_period = ["October", "March"],
     num_years = 4,
 );
 
@@ -74,7 +74,7 @@ end
 # Note that this simulation can take a few minutes to run. Setting `info_level =
 # 0` will show a progress bar while the simulation runs.`
 results = simulate_reservoir(case;
-simulator=simulator, config=config, info_level=-1);
+simulator=simulator, config=config, info_level=0);
 
 # ### Interactive visualization of results
 # We first plot the final temperature distribution in the reservoir and well

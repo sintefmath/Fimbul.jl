@@ -201,11 +201,12 @@ end
 - `bhp_discharge = 45.0si_unit(:bar)`: Bottom hole pressure of supporting well
   during discharge if BCs are not given (not default - set use_bc = false to
   force no BCs).
-- `charge_months = ("June", "July", "August", "September")`: Months for charge.
-- `discharge_months = ("December", "January", "February", "March")`: Months for
-  discharge.
+- `charge_period = ["June", "September"]`: Charge period.
+- `discharge_period = ["December", "March"]`: Discharge period.
 - `num_years = 5`: Number of years to simulate.
 - `report_interval = si_unit(:year)/12`: Report interval for simulation results.
+- `utes_schedule_args = NamedTuple()`: Additional arguments passed to
+  `make_utes_schedule()`.
 - All other keyword arguments are passed to `egg_geothermal`.
 
 """
@@ -217,10 +218,11 @@ function egg_ates(;
     rate_observation = missing,
     bhp_charge = 25.0si_unit(:bar),
     bhp_discharge = 45.0si_unit(:bar),
-    charge_months = ("June", "July", "August", "September"),
-    discharge_months = ("December", "January", "February", "March"),
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"],
     num_years = 5,
     report_interval = si_unit(:year)/12,
+    utes_schedule_args = NamedTuple(),
     kwargs...
     )
 
@@ -263,30 +265,36 @@ function egg_ates(;
     forces_discharge = setup_reservoir_forces(case0.model, control = control, bc = bc)
     # Set rest forces
     forces_rest = setup_reservoir_forces(case0.model, bc = bc)
-    # Set up timesteps and assign forces to each timestep
-    dt_vec = Float64[]
-    forces = []
-    month = si_unit(:year)/12
-    n_step = Int(round(month/report_interval))
-    dt = month/n_step
-    for year in 1:num_years
-        for mno in vcat(6:12, 1:5)
-            mname = monthname(mno)
-            if mname in discharge_months
-                push!(dt_vec, fill(dt, n_step)...)
-                push!(forces, fill(forces_discharge, n_step)...)
-            elseif mname in charge_months
-                push!(dt_vec, fill(dt, n_step)...)
-                push!(forces, fill(forces_charge, n_step)...)
-            else
-                push!(dt_vec, fill(dt, n_step)...)
-                push!(forces, fill(forces_rest, n_step)...)
-            end
-        end
-    end
+    dt, forces = make_utes_schedule(forces_charge, forces_discharge, forces_rest;
+        charge_period = charge_period,
+        discharge_period = discharge_period,
+        num_years = num_years,
+        report_interval = report_interval
+    )
+    # # Set up timesteps and assign forces to each timestep
+    # dt_vec = Float64[]
+    # forces = []
+    # month = si_unit(:year)/12
+    # n_step = Int(round(month/report_interval))
+    # dt = month/n_step
+    # for year in 1:num_years
+    #     for mno in vcat(6:12, 1:5)
+    #         mname = monthname(mno)
+    #         if mname in discharge_months
+    #             push!(dt_vec, fill(dt, n_step)...)
+    #             push!(forces, fill(forces_discharge, n_step)...)
+    #         elseif mname in charge_months
+    #             push!(dt_vec, fill(dt, n_step)...)
+    #             push!(forces, fill(forces_charge, n_step)...)
+    #         else
+    #             push!(dt_vec, fill(dt, n_step)...)
+    #             push!(forces, fill(forces_rest, n_step)...)
+    #         end
+    #     end
+    # end
 
     # ## Return case
-    case = JutulCase(case0.model, dt_vec, forces, 
+    case = JutulCase(case0.model, dt, forces, 
         state0 = case0.state0, parameters = case0.parameters)
     return case
 
