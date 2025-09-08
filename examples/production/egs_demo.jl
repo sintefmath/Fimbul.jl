@@ -9,16 +9,12 @@ kilogram = si_unit(:kilogram)
 meter = si_unit(:meter)
 darcy = si_unit(:darcy);
 
-# Alternative: original simple well setup
 depths = [0.0, 2000.0, 2750.0, 3500.0] .* meter
-well_distance = 50.0 .* meter
+well_distance = 200.0 .* meter
 heel_yz = [0.0, 2250.0] .* meter
 toe_yz = [2000.0, 2350.0] .* meter
 wx_inj = [(-well_distance/2.0, 0.0)]
 xw_prod = [(well_distance/2.0, 0.0)]
-
-##
-
 
 ##
 
