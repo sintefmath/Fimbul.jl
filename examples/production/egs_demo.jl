@@ -4,10 +4,86 @@ using HYPRE
 using Statistics
 using GLMakie
 # Useful SI units
+
+function topo_sort_well(cells, msh, geo = missing)
+
+    sorted_cells = Int[]
+    N = get_neighborship(UnstructuredMesh(msh))
+
+    geo = ismissing(geo) ? tpfv_geometry(msh) : geo
+    z = geo.cell_centroids[3, cells]
+
+    top = last(findmin(z))
+    println(top)
+    push!(sorted_cells, popat!(cells, top))
+
+    current_cell = sorted_cells[end]
+    while !isempty(cells)
+        for r = 1:2
+            neighbors = N[r,:] .== current_cell
+            for n in N[mod(r,2)+1, neighbors]
+                if n in cells
+                    push!(sorted_cells, n)
+                    popat!(cells, findfirst(isequal(n), cells))
+                    current_cell = n
+                    continue
+                end
+            end
+        end
+    end
+
+    return sorted_cells
+
+end
+
+##
 Kelvin, joule, watt = si_units(:Kelvin, :joule, :watt)
 kilogram = si_unit(:kilogram)
 meter = si_unit(:meter)
 darcy = si_unit(:darcy);
+
+well_spacing = 200.0 .* meter
+fracture_radius = 200.0 .* meter
+well_depth = 3000.0 .* meter
+well_lateral = 2000.0 .* meter
+fracture_aperture = 1e-3 .* meter
+ws, wd, wl = well_spacing, well_depth, well_lateral
+# well_coords = [
+#     [(-ws/2.0, 0.0, 0.0),(-ws/2.0, 0.0, wd), (-ws/2.0, wl, wd)],
+#     [(ws/2.0, 0.0, 0.0), (ws/2.0, 0.0, wd), (ws/2.0, wl, wd)]
+# ]
+
+well_coords = [
+    [-ws/2 0.0  0.0; -ws/2 0.0 wd; -ws/2 wl wd], 
+    [ ws/2 0.0  0.0;  ws/2 0.0 wd;  ws/2 wl wd]
+]
+
+out = Fimbul.egs(well_coords, fracture_radius, 100.0;
+);
+
+##
+domain, is_frac, msh = out
+
+
+mm = UnstructuredMesh(msh)
+N = get_neighborship(mm)
+# for well in well_coords
+well = well_coords[1]
+    cells = Jutul.find_enclosing_cells(msh, well, n = 1000)
+    println(length(cells))
+    println(sum(is_frac[cells]))
+    all_cells = Int[]
+    for cell in cells
+        faces = mm.faces.cells_to_faces[cell]
+        c = vcat(N[:, faces]...)
+        keep = is_frac[c]
+        push!(all_cells, c[keep]...)
+    end
+    push!(all_cells, cells...)
+    all_cells = unique!(all_cells)
+
+# end
+##
 
 depths = [0.0, 2000.0, 2750.0, 3500.0] .* meter
 well_distance = 200.0 .* meter
@@ -122,7 +198,7 @@ y = [
     y_max + offset_y
 ]
 
-hy_min = fracture_spacing/5
+hy_min = fracture_spacing/3
 hy_max = 200meter
 hy = fill(hy_max, length(y)-1)
 y_mid = diff(y)./2 .+ y[1:end-1]
@@ -135,3 +211,4 @@ xyz = (x, y, z)
 sizes = map(x->diff(x), xyz)
 dims = Tuple([length(s) for s in sizes])
 msh = CartesianMesh(dims, sizes, origin = minimum.(xyz))
+
