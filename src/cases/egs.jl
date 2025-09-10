@@ -1,41 +1,36 @@
-# function egs(well_spacing, well_depth, well_lateral;
-#     fracture_radius=well_spacing*1.25,
-#     fracture_spacing=well_lateral/10,
-#     kwargs...
-# )
-
-#     ws, wd, wl = well_spacing, well_depth, well_lateral
-#     well_coords = [
-#         [(-ws/2.0, 0.0, 0.0),(-ws/2.0, 0.0, wd), (-ws/2.0, wl, wd)],
-#         [(ws/2.0, 0.0, 0.0), (ws/2.0, 0.0, wd), (ws/2.0, wl, wd)],
-#     ]
-
-#     return egs(well_coords, fracture_radius, fracture_spacing; kwargs...)
-
-# end
+meter = si_unit(:meter)
+day = si_unit(:day)
 
 function egs(well_coords, fracture_radius, fracture_spacing;
     well_names = missing,
     fracture_aperture=1e-3,
-    porosity = 0.1,
-    permeability = 1.0 .* darcy,
+    porosity = 0.05,
+    permeability = 1.0e-2 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
     temperature_inj = convert_to_si(25, :Celsius),
-    msh_args = NamedTuple()
+    rate_prod = 100meter^3/day,
+    num_years = 20,
+    mesh_args = NamedTuple(),
+    schedule_args = NamedTuple(),
 )
 
     msh = Fimbul.make_egs_cart_mesh(
         well_coords, fracture_radius, fracture_spacing;
-        msh_args...
+        mesh_args...
     )
+    msh = UnstructuredMesh(msh)
 
     Δy = [cell_dims(msh, c)[2] for c in 1:number_of_cells(msh)]
 
     is_frac = isapprox.(Δy, fracture_aperture)
     geo = tpfv_geometry(msh)
     xz = geo.cell_centroids[[1,3],:]
-    xc = well_coords[1][2, [1,3]]
+    xc = 0.0
+    for wc in well_coords
+        xc = xc .+ wc[2,[1,3]]
+    end
+    xc = xc ./ (length(well_coords))
     println(xc)
     r = vec(sum((xc .- xz).^2, dims=1).^0.5)
     is_frac = is_frac .&& (r .<= fracture_radius)
@@ -58,58 +53,105 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     )
 
     if ismissing(well_names)
-        well_names = ["inj"]
+        well_names = [:Inj]
         for i in 2:length(well_coords)
-            push!(well_names, "Prod$(i-1)")
+            push!(well_names, Symbol("Prod$(i-1)"))
         end
     end
 
-    return domain, is_frac, msh
+    # TODO: support multiple producers
+    wells = []
+    N = get_neighborship(UnstructuredMesh(msh))
+    z = geo.cell_centroids[3, :]
+    for (wno, wc) in enumerate(well_coords)
+        cells = Jutul.find_enclosing_cells(msh, wc, n = 1000)
+        frac_cells = Int[]
+        for cell in cells
+            faces = msh.faces.cells_to_faces[cell]
+            c = vcat(N[:, faces]...)
+            keep = is_frac[c]
+            push!(frac_cells, c[keep]...)
+        end
+        push!(cells, frac_cells...)
+        unique!(cells)
+        cells = topo_sort_well(cells, msh, N, z)
 
-    for well in well_coords
-        cells = Jutul.find_enclosing_cells(msh, well)
-        println(length(cells))
-        println(sum(is_frac[cells]))
+        well = setup_well(domain, cells;
+            name = well_names[wno],
+            simple_well = false
+        )
+        push!(wells, well)
+
     end
 
-    return domain
+    model, _ = setup_reservoir_model(domain, :geothermal; wells = wells, split_wells = false)
+    bc, state0 = set_dirichlet_bcs(model)
+
+    rho = reservoir_model(model).system.rho_ref[1]
+    # Injector: inject cooled water at a rate equal to production
+    # TODO: assert that well exists at construction
+    # rate_target = TotalRateTarget(rate_prod)
+    rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Prod1])
+    ctrl_inj = InjectorControl(
+        rate_target, [1.0], density = rho, temperature = temperature_inj)
+    # Producer
+    # TODO: support multiple periods with different rates
+    rate_target = TotalRateTarget(-rate_prod)
+    ctrl_prod = ProducerControl(rate_target)
+    control = Dict(:Inj => ctrl_inj, :Prod1 => ctrl_prod)
+
+    limits = Dict()
+    limits[:Prod1] = (bhp = 10atm,)
+    forces = setup_reservoir_forces(model, control = control, bc = bc, limits = limits)
+
+    dt, forces = make_schedule(
+        [forces], [(1,1), (12,31)];
+        num_years = num_years,
+        schedule_args...)
+
+    # ## Create and return the complete simulation case
+    case = JutulCase(model, dt, forces; state0 = state0)
+    return case
 
 end
 
 function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
-    hxz_min = missing,
-    hxz_max = missing,
+    hx_min = missing,
+    hx_max = missing,
     hy_min = missing,
     hy_max = missing,
+    hz_min = missing,
+    hz_max = missing,
     offset_rel = 2.0,
 )
     # Calculate domain offset to minimize boundary effects
-    well_distance = abs(well_coords[1][1][1] - well_coords[2][1][1])
+    well_distance = abs(well_coords[1][1,1] - well_coords[2][1,1])
     y_min = minimum(well_coords[1][:, 2])
     y_max = maximum(well_coords[1][:, 2])
     well_lateral = abs(y_max - y_min)
 
+    depth = well_coords[1][3,3]
+
     offset = offset_rel*(well_distance + fracture_radius)
     # Well coordinates
-    hxz_min = ismissing(hxz_min) ? well_distance/10 : hxz_min
-    hxz_max = ismissing(hxz_max) ? offset/5 : hxz_max
+    hx_min = ismissing(hx_min) ? well_distance/10 : hx_min
+    hx_max = ismissing(hx_max) ? offset/5 : hx_max
+    hz_min = ismissing(hz_min) ? hx_min : hz_min
+    hz_max = ismissing(hz_max) ? (depth - fracture_radius)/5 : hz_max
 
-    hy_min = ismissing(hy_min) ? fracture_spacing/3 : hy_min
-    hy_max = ismissing(hy_max) ? offset/5 : hy_max
-
-    function make_coords_xz(x0, xw)
+    function make_coords_xz(x0, xw, h_min, h_max)
 
         x_min, x_max = extrema(xw)
         x_mid = (x_min + x_max)/2
 
-        xw .-= hxz_min/2
+        xw .-= h_min/2
         xw = vcat(x_mid - fracture_radius, xw, x_mid + fracture_radius)
         xd = sort(vcat(x0, xw))
         nx = length(xd)-1
-        hxz = fill(hxz_max, nx)
+        hxz = fill(h_max, nx)
         x_mid = diff(xd)./2 .+ xd[1:end-1]
         is_frac = x_min - fracture_radius .<= x_mid .<= x_max + fracture_radius
-        hxz[is_frac] .= hxz_min
+        hxz[is_frac] .= h_min
 
         xd = first(Fimbul.interpolate_z(xd, hxz))
 
@@ -128,7 +170,7 @@ function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
         x_mid - offset,
         x_mid + offset
     ]
-    x = make_coords_xz(x0, xw)
+    x = make_coords_xz(x0, xw, hx_min, hx_max)
     println(x)
 
     zw = []
@@ -140,7 +182,7 @@ function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
         0.0,
         4000.0
     ]
-    z = make_coords_xz(z0, zw)
+    z = make_coords_xz(z0, zw, hz_min, hz_max)
 
     yw = []
     for wc in well_coords
@@ -150,6 +192,9 @@ function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
     unique!(yw)
 
     y_min, y_max = extrema(yw)
+
+    hy_min = ismissing(hy_min) ? fracture_spacing/3 : hy_min
+    hy_max = ismissing(hy_max) ? max(offset, y_max - fracture_radius)/5 : hy_max
 
     fracture_start = y_min + fracture_spacing/2
     fracture_end = y_max - fracture_spacing/2
