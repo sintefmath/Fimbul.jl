@@ -271,3 +271,32 @@ function set_dirichlet_bcs(model, subset = :all;
     return bc, state0, p, T
 
 end
+
+function topo_sort_well(cells, msh, N = missing, z = missing)
+
+    N = ismissing(N) ? get_neighborship(UnstructuredMesh(msh)) : N
+    z = ismissing(z) ? tpfv_geometry(msh).cell_centroids[3, :] : z
+
+    sorted_cells = Int[]
+    top_ix = last(findmin(z[cells]))
+    push!(sorted_cells, popat!(cells, top_ix))
+
+    current_cell = sorted_cells[end]
+    while !isempty(cells)
+        for r = 1:2
+            face_ix = N[r,:] .== current_cell
+            neighbor_cells = N[mod(r,2)+1, face_ix]
+            is_neighbor = [n ∈ cells for n in neighbor_cells]
+            wn = neighbor_cells[is_neighbor]
+            isempty(wn) ? continue : nothing
+            @assert length(wn) <= 1 "Branching wells not supported"
+
+            push!(sorted_cells, wn[1])
+            popat!(cells, findfirst(isequal(wn[1]), cells))
+            current_cell = wn[1]
+        end
+    end
+
+    return sorted_cells
+
+end
