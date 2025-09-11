@@ -4,8 +4,8 @@ day = si_unit(:day)
 function egs(well_coords, fracture_radius, fracture_spacing;
     well_names = missing,
     fracture_aperture=1e-3,
-    porosity = 0.05,
-    permeability = 1.0e-2 .* darcy,
+    porosity = 0.01,
+    permeability = 1.0e-3 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
     temperature_inj = convert_to_si(25, :Celsius),
@@ -63,6 +63,7 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     wells = []
     N = get_neighborship(UnstructuredMesh(msh))
     z = geo.cell_centroids[3, :]
+    WI_max = 1e-10
     for (wno, wc) in enumerate(well_coords)
         cells = Jutul.find_enclosing_cells(msh, wc, n = 1000)
         frac_cells = Int[]
@@ -80,18 +81,21 @@ function egs(well_coords, fracture_radius, fracture_spacing;
             name = well_names[wno],
             simple_well = false
         )
+        open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
+        well.perforations.WI[.!open] .= 0.0
+        well.perforations.WI[open] = min.(well.perforations.WI[open], WI_max)
         push!(wells, well)
 
     end
 
-    model, _ = setup_reservoir_model(domain, :geothermal; wells = wells, split_wells = false)
-    bc, state0 = set_dirichlet_bcs(model)
+    model, _ = setup_reservoir_model(domain, :geothermal; wells = wells, split_wells = true)
+    bc, state0 = set_dirichlet_bcs(model, pressure_surface = 10atm)
 
     rho = reservoir_model(model).system.rho_ref[1]
     # Injector: inject cooled water at a rate equal to production
     # TODO: assert that well exists at construction
-    # rate_target = TotalRateTarget(rate_prod)
-    rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Prod1])
+    rate_target = TotalRateTarget(rate_prod)
+    # rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Prod1])
     ctrl_inj = InjectorControl(
         rate_target, [1.0], density = rho, temperature = temperature_inj)
     # Producer
@@ -103,6 +107,17 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     limits = Dict()
     limits[:Prod1] = (bhp = 10atm,)
     forces = setup_reservoir_forces(model, control = control, bc = bc, limits = limits)
+
+    # dt_target = si_unit(:year)/12
+
+    # dt_0 = 1si_unit(:hour)
+    # n_rampup = 20
+    # # dt_0*α^(n_rampup-1) = dt_target
+    # α = (dt_target/dt_0)^(1/(n_rampup-1))
+    # dt = [dt_0*α^(i-1) for i in 1:n_rampup]
+
+    # # n_step = Int(ceil(si_unit(:year)/dt_target))
+    # dt = vcat(dt, fill(dt_target, num_years*12))
 
     dt, forces = make_schedule(
         [forces], [(1,1), (12,31)];

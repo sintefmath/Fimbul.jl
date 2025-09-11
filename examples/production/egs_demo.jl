@@ -87,12 +87,91 @@ plot_reservoir(case.model, key = :porosity, aspect = :data, colormap = :hot)
 # fracture network facilitates heat exchange between the circulating fluid and
 # the surrounding hot rock matrix.
 
+r_domain = reservoir_model(case.model).data_domain
+block_size = 1000
+num_blocks = Int.(ceil(number_of_cells(msh)./block_size))
+p = JutulDarcy.partition_reservoir(case.model, num_blocks; wells_in_single_block = true)
+is_frac = r_domain[:porosity] .== 0.5
+is_well = falses(number_of_cells(msh))
+for (name, well) in get_model_wells(case.model)
+   cells = well.perforations.reservoir
+   is_well[cells] .= true
+end
+# Pad domain
+using SparseArrays
+N = get_neighborship(msh)
+M = sparse(vcat(N[1,:], N[2,:]), vcat(N[2,:], N[1,:]), 1.0)
+for k = 1:1
+   global is_well = is_well .|| M*is_well .> 0
+   global is_frac = is_frac .|| M*is_frac .> 0
+end
+pmax = maximum(p)
+p[is_frac] .= pmax + 1
+p[is_well] .= pmax + 1
+
+p = Jutul.compress_partition(p)
+
+plot_reservoir(case, p)
+
+##
+output_path = jutul_output_path("egs_demo")
+sim, cfg = setup_reservoir_simulator(case;
+    precond = :cpr,
+    method = :nldd,
+    nldd_partition = p,
+    always_solve_wells = true,
+    # subdomain_failure_throws = true,
+    subdomain_precond = :ilu0,
+    solve_tol_temperature = 0.25,
+    info_level = 2,
+    output_path = output_path,
+    tol_cnv = 1e-2,
+    tol_mb = 1e-6,
+    timesteps = :auto,
+    target_its = 4,
+    max_timestep = 6.0si_unit(:hour),
+    initial_dt = 5.0,
+    relaxation = true);
+cfg[:tolerances][:Reservoir][:default] = 1e-2
+# cfg[:linear_solver].config.max_iterations = 100
+# The transition from charging to discharging creates a thermal shock that is
+# numerically challenging for the nonlinear solver. We use a specialized
+# timestep selector that reduces the timestep to 5 seconds during control
+# changes to maintain numerical stability and convergence.
+# sel = VariableChangeTimestepSelector(:Temperature, 2.5; relative = false, model = :Inj)
+# sel = JutulDarcy.ControlChangeTimestepSelector(
+#     case.model, 0.0, convert_to_si(5.0, :second))
+push!(cfg[:timestep_selectors], sel)
+cfg[:timestep_max_decrease] = 1e-6
+for ws in well_symbols(case.model)
+    cfg[:tolerances][ws][:default] = 1e-2
+end
+
+# for c in cfg[:config_subdomains]
+#     c[:info_level] = -1
+#     c[:max_timestep_cuts] = 0
+#     c[:tolerances][:Reservoir][:default] = 1e-2
+# end
+
+for (sno, sub_cfg) in enumerate(cfg[:config_subdomains])
+    for k in keys(sub_cfg[:tolerances])
+        sub_cfg[:tolerances][k][:default] = 1e-2
+    end
+    sub_cfg[:max_timestep_cuts] = 0
+    sub_cfg[:info_level] = 0
+    sub_cfg[:linear_solver].config.max_iterations = 100
+    # mdl = sim.subdomain_simulators[sno].model
+    # reservoir_linsolve(submodel, subdomain_precond)
+end
+
+
+##
 # Note: EGS simulations can be computationally intensive due to the coupled
 # thermal-hydraulic processes in fractures. Setting info_level = 0 will show
 # a progress bar during simulation.
-results = simulate_reservoir(case; info_level = 2)
-
+results = simulate_reservoir(case; simulator = sim, config = cfg, restart = false)
 # ## Visualize EGS results
+
 # First, plot the temperature field evolution throughout the simulation.
 # The visualization shows how thermal depletion progresses through the
 # fracture network over time.
