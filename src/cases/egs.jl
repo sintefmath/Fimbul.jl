@@ -5,18 +5,18 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     well_names = missing,
     fracture_aperture=1e-3,
     porosity = 0.01,
-    permeability = 1.0e-3 .* darcy,
+    permeability = 0.5e-3 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
     temperature_inj = convert_to_si(25, :Celsius),
-    rate_prod = 100meter^3/day,
+    rate_prod = 10kilogram/second/(1000kilogram/meter^3),
     num_years = 20,
     mesh_args = NamedTuple(),
     schedule_args = NamedTuple(),
 )
 
     msh = Fimbul.make_egs_cart_mesh(
-        well_coords, fracture_radius, fracture_spacing;
+        well_coords, fracture_aperture, fracture_radius, fracture_spacing;
         mesh_args...
     )
     msh = UnstructuredMesh(msh)
@@ -63,30 +63,43 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     wells = []
     N = get_neighborship(UnstructuredMesh(msh))
     z = geo.cell_centroids[3, :]
-    WI_max = 1e-10
-    for (wno, wc) in enumerate(well_coords)
-        cells = Jutul.find_enclosing_cells(msh, wc, n = 1000)
-        frac_cells = Int[]
-        for cell in cells
-            faces = msh.faces.cells_to_faces[cell]
-            c = vcat(N[:, faces]...)
-            keep = is_frac[c]
-            push!(frac_cells, c[keep]...)
-        end
-        push!(cells, frac_cells...)
-        unique!(cells)
-        cells = topo_sort_well(cells, msh, N, z)
+    WI_max = 1e-9
 
-        well = setup_well(domain, cells;
-            name = well_names[wno],
+    cells = find_well_cells(msh, well_coords[1], z, N, is_frac)
+    well_inj = setup_well(domain, cells;
+            name = :Injector,
             simple_well = false
         )
-        open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
-        well.perforations.WI[.!open] .= 0.0
-        well.perforations.WI[open] = min.(well.perforations.WI[open], WI_max)
-        push!(wells, well)
+    
+    open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
+    well_inj.perforations.WI[.!open] .= 0.0
+    well_inj.perforations.WI[open] = min.(well_inj.perforations.WI[open], WI_max)
+    push!(wells, well_inj)
 
+    println("Adding well Prod")
+    cells = [cells[1]]
+    neighbors = [0; 0]
+    cell_no = 1;
+    for (wno, wc) in enumerate(well_coords)
+        wno == 1 ? continue : nothing
+        println("Adding producer branch $(wno-1)/$(length(well_coords)-1)")
+        cells_k = Jutul.find_enclosing_cells(msh, wc, n = 1000)
+        num_cells = length(cells_k)
+        push!(cells, cells_k...)
+        joint_neighbors = [1; cell_no + 1]
+        nodes = collect(1:num_cells) .+ cell_no
+        branch_neighbors = [nodes[1:end-1]'; nodes[2:end]']
+        neighbors = hcat(neighbors, joint_neighbors, branch_neighbors)
+        cell_no += num_cells
     end
+
+    neighbors = Int64.(neighbors[:, 2:end])
+    cells = Int64.(cells)
+
+    well_prod = setup_well(domain, cells;
+    N = neighbors, name = :Producer, simple_well = false)
+
+    wells = [well_inj, well_prod]
 
     model, _ = setup_reservoir_model(domain, :geothermal; wells = wells, split_wells = true)
     bc, state0 = set_dirichlet_bcs(model, pressure_surface = 10atm)
@@ -102,10 +115,10 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     # TODO: support multiple periods with different rates
     rate_target = TotalRateTarget(-rate_prod)
     ctrl_prod = ProducerControl(rate_target)
-    control = Dict(:Inj => ctrl_inj, :Prod1 => ctrl_prod)
+    control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod)
 
     limits = Dict()
-    limits[:Prod1] = (bhp = 10atm,)
+    limits[:Producer] = (bhp = 10atm,)
     forces = setup_reservoir_forces(model, control = control, bc = bc, limits = limits)
 
     # dt_target = si_unit(:year)/12
@@ -130,7 +143,21 @@ function egs(well_coords, fracture_radius, fracture_spacing;
 
 end
 
-function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
+function find_well_cells(msh, wc, z, N, is_frac)
+    cells = Jutul.find_enclosing_cells(msh, wc, n = 1000)
+    frac_cells = Int[]
+    for cell in cells
+        faces = msh.faces.cells_to_faces[cell]
+        c = vcat(N[:, faces]...)
+        keep = is_frac[c]
+        push!(frac_cells, c[keep]...)
+    end
+    push!(cells, frac_cells...)
+    unique!(cells)
+    cells = topo_sort_well(cells, msh, N, z)
+end
+
+function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fracture_spacing;
     hx_min = missing,
     hx_max = missing,
     hy_min = missing,
@@ -143,7 +170,6 @@ function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
     well_distance = abs(well_coords[1][1,1] - well_coords[2][1,1])
     y_min = minimum(well_coords[1][:, 2])
     y_max = maximum(well_coords[1][:, 2])
-    well_lateral = abs(y_max - y_min)
 
     depth = well_coords[1][3,3]
 
@@ -213,10 +239,9 @@ function make_egs_cart_mesh(well_coords, fracture_radius, fracture_spacing;
 
     fracture_start = y_min + fracture_spacing/2
     fracture_end = y_max - fracture_spacing/2
-    aperture = 1e-3
 
     fracture_y = fracture_start:fracture_spacing:fracture_end
-    fracture_y = sort(vcat(fracture_y, fracture_y .+ aperture))
+    fracture_y = sort(vcat(fracture_y, fracture_y .+ fracture_aperture))
 
     y = [
         y_min - offset,
