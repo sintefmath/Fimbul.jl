@@ -175,7 +175,7 @@ function process_periods(year, periods)
     for (pno, period) in enumerate(periods)
         time = process_time(year, period)
         if pno > 1
-            time < periods_proc[pno-1] ? time += Dates.Year(1) : nothing
+            time <= periods_proc[pno-1] ? time += Dates.Year(1) : nothing
         end
         periods_proc[pno] = time
     end
