@@ -17,6 +17,7 @@ using GLMakie
 # Useful SI units
 meter = si_unit(:meter)
 second = si_unit(:second)
+Kelvin, watt = si_units(:Kelvin, :watt)
 
 
 # ## Set up EGS case
@@ -49,6 +50,7 @@ case = Fimbul.egs(
     well_coords, 
     fracture_radius, 
     fracture_spacing; # Domain size parameter
+    rock_thermal_conductivity = 10 .* watt/(meter*Kelvin),
     num_years = 10, # Simulate 10 years of operation
     fracture_aperture = fracture_aperture,
     rate = rate,
@@ -173,7 +175,6 @@ function get_fracture_data(states, model, well)
 
     perf = model.models[well].data_domain.representation.perforations
     is_frac = findall(isapprox.(perf.WI, maximum(perf.WI)))
-    Cp = reservoir_model(model).data_domain[:component_heat_capacity][1]
     jj = [cell_ijk(msh, c)[2] for c in perf.reservoir[is_frac]]
 
     JJ = unique(jj)
@@ -183,21 +184,15 @@ function get_fracture_data(states, model, well)
     y = geo.cell_centroids[2, perf.reservoir[is_frac]]
 
     for (sno, state) in enumerate(states)
-        Qv = state[well][:TotalMassFlux]
-        Qv = diff(Qv)[is_frac]
-        # Tv = state[well][:Temperature][is_frac]
+        Qn = state[well][:TotalMassFlux]
+        Qn = diff(Qn)[is_frac]
+        Tn = state[well][:Temperature][is_frac]
         h = state[well][:FluidEnthalpy][is_frac]
-        ρ = state[well][:PhaseMassDensities][is_frac]
-        p = state[well][:Pressure][is_frac]
-
         for (fno, j) in enumerate(JJ)
             ix = jj .== j
-            # println("j: ", j, " ix: ", ix)
-            Q[sno, fno] = sum(Qv[ix])
-            Qh[sno, fno] = sum(h[ix].*Qv[ix])
-            pf = mean(p[ix])
-            ρf = mean(ρ[ix])
-            T[sno, fno] = (Qh[sno, fno]/Q[sno, fno] .- pf/ρf)./Cp
+            Q[sno, fno] = sum(Qn[ix])
+            Qh[sno, fno] = sum(h[ix].*Qn[ix])
+            T[sno, fno] = mean(Tn[ix])
         end
 
     end
@@ -274,9 +269,9 @@ plot_fracture_data(ax_pwr, effect./1e6, true)
 hidexdecorations!(ax_pwr, grid = false)
 
 # Plot cumulative energy
-ax = make_axis("Cumulative thermal energy", "Energy (GWh)", 3)
+ax = make_axis("Cumulative thermal energy", "Energy (TWh)", 3)
 energy = cumsum(effect.*dt, dims = 1)
-plot_fracture_data(ax, energy/(si_unit(:giga)*si_unit(:hour)), true)
+plot_fracture_data(ax, energy/(1e3*si_unit(:giga)*si_unit(:hour)), true)
 hidexdecorations!(ax, grid = false)
 
 ax = make_axis("Energy per year per fracture", "Energy (GWh)", 4)
