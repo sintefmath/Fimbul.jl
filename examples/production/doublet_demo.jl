@@ -114,18 +114,18 @@ cells = cells .|| geo.cell_centroids[3, :] .> 2475.0
 # Create subplots for each highlighted timestep
 fig = Figure(size = (800, 800))
 for (i, n) in enumerate(timesteps)
-    ax = Axis3(fig[(i-1)÷2+1, (i-1)%2+1]; title = "$(times[n]) years",
+    ax_i = Axis3(fig[(i-1)÷2+1, (i-1)%2+1]; title = "$(times[n]) years",
     zreversed = true, elevation = pi/8, aspect = :data)
 
     ΔT = Δstates[n][:Temperature]
 
-    plot_cell_data!(ax, msh, ΔT; 
+    plot_cell_data!(ax_i, msh, ΔT; 
         cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max))
-    plot_well!(ax, msh, wells[:Injector]; 
+    plot_well!(ax_i, msh, wells[:Injector]; 
     color = :black, linewidth = 4, top_factor = 0.4, markersize = 0.0)
-    plot_well!(ax, msh, wells[:Producer]; 
+    plot_well!(ax_i, msh, wells[:Producer]; 
     color = :black, linewidth = 4, markersize = 0.0)
-    hidedecorations!(ax)
+    hidedecorations!(ax_i)
 end
 Colorbar(fig[3, 1:2]; 
     colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 
