@@ -150,17 +150,25 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     
     ch_start = process_time(start_year, charge_period[1])
     ch_end = process_time(start_year, charge_period[2], true)
+    ch_end < ch_start ? ch_end += Dates.Year(1) : nothing
     dch_start = process_time(start_year, discharge_period[1])
     dch_end = process_time(start_year, discharge_period[2], true)
+    dch_end < dch_start ? dch_end += Dates.Year(1) : nothing
 
     periods = [ch_start, ch_end, dch_start, dch_end, ch_start + Dates.Year(1)]
+    forces = [forces_charge; forces_rest; forces_discharge; forces_rest]
+    remove, p0 = [], nothing
+    for (pno, p) in enumerate(periods)
+        if 1 < pno < length(periods) && p - p0 <= Dates.Second(0)
+            push!(remove, pno)
+        end
+        p0 = p
+    end
+    deleteat!(periods, remove)
+    deleteat!(forces, remove.-1)
     periods = process_periods(start_year, periods)
-    keep = diff(periods) .> Dates.Second(0)
-    
-    periods = periods[[keep; true]]
 
     periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
-    forces = [forces_charge; forces_rest; forces_discharge; forces_rest][keep]
 
     dt, forces, timestamps = make_schedule(forces, periods;
         start_year = start_year, num_years = num_years, kwargs...)
