@@ -284,16 +284,16 @@ end;
 fig = Figure(size = (800, 1000))
 for cycle in 1:num_years
     ## Plot charging stage temperatures (thermal plume development)
-    ax = plot_aquifer_temperature!(fig, T_line, "Charging", cycle)
+    ax_c = plot_aquifer_temperature!(fig, T_line, "Charging", cycle)
     if cycle < num_years
-        hidexdecorations!(ax; grid=false)
+        hidexdecorations!(ax_c; grid=false)
     end
     ## Plot discharging stage temperatures (thermal recovery and cooling)
-    ax = plot_aquifer_temperature!(fig, T_line, "Discharging", cycle)
+    ax_c = plot_aquifer_temperature!(fig, T_line, "Discharging", cycle)
     if cycle < num_years
-        hidedecorations!(ax; grid=false)
+        hidedecorations!(ax_c; grid=false)
     else
-        hideydecorations!(ax; grid=false)
+        hideydecorations!(ax_c; grid=false)
     end
 end
 fig
