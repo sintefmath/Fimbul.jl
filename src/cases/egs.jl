@@ -239,7 +239,9 @@ function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fra
 
     fracture_start = y_min + fracture_spacing/2
     fracture_end = y_max - fracture_spacing/2
-    nfrac = Int(floor((fracture_end - fracture_start)/fracture_spacing)) + 1
+    fractured_length = fracture_end - fracture_start
+    @assert fractured_length > 0 "Fracture spacing too large for well length"
+    nfrac = Int(round(fractured_length/fracture_spacing)) + 1
     
     fracture_y = range(fracture_start, stop=fracture_end, length=nfrac)
     fracture_y = sort(vcat(fracture_y, fracture_y .+ fracture_aperture))
