@@ -159,7 +159,7 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     forces = [forces_charge; forces_rest; forces_discharge; forces_rest]
     remove, p0 = [], nothing
     for (pno, p) in enumerate(periods)
-        if 1 < pno < length(periods) && p - p0 <= Dates.Second(0)
+        if 1 < pno && p - p0 <= Dates.Second(0)
             push!(remove, pno)
         end
         p0 = p
