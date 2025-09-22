@@ -13,7 +13,7 @@ using GLMakie
 # to September) with hot water at 90°C, and discharged during winter months
 # (October to March) with cold water at 10°C. This seasonal operation is
 # simulated over a 4-year period to study the thermal energy storage performance.
-case, sections = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
+case, sectors = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
     charge_period = ["April", "September"],
     discharge_period = ["October", "March"],
     num_years = 4,
@@ -21,9 +21,9 @@ case, sections = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
 
 # ### Visualize BTES system layout
 # The 48 BTES wells are arranged in a pattern that ensures approximately equal
-# spacing between wells. The wells are organized into 6 sections of 8 wells
+# spacing between wells. The wells are organized into 6 sectors of 8 wells
 # each. During charging, water is injected at 0.5 l/s into the innermost well of
-# each section and flows sequentially through all wells in series to the
+# each sector and flows sequentially through all wells in series to the
 # outermost well. During discharging, the flow direction reverses, with water
 # flowing from the outermost well back to the innermost well.
 msh = physical_representation(reservoir_model(case.model).data_domain)
@@ -33,13 +33,13 @@ azimuth = 0, elevation = π/2)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 colors = Makie.wong_colors()
 lns, labels = [], String[]
-for (sno, (section, wells)) in enumerate(sections)
+for (sno, (sector, wells)) in enumerate(sectors)
     for (wno, wname) in enumerate(wells)
         well = case.model.models[wname].domain.representation
         l = plot_well!(ax, msh, well; color = colors[sno], fontsize = 0)
         if wno == 1
             push!(lns, l)
-            push!(labels, "Section $sno")
+            push!(labels, "Sector $sno")
         end
     end
 end
@@ -76,7 +76,7 @@ simulator=simulator, config=config, info_level=0);
 # ### Interactive visualization of results
 # We first plot the final temperature distribution in the reservoir and well
 # performance over time. The reservoir plot shows the thermal plumes developed
-# around each well section, while the well results show the temperature and flow
+# around each well sector, while the well results show the temperature and flow
 # rate evolution throughout the simulation.
 plot_reservoir(case.model, results.states;
 well_fontsize = 0, key = :Temperature, step = length(case.dt),
@@ -121,10 +121,10 @@ fig
 # capacity requirement.
 
 # To this end, we define a utility function to plot temperature evolution in a
-# BTES section. This function visualizes temperature as a function of well depth
-# for all wells in a given section at specified timesteps, helping to understand
+# BTES sector. This function visualizes temperature as a function of well depth
+# for all wells in a given sector at specified timesteps, helping to understand
 # thermal propagation through the wellbore network.
-function plot_btes_temperature(ax, section, timesteps)
+function plot_btes_temperature(ax, sector, timesteps)
     colors = cgrad(:ice, length(timesteps), categorical = true)
     msh = physical_representation(reservoir_model(case.model).data_domain)
     geo = tpfv_geometry(msh)
@@ -132,7 +132,7 @@ function plot_btes_temperature(ax, section, timesteps)
     out = []
     for (sno, step) in enumerate(timesteps)
         label = String("$(time[step]) days")
-        for (wno, well) in enumerate(sections[Symbol("S$section")])
+        for (wno, well) in enumerate(sectors[Symbol("S$sector")])
             lbl = wno == 1 ? label : nothing
             T = results.result.states[step][well][:Temperature]
             T = convert_from_si.(T, :Celsius)
@@ -145,31 +145,31 @@ function plot_btes_temperature(ax, section, timesteps)
 end
 
 fig = Figure(size = (1000, 750))
-section = 1
+sector = 1
 
 # ### Temperature evolution during the first charging cycle
 # We first visualize how thermal energy propagates through the wellbore network
-# as hot water flows from the innermost to the outermost well in the section.
-well = sections[Symbol("S$section")][1]
+# as hot water flows from the innermost to the outermost well in the sector.
+well = sectors[Symbol("S$sector")][1]
 T_ch = convert_to_si(90.0, :Celsius)
 is_charge = [f[:Facility].control[well].temperature == T_ch for f in case.forces]
 stop = findfirst(diff(is_charge) .< 0)
-ax = Axis(fig[1, 1]; title = "Temperature evolution, section $section (charging)",
+ax = Axis(fig[1, 1]; title = "Temperature evolution, sector $sector (charging)",
 xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
-plot_btes_temperature(ax, section, 1:stop)
+plot_btes_temperature(ax, sector, 1:stop)
 Legend(fig[1,2], ax; fontsize = 20)
 
 # ### Temperature evolution during the first discharging cycle
 # Next, we show how stored thermal energy is extracted as flow direction
 # reverses, with water flowing from the outermost to the innermost well.
-well = sections[Symbol("S$section")][end-1]
+well = sectors[Symbol("S$sector")][end-1]
 T_dch = convert_to_si(10.0, :Celsius)
 is_discharge = [f[:Facility].control[well].temperature == T_dch for f in case.forces]
 start = findfirst(diff(is_discharge) .> 0)+1
 stop = findfirst(diff(is_discharge) .< 0)
-ax = Axis(fig[2, 1]; title = "Temperature evolution, section $section (discharging)",
+ax = Axis(fig[2, 1]; title = "Temperature evolution, sector $sector (discharging)",
 xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
-plot_btes_temperature(ax, section, start:stop)
+plot_btes_temperature(ax, sector, start:stop)
 Legend(fig[2,2], ax; fontsize = 20)
 
 fig
