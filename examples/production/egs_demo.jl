@@ -3,70 +3,58 @@
 # Enhanced Geothermal System (EGS). EGS technology enables geothermal energy
 # extraction from hot dry rock formations where natural permeability is
 # insufficient for fluid circulation.
-#
-# ## EGS System Overview
-# EGS systems create artificial geothermal reservoirs through hydraulic
-# stimulation, creating a fracture network that connects injection and
-# production wells.
-
-# ## System Configuration
-# The simulated EGS consists of:
-# - **Injector well**: Injects cold water (25°C) at controlled flow rate
-# - **Producer well**: Extracts heated water for surface energy conversion
-# - **Fracture network**: Discrete high-permeability zones enabling fluid circulation
-# - **Hot rock matrix**: Provides thermal energy source (initial temperature gradient)
-
-# ## Required Packages and Dependencies
-#
-# The simulation requires several specialized Julia packages:
 
 # Add required modules to namespace
-using Jutul, JutulDarcy, Fimbul  # Core reservoir simulation framework
+using Jutul, JutulDarcy, Fimbul # Core reservoir simulation framework
 using HYPRE # High-performance linear algebra solvers
 using GLMakie # 3D visualization and plotting capabilities
-using Statistics
+using Statistics # For computing statistics
 
 # Useful SI units
 meter = si_unit(:meter)
 day = si_unit(:day)
 watt = si_unit(:watt);
 
-# ## EGS System Geometry and Configuration
-#
-# Design the geometric layout of the EGS including well trajectories, fracture
-# network dimensions, and operational parameters. The configuration represents a
-# small, commercial-scale EGS with horizontal wells and engineered fracture
-# network.
+# ## EGS setup
+# We consider an EGS system with one injection well and two production wells.
+# The wells extend 2500 m vertically before they continue horizontally. The
+# horizontal sections are arranged in a triangular pattern, connected by a
+# stimulated fracture network comprising eight fractures intersecting the wells
+# at a right angle. Thermal energy is produced by circulating cold water through
+# this fracture network, which extracts heat from the surrounding hot rock
+# matrix by conduction. To leverage buoyancy effects, the injection well is
+# placed at a lower elevation than the production wells, forcing the colder (and
+# therefore denser) water to sweep a larger volume of the fracture network,
+# thereby enhancing heat extraction.
 
-# ### Geometric Parameters
-#
-# Define EGS system geometry
-well_spacing_x = 100.0meter # Horizontal separation between wells [m]
-well_spacing_z = sqrt(3/4*well_spacing_x^2) # Vertical well offset
-well_depth = 2500.0meter # Vertical depth to horizontal well section [m] - typical EGS depth
+# ### Define EGS geometry
+# We will use the setup function `egs`, which takes as input the well
+# coordinates, fracture radius, and fracture spacing to create the complete EGS.
+well_depth = 2500.0meter # Vertical depth to horizontal well section [m]
+well_spacing_x = 100.0meter # Horizontal separation between production wells [m]
+well_spacing_z = sqrt(3/4*well_spacing_x^2) # Vertical offset between injector and producers [m]
 well_lateral = 500.0meter # Length of horizontal well section [m]
-fracture_radius = 200.0meter # Radius of stimulated fracture network [m]
-fracture_spacing = well_lateral/8 # Spacing between discrete fractures [m] - controls resolution
 
-# ### Well Trajectory Definition
-#
-# Wells start vertically from surface, then transition to horizontal at depth to
-# maximize contact with fracture network. The setup function supports arbitrary
-# number of wells, where the first is the injector and subsequent wells are
-# producers. All producers are coupled together at the surface.
+# Well coordinates are defined as a vector of nx3 arrays, each containing the
+# (x,y,z) coordinates of a well trajectory. The first well is the injector,
+# while preceding wells are interpreted as producers. All producers are coupled
+# together in a single well at the top to allow enable controlling/monitoring
+# the total production rate.
 ws_x, ws_z, wd, wl = well_spacing_x, well_spacing_z, well_depth, well_lateral
 well_coords = [
     [0.0 0.0 0.0; 0.0 0.0 wd; 0.0 wl wd], # Injector
     [-ws_x/2 0.0  0.0; -ws_x/2 0.0 wd-ws_z; -ws_x/2 wl wd-ws_z], # Producer leg 1
     [ ws_x/2 0.0  0.0;  ws_x/2 0.0 wd-ws_z;  ws_x/2 wl wd-ws_z] # Producer leg 2
 ]
+# The fracture network is defined by the fracture radius and spacing along the
+# wellbore, starting at the horizontal section of the well.
+fracture_radius = 200.0meter # Radius of stimulated fracture network [m]
+fracture_spacing = well_lateral/8 # Spacing between discrete fractures [m]
 
-# ### EGS Case Generation
-#
-# Create the complete EGS model including reservoir domain, fracture network,
-# wells, and simulation schedule using Fimbul's specialized EGS constructor.
-
-# Create EGS case with fracture network
+# ### Create EGS VariableChangeTimestepSelector
+# We set up a scenario describing 10 years of operation with a water injection
+# rate of 9250 m³/day (approximately 107 liters/second) at a temperature of
+# 25°C. The simulation will output results four times per year for analysis.
 reports_per_year = 4 # Output frequency for results analysis
 case = Fimbul.egs(well_coords, fracture_radius, fracture_spacing;
     rate = 9250meter^3/day, # Water injection rate
@@ -75,39 +63,19 @@ case = Fimbul.egs(well_coords, fracture_radius, fracture_spacing;
     schedule_args = (report_interval = si_unit(:year)/reports_per_year,)
 );
 
-# ## 3D Visualization of EGS System
-#
-# Generate comprehensive 3D visualization of the computational mesh, well trajectories,
-# and fracture network. The mesh is adaptively refined around wells and fractures
-# to accurately resolve thermal and hydraulic gradients in these critical regions.
-
-# ### Extract Mesh and Geometry Information
-#
-# Access the computational grid and geometric properties for visualization:
-
-# Inspect EGS model
+# ### Inspect EGS model
 # Visualize the computational mesh, wells, and fracture network. The mesh is
 # refined around wells and fractures to capture thermal and hydraulic processes
 # accurately in these critical regions.
-msh = physical_representation(reservoir_model(case.model).data_domain)  # Extract mesh geometry
-geo = tpfv_geometry(msh)                                                # Compute geometric properties
-
-# ### Create 3D System Overview Plot
-#
-# Generate main visualization showing mesh structure and well locations:
-
-fig = Figure(size = (1200, 800))
-ax = Axis3(fig[1, 1], zreversed = true, aspect = :data,
+msh = physical_representation(reservoir_model(case.model).data_domain)
+geo = tpfv_geometry(msh)
+fig = Figure(size = (800, 800))
+ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data,
     title = "EGS System: Wells and Fracture Network")
-Jutul.plot_mesh_edges!(ax, msh, alpha = 0.3)  # Show computational grid with transparency
-
-# ### Well Trajectory Visualization
-#
-# Plot wells with distinct colors to show injection and production roles:
-
-# Plot wells with distinct colors
+# Show computational mesh with transparency
+Jutul.plot_mesh_edges!(ax, msh)
+# Plot wells
 wells = get_model_wells(case.model)
-# colors = cgrad(:seaborn_icefire_gradient, 10, categorical = true)[[1,end]]
 function plot_egs_wells(ax; colors = [:red, :blue])
     for (i, (name, well)) in enumerate(wells)
         color = colors[i]
@@ -119,107 +87,55 @@ function plot_egs_wells(ax; colors = [:red, :blue])
             geo = geo, linewidth = 3, color = color, label = label)
     end
 end
-
 plot_egs_wells(ax)
-fig
-
-# ### Fracture Network Visualization
-#
-# Highlight high-permeability fracture zones in the computational domain:
-
 # Highlight fracture network (high porosity cells)
 domain = reservoir_model(case.model).data_domain
-is_fracture = domain[:porosity] .> 0.1  # Fractures identified by enhanced porosity
+is_fracture = isapprox.(domain[:porosity], maximum(domain[:porosity]))
 fracture_cells = findall(is_fracture)
-if !isempty(fracture_cells)
-    plot_cell_data!(ax, msh, Float64.(is_fracture),
-        cells = fracture_cells,
-        colorrange = (0, 1))
-end
+plot_mesh!(ax, msh; cells = fracture_cells)
 fig
 
-# ### Reservoir Property Visualization
-#
-# Examine the spatial distribution of geological properties, particularly
-# porosity which distinguishes fracture zones from rock matrix:
-
-# Plot reservoir properties
-# Examine the geological properties.
-plot_reservoir(case.model, key = :porosity, aspect = :data, colormap = :hot)
-
-# ## Numerical Simulation Configuration
-#
-# Configure the reservoir simulator with appropriate solver settings, convergence criteria,
-# and timestep control for robust simulation of coupled thermal-hydraulic processes in EGS.
-
-# ### Primary Solver Setup
-#
-# Initialize the reservoir simulator with tolerance settings optimized for EGS:
-
-# Simulate EGS energy production
-# We simulate the EGS system for 30 years of operation. The injector is set to
-# inject cold water at 20°C, while the producer extracts heated water. The
-# fracture network facilitates heat exchange between the circulating fluid and
-# the surrounding hot rock matrix.
+# ## Simulate system
+# To simulate the system, we configure the reservoir simulator with settings
+# optimized for EGS applications.
 sim, cfg = setup_reservoir_simulator(case;
-    info_level = 2,          # Detailed convergence information (0=progress bar, 1=basic, 2=detailed)
-    tol_cnv = Inf,          # Disable CNV tolerance (material balance) - use other criteria
-    inc_tol_dT = 1e-2,      # Temperature increment tolerance [K] - ensures thermal accuracy
-    inc_tol_dp_rel = 1e-3,  # Relative pressure increment tolerance [-] - controls pressure changes
-    initial_dt = 5.0,       # Initial timestep [days] - conservative start for stability
-    relaxation = true);     # Enable solution relaxation for numerical stability
+    info_level = 2, # 0=progress bar, 1=basic, 2=detailed
+    tol_cnv = Inf, # Disable CNV tolerance - use other criteria
+    inc_tol_dT = 1e-2, # Temperature increment tolerance [K]
+    inc_tol_dp_rel = 1e-3, # Relative pressure increment tolerance [-]
+    initial_dt = 5.0, # Initial timestep [s]
+    relaxation = true); # Enable relaxation in Newton solver
 
-# ### Adaptive Timestep Control
-#
-# Add specialized timestep selectors to control solution quality during thermal transients.
-# These selectors monitor temperature changes and adjust timesteps to maintain accuracy:
-
-sel = VariableChangeTimestepSelector(:Temperature, 5.0; relative = false, model = :Injector)
+# We add a specialized timestep selector to control solution quality during
+# thermal transients. These selectors monitor temperature changes and adjust
+# timesteps aiming at a maximum change of 5 K per timestep.
+sel = VariableChangeTimestepSelector(:Temperature, 5.0; 
+relative = false, model = :Reservoir)
 push!(cfg[:timestep_selectors], sel)
-sel = VariableChangeTimestepSelector(:Temperature, 5.0; relative = false, model = :Producer)
-push!(cfg[:timestep_selectors], sel)
+# sel = VariableChangeTimestepSelector(:Temperature, 5.0; relative = false, model = :Producer)
+# push!(cfg[:timestep_selectors], sel)
 
-##
-# Note: EGS simulations can be computationally intensive due to the coupled
-# thermal-hydraulic processes in fractures. Setting info_level = 0 will show
-# a progress bar during simulation.
+# Note: EGS simulations can be computationally intensive. Depending on your
+# system, the simulation may take several minutes to complete.
 results = simulate_reservoir(case; simulator = sim, config = cfg)
-# ## Results Analysis and Visualization
-#
-# Analyze simulation results to understand EGS performance, thermal depletion patterns,
-# and energy production characteristics throughout the operational period.
 
-# ### Temperature Field Evolution
-#
-# Visualize how thermal depletion progresses through the fracture network over time.
-# This shows the cooling front advancement and thermal interaction between fractures:
+# ## Analysis and Visualization
+# Next, we analyze and visualize the simulation results to understand the EGS
+# performance, thermal depletion patterns, and energy production characteristics
+# throughout the operational period.
 
-# Visualize EGS results
 
-# First, plot the temperature field evolution throughout the simulation.
-# The visualization shows how thermal depletion progresses through the
-# fracture network over time.
+# ### Reservoir state evolution
+# First, plot the reservoir state throughout the simulation.
 plot_reservoir(case.model, results.states;
     colormap = :seaborn_icefire_gradient,
     key = :Temperature,
     aspect = :data)
 
-# ### Well Performance Analysis
-#
-# Examine operational metrics including flow rates, pressures, and temperatures
-# to understand EGS system behavior and identify thermal breakthrough timing:
-
-# Plot well performance
-# Examine the well responses including flow rates, pressures, and temperatures
-# to understand EGS operational behavior and thermal decline over time.
-plot_well_results(results.wells)
-
-# ### Temperature Change Analysis
-#
-# Calculate and visualize temperature changes relative to initial conditions
-# to quantify thermal depletion magnitude and spatial distribution:
-
-# Calculate temperature changes from initial conditions
+# ### Deviation from initial conditions
+# It is often more informative to visualize the deviation from the inital
+# conditions to highlight thermal depletion zones. We therefore compute the
+# change in reservoir variables to the initial state for all timesteps.
 Δstates = []
 for state in results.states
     Δstate = Dict{Symbol, Any}()
@@ -231,34 +147,30 @@ for state in results.states
     end
     push!(Δstates, Δstate)
 end
-
-# Plot temperature changes to highlight thermal depletion zones
 plot_reservoir(case.model, Δstates;
     colormap = :seaborn_icefire_gradient,
     key = :Temperature,
     aspect = :data)
 
-# ### Fracture-Level Thermal Evolution
-#
-# Create detailed time-series visualization of temperature changes within 
-# the fracture network to understand thermal depletion progression:
+# ### Fracture-level thermal evolution
+# Before we inspect well output, we visualize the temperature within the
+# fracture network. This helps us understand how effectively the cold water
+# propagates through the fractures.
 
 # Extract fracture zones and prepare time-series data
 dt = case.dt
-is_frac = isapprox.(domain[:porosity], maximum(domain[:porosity]))  # Identify fracture cells
-time = convert_from_si.(cumsum(dt), :year)                          # Convert timesteps to years
-ΔT = [Δstate[:Temperature][is_frac] for Δstate in Δstates]         # Temperature changes in fractures
-colorrange = extrema(vcat(ΔT...))                                   # Color scale for all timesteps
+time = convert_from_si.(cumsum(dt), :year)
+ΔT = [Δstate[:Temperature][is_fracture] for Δstate in Δstates]
+colorrange = extrema(vcat(ΔT...))
 
-# Set up 3D visualization parameters for fracture temperature evolution
-x = geo.cell_centroids[:, is_frac]    # Fracture cell coordinates
-xlim = extrema(x, dims=2)             # Determine spatial bounds
-xlim = [xl .+ (xl[2]-xl[1]).*(-0.1, 0.1) for xl in xlim]  # Add 10% margin
-limits = Tuple(xlim)
+# Define plot limits
+x = geo.cell_centroids[:, is_fracture]
+xlim = extrema(x, dims=2)
+limits = Tuple([xl .+ (xl[2]-xl[1]).*(-0.1, 0.1) for xl in xlim])
 
-# Create multi-panel time-series visualization
+# Visualize fracture temperature at three representative timesteps
 fig = Figure(size = (650, 800))
-steps = Int.(round.(range(1, length(ΔT), 3)))  # Select 3 representative timesteps
+steps = Int.(round.(range(1, length(ΔT), 3)))
 for (n, ΔT_n) in enumerate(ΔT[steps])
     ax_n = Axis3(fig[n, 1],
     zreversed = true, aspect = (1,6,1),
@@ -276,14 +188,17 @@ for (n, ΔT_n) in enumerate(ΔT[steps])
     plot_egs_wells(ax_n; colors = [:black, :black])
     hidedecorations!(ax_n)
 end
-
+# Add colorbar
 Colorbar(fig[length(steps)+1, 1];
     colormap = :seaborn_icefire_gradient, colorrange = colorrange,
     label = "ΔT (°C)", vertical = false, flipaxis = false)
-
 fig
 
-# ### Fracture Data Extraction and Analysis
+# ### Well Performance Analysis
+# Next, we examine the well responses including flow rates, pressures, and
+# temperatures. Notice how the flow rate declines over time due to cooling of
+# the fracture network and consequent increase in fluid viscosity.
+plot_well_results(results.wells)
 #
 # Extract detailed flow and thermal data from individual fractures to analyze
 # their relative contributions to overall EGS energy production performance.
