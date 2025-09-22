@@ -201,38 +201,38 @@ function setup_controls(model, number_of_sectors,
         well_radii = r[wc[order_θ[wno]]]
         order = sortperm(well_radii)
         sec_wells = Symbol[]
-        for wno in order
+        for (k, wno) in enumerate(order)
             well_sup = sw[wno]
             well_ret = get_return(well_sup)
             @assert well_sup ∉ assigned
             @assert well_ret ∉ assigned
-            if wno == 1
+            if k == 1
                 # Water is injected into innermost well during charging
                 control_charge[well_sup] = ctrl_charge
                 # Discharging runs from outer to inner
-                well_prev = get_return(sw[wno+1])
+                well_prev = get_return(sw[order[k+1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_discharge[well_sup] = ctrl
-            elseif wno == length(sw)
+            elseif k == length(sw)
                 # Water is injected into outermost well during discharging
                 control_discharge[well_sup] = ctrl_discharge
                 # Charging runs from inner to outer
-                well_prev = get_return(sw[wno-1])
+                well_prev = get_return(sw[order[k-1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_charge[well_sup] = ctrl
             else
                 # Charging runs from inner to outer
-                well_prev = get_return(sw[wno-1])
+                well_prev = get_return(sw[order[k-1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_charge[well_sup] = ctrl
                 # Discharging runs from outer to inner
-                well_prev = get_return(sw[wno+1])
+                well_prev = get_return(sw[order[k+1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
