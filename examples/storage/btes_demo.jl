@@ -64,9 +64,6 @@ sel = JutulDarcy.ControlChangeTimestepSelector(
     case.model, 0.0, convert_to_si(5.0, :second))
 push!(config[:timestep_selectors], sel)
 config[:timestep_max_decrease] = 1e-6
-for ws in well_symbols(case.model)
-    config[:tolerances][ws][:default] = 1e-2
-end
 
 # ## Simulate the BTES system
 # Run the full 4-year simulation with the configured solver settings.
