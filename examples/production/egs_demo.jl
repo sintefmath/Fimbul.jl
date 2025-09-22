@@ -24,12 +24,12 @@
 using Jutul, JutulDarcy, Fimbul  # Core reservoir simulation framework
 using HYPRE # High-performance linear algebra solvers
 using GLMakie # 3D visualization and plotting capabilities
+using Statistics
 
 # Useful SI units
 meter = si_unit(:meter)
-hour = si_unit(:hour)
-kilogram = si_unit(:kilogram)
-Kelvin, watt, joule = si_units(:Kelvin, :watt, :joule)
+day = si_unit(:day)
+watt = si_unit(:watt);
 
 # ## EGS System Geometry and Configuration
 #
@@ -41,11 +41,11 @@ Kelvin, watt, joule = si_units(:Kelvin, :watt, :joule)
 # ### Geometric Parameters
 #
 # Define EGS system geometry
-well_spacing_x = 100.0 # Horizontal separation between wells [m]
+well_spacing_x = 100.0meter # Horizontal separation between wells [m]
 well_spacing_z = sqrt(3/4*well_spacing_x^2) # Vertical well offset
-well_depth = 2500.0 # Vertical depth to horizontal well section [m] - typical EGS depth
-well_lateral = 500.0 # Length of horizontal well section [m]
-fracture_radius = 200.0 # Radius of stimulated fracture network [m]
+well_depth = 2500.0meter # Vertical depth to horizontal well section [m] - typical EGS depth
+well_lateral = 500.0meter # Length of horizontal well section [m]
+fracture_radius = 200.0meter # Radius of stimulated fracture network [m]
 fracture_spacing = well_lateral/8 # Spacing between discrete fractures [m] - controls resolution
 
 # ### Well Trajectory Definition
@@ -69,8 +69,7 @@ well_coords = [
 # Create EGS case with fracture network
 reports_per_year = 4 # Output frequency for results analysis
 case = Fimbul.egs(well_coords, fracture_radius, fracture_spacing;
-    fracture_aperture = fracture_aperture,
-    rate = 100meter^3/hour, # Water injection rate
+    rate = 9250meter^3/day, # Water injection rate
     temperature_inj = convert_to_si(25.0, :Celsius), # Injection temperature
     num_years = 10, # Years of operation
     schedule_args = (report_interval = si_unit(:year)/reports_per_year,)
@@ -122,6 +121,7 @@ function plot_egs_wells(ax; colors = [:red, :blue])
 end
 
 plot_egs_wells(ax)
+fig
 
 # ### Fracture Network Visualization
 #
@@ -244,6 +244,7 @@ plot_reservoir(case.model, Δstates;
 # the fracture network to understand thermal depletion progression:
 
 # Extract fracture zones and prepare time-series data
+dt = case.dt
 is_frac = isapprox.(domain[:porosity], maximum(domain[:porosity]))  # Identify fracture cells
 time = convert_from_si.(cumsum(dt), :year)                          # Convert timesteps to years
 ΔT = [Δstate[:Temperature][is_frac] for Δstate in Δstates]         # Temperature changes in fractures
@@ -370,7 +371,6 @@ fdata_prod = get_fracture_data(states, case.model, :Producer);  # Producer fract
 # ### Energy Production Analysis Setup
 #
 # Prepare arrays and visualization settings for comprehensive energy analysis:
-
 nsteps = length(dt)                                         # Number of simulation timesteps
 energy, cat, dodge = Float64[], Int[], Int[]               # Arrays for energy analysis plots
 
@@ -438,9 +438,10 @@ hidexdecorations!(ax_pwr, grid = false)
 height, cat, dodge = Float64[], Int[], Int[]                  # Arrays for grouped bar chart
 n = reports_per_year                                          # Reports per year
 energy_per_year = []
-for (fno, effect_f) in enumerate(eachcol(effect))
+GWh = si_unit(:giga)*si_unit(:watt)*si_unit(:hour)  # GWh unit conversion
+for (fno, eff_f) in enumerate(eachcol(effect))
     ## Integrate power over annual periods to get energy [GWh]
-    energy_f = [sum(effect_f[k:k+n-1].*dt[k:k+n-1])./(si_unit(:giga)*si_unit(:hour)) for k = 1:n:length(dt)-n+1]
+    energy_f = [sum(eff_f[k:k+n-1].*dt[k:k+n-1])./GWh for k = 1:n:length(dt)-n+1]
     push!(energy_per_year, energy_f)
     push!(cat, 1:length(energy_f)...)
     push!(dodge, fill(fno, length(energy_f))...)

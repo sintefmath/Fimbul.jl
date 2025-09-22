@@ -4,9 +4,9 @@ day = si_unit(:day)
 
 function egs(well_coords, fracture_radius, fracture_spacing;
     well_names = missing,
-    fracture_aperture=1e-3,
+    fracture_aperture=0.5e-3,
     porosity = 0.01,
-    permeability = 0.5e-3 .* darcy,
+    permeability = 1e-3 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
     temperature_inj = convert_to_si(25, :Celsius),
@@ -129,9 +129,7 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     ctrl_prod = ProducerControl(rate_target)
     control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod)
 
-    limits = Dict()
-    limits[:Producer] = (bhp = 10atm,)
-    forces = setup_reservoir_forces(model, control = control, bc = bc, limits = limits)
+    forces = setup_reservoir_forces(model, control = control, bc = bc)#, limits = limits)
 
     dt, forces = make_schedule(
         [forces], [(1,1), (1,1)];
