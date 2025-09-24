@@ -272,3 +272,82 @@ function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fra
     return msh
 
 end
+
+ """
+    get_egs_fracture_data(states, model, well)
+
+Extract flow rates, temperatures, and energy fluxes from individual fractures
+connected to the specified well. This function processes simulation results
+to compute fracture-level performance metrics.
+
+Args:
+    states: Simulation state results for all timesteps
+    model: EGS model containing well and fracture geometry
+    well: Well symbol to analyze
+
+Returns:
+    Dictionary containing fracture-level data arrays:
+    - :y: Y-coordinates of fracture locations
+    - :Temperature: Temperature evolution in each fracture
+    - :MassFlux: Mass flow rate to/from well into each fracture
+    - :EnergyFlux: Thermal energy flux to/from well into each fracture
+
+    NOTE: Positive flux indicates flow into the fracture from the well, negative
+    indicates flow out of the fracture into the well.
+    
+"""
+function get_egs_fracture_data(states, model, well; geo = missing)
+
+    # Mesh and geometry
+    msh = physical_representation(reservoir_model(model).data_domain)
+    geo  = ismissing(geo) ? tpfv_geometry(msh) : geo
+
+    ## Extract well perforation data and connectivity information
+    perf = model.models[well].data_domain.representation.perforations # Well-fracture connections
+    N = model.models[well].domain.representation.neighborship # Cell connectivity matrix
+    is_frac = findall(isapprox.(perf.WI, maximum(perf.WI))) # High-productivity fracture connections
+    jj = [cell_ijk(msh, c)[2] for c in perf.reservoir[is_frac]] # Y-indices of fracture cells
+
+    ## Initialize data arrays for fracture analysis
+    JJ = unique(jj) # Unique fracture Y-locations
+    nstep = length(states) # Number of simulation timesteps
+    nfrac = length(JJ) # Number of discrete fractures
+    Q, Qh, T = zeros(nstep, nfrac), zeros(nstep, nfrac), zeros(nstep, nfrac) # Pre-allocate arrays
+    y = geo.cell_centroids[2, perf.reservoir[is_frac]] # Y-coordinates of fracture centers
+
+    ## Process each simulation timestep
+    for (sno, state) in enumerate(states)
+        ## Extract mass fluxes and enthalpies from well model
+        Qn = state[well][:TotalMassFlux] # Mass flux per well segment [kg/s]
+        h = state[well][:FluidEnthalpy] # Fluid enthalpy [J/kg]
+
+        ## Apply upwind scheme for enthalpy (use upstream cell value)
+        h = [q > 0 ? h[N[1,s]] : h[N[2,s]] for (s,q) in enumerate(Qn)]
+        
+        ## Compute energy fluxes combining mass and enthalpy
+        Qhn = Qn.*h # Energy flux [W]
+
+        ## Calculate net fluxes per fracture segment (flow into fracture)
+        Qn = .-diff(Qn)[is_frac] # Net mass flux into fracture [kg/s]
+        Qhn = .-diff(Qhn)[is_frac] # Net energy flux into fracture [W]
+        Tn = state[well][:Temperature][is_frac] # Temperature in fracture [K]
+        h = state[well][:FluidEnthalpy][is_frac] # Enthalpy in fracture [J/kg]
+
+        ## Aggregate data by fracture Y-location
+        for (fno, j) in enumerate(JJ)
+            ix = jj .== j # Cells belonging to this fracture
+            Q[sno, fno] = sum(Qn[ix]) # Total mass flow for this fracture
+            Qh[sno, fno] = sum(Qhn[ix]) # Total energy flow for this fracture
+            T[sno, fno] = mean(Tn[ix]) # Average temperature for this fracture
+        end
+    end
+
+    ## Return organized fracture data
+    data = Dict()
+    data[:y] = y # Spatial coordinates
+    data[:Temperature] = T # Temperature evolution [K]
+    data[:MassFlux] = Q # Mass flux evolution [kg/s]
+    data[:EnergyFlux] = Qh # Energy flux evolution [W]
+
+    return data
+end
