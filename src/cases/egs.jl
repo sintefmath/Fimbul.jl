@@ -1,4 +1,3 @@
-using Statistics
 meter = si_unit(:meter)
 day = si_unit(:day)
 
