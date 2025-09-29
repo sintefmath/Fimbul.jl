@@ -8,7 +8,6 @@
 using Jutul, JutulDarcy, Fimbul # Core reservoir simulation framework
 using HYPRE # High-performance linear solvers
 using GLMakie # 3D visualization and plotting capabilities
-using Statistics # For computing statistics
 
 # Useful SI units
 meter, day, watt = si_units(:meter, :day, :watt)

@@ -21,7 +21,7 @@ module Fimbul
 
     # Load dependencies into namespace
     using Jutul, JutulDarcy
-    using LinearAlgebra
+    using LinearAlgebra, Statistics
     using Gmsh
     using Dates
     using Integrals
