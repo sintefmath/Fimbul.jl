@@ -217,7 +217,7 @@ function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fra
     end
     z0 = [
         0.0,
-        4000.0
+        maximum(zw) + offset
     ]
     z = make_coords_xz(z0, zw, hz_min, hz_max)
 
