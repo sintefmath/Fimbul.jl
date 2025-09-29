@@ -1,0 +1,1 @@
+import{_ as e,c as t,o as a}from"./chunks/framework.DZjx3209.js";const i=JSON.parse('{"title":"","description":"","frontmatter":{},"headers":[],"relativePath":"extras/refs.md","filePath":"extras/refs.md","lastUpdated":null}'),r={name:"extras/refs.md"};function s(o,n,c,d,f,p){return a(),t("div")}const l=e(r,[["render",s]]);export{i as __pageData,l as default};
