@@ -67,10 +67,10 @@ case = Fimbul.egs(well_coords, fracture_radius, fracture_spacing;
 msh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(msh)
 fig = Figure(size = (800, 800))
-ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data,
+ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data, perspectiveness = 0.5,
     title = "EGS System: Wells and Fracture Network")
 Jutul.plot_mesh_edges!( # Show computational mesh with transparency
-    ax, msh, alpha = 0.3)
+    ax, msh, alpha = 0.2)
 wells = get_model_wells(case.model)
 function plot_egs_wells( # Utility to plot wells in EGS system
     ax; colors = [:red, :blue])
@@ -126,10 +126,12 @@ results = simulate_reservoir(case; simulator = sim, config = cfg)
 
 # ### Reservoir state evolution
 # First, plot the reservoir state throughout the simulation.
-plot_reservoir(case.model, results.states;
-    colormap = :seaborn_icefire_gradient,
-    key = :Temperature,
-    aspect = :data)
+plot_res_args = (
+    resolution = (600, 800), aspect = :data, 
+    colormap = :seaborn_icefire_gradient, key = :Temperature,
+    well_arg = (markersize = 0.0, ),
+)
+plot_reservoir(case.model, results.states; plot_res_args...)
 
 # ### Deviation from initial conditions
 # It is often more informative to visualize the deviation from the inital
@@ -146,10 +148,7 @@ for state in results.states
     end
     push!(Δstates, Δstate)
 end
-plot_reservoir(case.model, Δstates;
-    colormap = :seaborn_icefire_gradient,
-    key = :Temperature,
-    aspect = :data)
+plot_reservoir(case.model, Δstates; plot_res_args...)
 
 # ### Well Performance Analysis
 # Next, we examine the well responses including flow rates, pressures, and
@@ -177,6 +176,7 @@ fig = Figure(size = (650, 800))
 steps = Int.(round.(range(1, length(ΔT), 3)))
 for (n, ΔT_n) in enumerate(ΔT[steps])
     ax_n = Axis3(fig[n, 1],
+    perspectiveness = 0.5,
     zreversed = true, aspect = (1,6,1),
     azimuth = 1.2pi,
     elevation = pi/20,
