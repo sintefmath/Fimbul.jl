@@ -157,7 +157,7 @@ function btes(;
 
 end
 
-function setup_controls(model, number_of_sections, 
+function setup_controls(model, number_of_sectors, 
     rate_charge, rate_discharge, temperature_charge, temperature_discharge)
 
     rho = reservoir_model(model).system.rho_ref[1]
@@ -168,7 +168,7 @@ function setup_controls(model, number_of_sections,
     ctrl_discharge = InjectorControl(rate_target, [1.0],
         density=rho, temperature=temperature_discharge);
     # BHP control for return side
-    bhp_target = BottomHolePressureTarget(5.0si_unit(:atm))
+    bhp_target = BottomHolePressureTarget(1.0si_unit(:atm))
     ctrl_ret = ProducerControl(bhp_target);
     # Set up forces
     control_charge = Dict()
@@ -184,54 +184,55 @@ function setup_controls(model, number_of_sections,
     wells = well_symbols(model)
     filter!(well -> contains(String(well), "_supply"), wells)
     get_return = (well) -> Symbol(replace(String(well), "_supply" => "_return"))
-    sections = Dict()
-    for sno in 1:number_of_sections
-        θ_min = (sno - 1)*2π/number_of_sections
-        θ_max = sno*2π/number_of_sections
-        in_section = θ_min .<= θ .<= θ_max
-        sw, well_radii = Symbol[], Float64[]
-        for well in wells
-            well in assigned ? continue : nothing
-            wmodel = model.models[well]
-            wc = wmodel.domain.representation.perforations.reservoir[1]
-            !in_section[wc] ? continue : nothing
-            push!(sw, well)
-            push!(well_radii, r[wc])
-        end
+    sectors = Dict()
+    wells_per_sector = div(length(wells), number_of_sectors)
+    rem = length(wells) - wells_per_sector*number_of_sectors
+    wells_per_sector = fill(wells_per_sector, number_of_sectors)
+    wells_per_sector[1:rem] .+= 1
+    wmodels = [model.models[well] for well in wells]
+    wc = [wm.domain.representation.perforations.reservoir[1] for wm in wmodels]
+    θ = θ[wc]
+    order_θ = sortperm(θ)
+    wtot = 0
+    for sno in 1:number_of_sectors
+        wno = (1:wells_per_sector[sno]) .+ wtot
+        wtot += wells_per_sector[sno]
+        sw = wells[order_θ[wno]]
+        well_radii = r[wc[order_θ[wno]]]
         order = sortperm(well_radii)
         sec_wells = Symbol[]
-        for wno in order
+        for (k, wno) in enumerate(order)
             well_sup = sw[wno]
             well_ret = get_return(well_sup)
             @assert well_sup ∉ assigned
             @assert well_ret ∉ assigned
-            if wno == order[1]
+            if k == 1
                 # Water is injected into innermost well during charging
                 control_charge[well_sup] = ctrl_charge
                 # Discharging runs from outer to inner
-                well_prev = get_return(sw[wno+1])
+                well_prev = get_return(sw[order[k+1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_discharge[well_sup] = ctrl
-            elseif wno == order[end]
+            elseif k == length(sw)
                 # Water is injected into outermost well during discharging
                 control_discharge[well_sup] = ctrl_discharge
                 # Charging runs from inner to outer
-                well_prev = get_return(sw[wno-1])
+                well_prev = get_return(sw[order[k-1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_charge[well_sup] = ctrl
             else
                 # Charging runs from inner to outer
-                well_prev = get_return(sw[wno-1])
+                well_prev = get_return(sw[order[k-1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_charge[well_sup] = ctrl
                 # Discharging runs from outer to inner
-                well_prev = get_return(sw[wno+1])
+                well_prev = get_return(sw[order[k+1]])
                 target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
@@ -242,11 +243,11 @@ function setup_controls(model, number_of_sections,
             push!(assigned, well_sup, well_ret)
             push!(sec_wells, well_sup, well_ret)
         end
-        sections[Symbol("S$sno")] = sec_wells
+        sectors[Symbol("S$sno")] = sec_wells
     end
 
     @assert sort(assigned) == sort(well_symbols(model))
 
-    return control_charge, control_discharge, sections
+    return control_charge, control_discharge, sectors
 
 end

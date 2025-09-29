@@ -150,17 +150,25 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
     
     ch_start = process_time(start_year, charge_period[1])
     ch_end = process_time(start_year, charge_period[2], true)
+    ch_end < ch_start ? ch_end += Dates.Year(1) : nothing
     dch_start = process_time(start_year, discharge_period[1])
     dch_end = process_time(start_year, discharge_period[2], true)
+    dch_end < dch_start ? dch_end += Dates.Year(1) : nothing
 
     periods = [ch_start, ch_end, dch_start, dch_end, ch_start + Dates.Year(1)]
+    forces = [forces_charge; forces_rest; forces_discharge; forces_rest]
+    remove, p0 = [], nothing
+    for (pno, p) in enumerate(periods)
+        if 1 < pno && p - p0 <= Dates.Second(0)
+            push!(remove, pno)
+        end
+        p0 = p
+    end
+    deleteat!(periods, remove)
+    deleteat!(forces, remove.-1)
     periods = process_periods(start_year, periods)
-    keep = diff(periods) .> Dates.Second(0)
-    
-    periods = periods[[keep; true]]
 
     periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
-    forces = [forces_charge; forces_rest; forces_discharge; forces_rest][keep]
 
     dt, forces, timestamps = make_schedule(forces, periods;
         start_year = start_year, num_years = num_years, kwargs...)
@@ -175,7 +183,7 @@ function process_periods(year, periods)
     for (pno, period) in enumerate(periods)
         time = process_time(year, period)
         if pno > 1
-            time < periods_proc[pno-1] ? time += Dates.Year(1) : nothing
+            time <= periods_proc[pno-1] ? time += Dates.Year(1) : nothing
         end
         periods_proc[pno] = time
     end
@@ -269,5 +277,34 @@ function set_dirichlet_bcs(model, subset = :all;
     );
 
     return bc, state0, p, T
+
+end
+
+function topo_sort_well(cells, msh, N = missing, z = missing)
+
+    N = ismissing(N) ? get_neighborship(UnstructuredMesh(msh)) : N
+    z = ismissing(z) ? tpfv_geometry(msh).cell_centroids[3, :] : z
+
+    sorted_cells = Int[]
+    top_ix = last(findmin(z[cells]))
+    push!(sorted_cells, popat!(cells, top_ix))
+
+    current_cell = sorted_cells[end]
+    while !isempty(cells)
+        for r = 1:2
+            face_ix = N[r,:] .== current_cell
+            neighbor_cells = N[mod(r,2)+1, face_ix]
+            is_neighbor = [n ∈ cells for n in neighbor_cells]
+            wn = neighbor_cells[is_neighbor]
+            isempty(wn) ? continue : nothing
+            @assert length(wn) <= 1 "Branching wells not supported"
+
+            push!(sorted_cells, wn[1])
+            popat!(cells, findfirst(isequal(wn[1]), cells))
+            current_cell = wn[1]
+        end
+    end
+
+    return sorted_cells
 
 end

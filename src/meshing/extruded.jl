@@ -123,7 +123,7 @@ function extruded_mesh(cell_constraints, depths;
 end
 
 function interpolate_z(depths, hz;
-    interpolation = :default, transition = 1/3)
+    interpolation = :default, transition = 1/3, force_interpolation = true)
 
     n = length(depths)
     @assert n >= 2
@@ -172,9 +172,18 @@ function interpolate_z(depths, hz;
         
         frac = (1 < i < n-1) ? transition : 2/3
         dz = frac*thickness
-        if interpolation[i] != :nothing && hz_curr > dz
-            @warn "Transition in layer $(i) not feasible (hz = $hz_curr > dz = $dz)"  
-        else
+        do_interpolation = interpolation[i] != :nothing
+        if do_interpolation && hz_curr > dz
+            msg = "Transition in layer $(i) not feasible (hz = $hz_curr > dz = $dz)"
+            if force_interpolation
+                hz_curr = dz/2
+                @warn msg * ". Forcing interpolation by reducing hz to $hz_curr"
+            else
+                do_interpolation = false
+                @warn msg * ". No interpolation will be done."
+            end
+        end
+        if do_interpolation
             if interpolation[i] ∈ [:top, :both]
                 z_0t = z_0 + dz
             end

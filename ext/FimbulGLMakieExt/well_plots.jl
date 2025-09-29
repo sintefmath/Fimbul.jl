@@ -82,7 +82,7 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
             lines!(ax, vb, zb; color = :blue, label = lbl, kwargs...)
         else
             vb = values[branch,:]
-            lines!(ax, vb[:, 1], vb[:,2], z_i; color = :blue, label = lbl, kwargs...)
+            lines!(ax, vb[:, 1], vb[:,2], zb; color = :blue, label = lbl, kwargs...)
         end
     end
     
