@@ -80,7 +80,6 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     well_inj.perforations.WI[open] = min.(well_inj.perforations.WI[open], WI_max)
     push!(wells, well_inj)
 
-    println("Adding well Prod")
     cells = [cells[1]]
     neighbors = [0; 0]
     cell_no = 1;
