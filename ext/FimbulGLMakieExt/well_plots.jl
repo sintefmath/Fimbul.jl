@@ -72,7 +72,7 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
     branches = dfs_branches(N)
     rcells = well_representation.perforations.reservoir
     
-    z = vcat(well_representation.top.reference_depth, geo.cell_centroids[3, rcells])
+    z = model.models[well].data_domain[:cell_centroids][3, :]
     # Plot edges
     for (i, branch) in enumerate(branches)
         zb = z[branch]
