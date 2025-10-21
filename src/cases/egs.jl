@@ -68,20 +68,21 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     N = get_neighborship(UnstructuredMesh(msh))
     z = geo.cell_centroids[3, :]
     WI_max = 1e-9
-
     cells = find_well_cells(msh, well_coords[1], z, N, is_frac)
-    well_inj = setup_well(domain, cells;
-            name = :Injector,
-            simple_well = false
-        )
-    
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in cells]
     open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
-    well_inj.perforations.WI[.!open] .= 0.0
-    well_inj.perforations.WI[open] = min.(well_inj.perforations.WI[open], WI_max)
+    WI[.!open] .= 0.0
+    WI = min.(WI, WI_max)
+    well_inj = setup_well(domain, cells;
+        name = :Injector,
+        WI = WI,
+        simple_well = false
+    )
     push!(wells, well_inj)
 
     cells = [cells[1]]
     neighbors = [0; 0]
+    nodes = [1]
     cell_no = 1;
     for (wno, wc) in enumerate(well_coords)
         wno == 1 ? continue : nothing
@@ -90,24 +91,28 @@ function egs(well_coords, fracture_radius, fracture_spacing;
         num_cells = length(cells_k)
         push!(cells, cells_k...)
         joint_neighbors = [1; cell_no + 1]
-        nodes = collect(1:num_cells) .+ cell_no
-        branch_neighbors = [nodes[1:end-1]'; nodes[2:end]']
+        branch_nodes = collect(1:num_cells) .+ cell_no
+        branch_neighbors = [branch_nodes[1:end-1]'; branch_nodes[2:end]']
         neighbors = hcat(neighbors, joint_neighbors, branch_neighbors)
+        push!(nodes, branch_nodes...)
         cell_no += num_cells
     end
 
     neighbors = Int64.(neighbors[:, 2:end])
     cells = Int64.(cells)
-
-    well_prod = setup_well(domain, cells;
-    N = neighbors, name = :Producer, simple_well = false)
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in cells]
     open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
-    well_prod.perforations.WI[.!open] .= 0.0
-    well_prod.perforations.WI[open] = min.(well_prod.perforations.WI[open], WI_max)
-
+    WI[.!open] .= 0.0
+    WI = min.(WI, WI_max)[2:end]
+    
+    well_prod = setup_well(domain, cells[2:end];
+    perforation_cells_well = nodes[2:end],
+    well_cell_centers = geo.cell_centroids[:, cells],
+    N = neighbors, name = :Producer, WI = WI, simple_well = false)
+    
     wells = [well_inj, well_prod]
 
-    model, _ = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal; wells = wells, model_args...)
     bc, state0 = set_dirichlet_bcs(model, pressure_surface = 10atm)
 
@@ -172,7 +177,7 @@ function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fra
 
     offset = offset_rel*(well_distance + fracture_radius)
     # Well coordinates
-    hx_min = ismissing(hx_min) ? well_distance/5 : hx_min
+    hx_min = ismissing(hx_min) ? well_distance/4 : hx_min
     hx_max = ismissing(hx_max) ? offset/5 : hx_max
     hz_min = ismissing(hz_min) ? hx_min : hz_min
     hz_max = ismissing(hz_max) ? (depth - fracture_radius)/5 : hz_max
@@ -302,18 +307,20 @@ function get_egs_fracture_data(states, model, well; geo = missing)
 
     ## Extract well perforation data and connectivity information
     perf = model.models[well].data_domain.representation.perforations # Well-fracture connections
+    WI = model.models[well].data_domain[:well_index]
     N = model.models[well].domain.representation.neighborship # Cell connectivity matrix
-    is_frac = findall(isapprox.(perf.WI, maximum(perf.WI))) # High-productivity fracture connections
-    jj = [cell_ijk(msh, c)[2] for c in perf.reservoir[is_frac]] # Y-indices of fracture cells
-
+    fcells = findall(isapprox.(WI, maximum(WI))) # High-productivity fracture connections
+    jj = [cell_ijk(msh, c)[2] for c in perf.reservoir[fcells]] # Y-indices of fracture cells
     ## Initialize data arrays for fracture analysis
     JJ = unique(jj) # Unique fracture Y-locations
     nstep = length(states) # Number of simulation timesteps
     nfrac = length(JJ) # Number of discrete fractures
     Q, Qh, T = zeros(nstep, nfrac), zeros(nstep, nfrac), zeros(nstep, nfrac) # Pre-allocate arrays
-    y = geo.cell_centroids[2, perf.reservoir[is_frac]] # Y-coordinates of fracture centers
+    y = geo.cell_centroids[2, perf.reservoir[fcells]] # Y-coordinates of fracture centers
 
     ## Process each simulation timestep
+    p1 = minimum(perf.self)
+    fcells = fcells .+ (p1 - 1) # Adjust to global well perforation indices
     for (sno, state) in enumerate(states)
         ## Extract mass fluxes and enthalpies from well model
         Qn = state[well][:TotalMassFlux] # Mass flux per well segment [kg/s]
@@ -326,16 +333,21 @@ function get_egs_fracture_data(states, model, well; geo = missing)
         Qhn = Qn.*h # Energy flux [W]
 
         ## Calculate net fluxes per fracture segment (flow into fracture)
-        Qn = .-diff(Qn)[is_frac] # Net mass flux into fracture [kg/s]
-        Qhn = .-diff(Qhn)[is_frac] # Net energy flux into fracture [W]
-        Tn = state[well][:Temperature][is_frac] # Temperature in fracture [K]
-        h = state[well][:FluidEnthalpy][is_frac] # Enthalpy in fracture [J/kg]
-
+        Tn = state[well][:Temperature][fcells] # Temperature in fracture [K]
+        Qnf = zeros(length(fcells))
+        Qhnf = zeros(length(fcells))
+        for (fno, c) in enumerate(fcells)
+            fseg = findall(vec(any(N .== c, dims=1)))
+            println("Fracture cell $c segments: $fseg")
+            @assert length(fseg) == 2 "Fracture cell $c not found in connectivity matrix"
+            Qnf[fno] = Qn[fseg[1]] - Qn[fseg[2]]
+            Qhnf[fno] = Qhn[fseg[1]] - Qhn[fseg[2]]
+        end
         ## Aggregate data by fracture Y-location
         for (fno, j) in enumerate(JJ)
             ix = jj .== j # Cells belonging to this fracture
-            Q[sno, fno] = sum(Qn[ix]) # Total mass flow for this fracture
-            Qh[sno, fno] = sum(Qhn[ix]) # Total energy flow for this fracture
+            Q[sno, fno] = sum(Qnf[ix]) # Total mass flow for this fracture
+            Qh[sno, fno] = sum(Qhnf[ix]) # Total energy flow for this fracture
             T[sno, fno] = mean(Tn[ix]) # Average temperature for this fracture
         end
     end
