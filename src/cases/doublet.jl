@@ -42,7 +42,7 @@ function geothermal_doublet(;
     temperature_inj = convert_to_si(20.0, :Celsius),
     rate = 300meter^3/hour,
     temperature_surface = convert_to_si(10.0, :Celsius),
-    num_years = 200,
+    num_years = 100,
     report_interval = si_unit(:year),
     )
 
@@ -57,6 +57,8 @@ function geothermal_doublet(;
         spacing_top/2 0.0 depth_1;
         spacing_bottom/2 0.0 depth_2;
     ]
+
+    well_coords = [trajectory_inj, trajectory_prod]
 
     xw_inj = [Tuple(x) for x in eachrow(unique(trajectory_inj[:, 1:2], dims=1))]
     xw_prod = [Tuple(x) for x in eachrow(unique(trajectory_prod[:, 1:2], dims=1))]
@@ -91,7 +93,7 @@ function geothermal_doublet(;
     cells_inj = Jutul.find_enclosing_cells(mesh, trajectory_inj, n = 1000)
     ix = unique(i -> mesh_layer[cells_inj[i]], eachindex(cells_inj))
     cells_inj = cells_inj[ix]
-    WI = map(c -> compute_peaceman_index(mesh, permeability[c], 0.1, c), cells_inj)
+    WI = [compute_peaceman_index(mesh, permeability[c], 0.1, c) for c in cells_inj]
     WI[layers[cells_inj] .!== 3] .= 0.0
     well_inj = setup_well(domain, cells_inj; 
         name = :Injector, WI = WI, simple_well = false)
@@ -100,12 +102,12 @@ function geothermal_doublet(;
     cells_prod = Jutul.find_enclosing_cells(mesh, trajectory_prod, n = 1000)
     ix = unique(i -> mesh_layer[cells_prod[i]], eachindex(cells_prod))
     cells_prod = cells_prod[ix]
-    WI = map(c -> compute_peaceman_index(mesh, permeability[c], 0.1, c), cells_prod)
+    WI = [compute_peaceman_index(mesh, permeability[c], 0.1, c) for c in cells_prod]
     WI[layers[cells_prod] .!== 3] .= 0.0
     well_prod = setup_well(domain, cells_prod;
         name = :Producer, WI = WI, simple_well = false)
 
-    model, parameters = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal,
         wells = [well_inj, well_prod],
     );
@@ -140,14 +142,6 @@ function geothermal_doublet(;
 
     case = JutulCase(model, dt, forces; state0 = state0)
 
-    x = reinterpret(reshape, Float64, mesh.node_points)
-    x_min = minimum(x, dims=2)
-    x_max = maximum(x, dims=2)
-    dx = x_max .- x_min
-    aspect = Tuple(dx./maximum(dx))
-
-    plot_args = (aspect = aspect,)
-
-    return case, plot_args
+    return case
 
 end
