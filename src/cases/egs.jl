@@ -338,7 +338,6 @@ function get_egs_fracture_data(states, model, well; geo = missing)
         Qhnf = zeros(length(fcells))
         for (fno, c) in enumerate(fcells)
             fseg = findall(vec(any(N .== c, dims=1)))
-            println("Fracture cell $c segments: $fseg")
             @assert length(fseg) == 2 "Fracture cell $c not found in connectivity matrix"
             Qnf[fno] = Qn[fseg[1]] - Qn[fseg[2]]
             Qhnf[fno] = Qhn[fseg[1]] - Qhn[fseg[2]]
