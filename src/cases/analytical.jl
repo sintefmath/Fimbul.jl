@@ -53,7 +53,7 @@ function analytical_1d(;
 
     # ## Make resservoir model
     sys = SinglePhaseSystem(AqueousPhase(); reference_density = density)
-    model, parameters = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, sys,
         thermal = true,
     );
@@ -85,7 +85,7 @@ function analytical_1d(;
     t = cumsum(dt)
 
     # ## Set up case
-    case = JutulCase(model, dt, forces, state0 = state0, parameters = parameters)
+    case = JutulCase(model, dt, forces, state0 = state0)
 
     return case, sol, x, t
 
