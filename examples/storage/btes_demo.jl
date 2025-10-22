@@ -63,7 +63,7 @@ simulator, config = setup_reservoir_simulator(case;
 sel = JutulDarcy.ControlChangeTimestepSelector(
     case.model, 0.0, convert_to_si(5.0, :second))
 push!(config[:timestep_selectors], sel)
-config[:timestep_max_decrease] = 1e-6
+config[:timestep_max_decrease] = 1e-6;
 
 # ## Simulate the BTES system
 # Run the full 4-year simulation with the configured solver settings.
@@ -131,7 +131,7 @@ function plot_btes_temperature(ax, sector, timesteps)
     time = convert_from_si.(cumsum(case.dt), :day)
     out = []
     for (sno, step) in enumerate(timesteps)
-        label = String("$(time[step]) days")
+        label = String("$(round((time[step]),digits=1)) days")
         for (wno, well) in enumerate(sectors[Symbol("S$sector")])
             lbl = wno == 1 ? label : nothing
             T = results.result.states[step][well][:Temperature]
