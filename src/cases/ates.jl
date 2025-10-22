@@ -133,20 +133,24 @@ function ates(;
     cell = Jutul.find_enclosing_cells(msh, xw_hot)[1]
     ij = cell_ijk(msh, cell)[1:2]
     hot_well = setup_vertical_well(domain, ij[1], ij[2]; toe=k, simple_well=false, name = :Hot)
-    # Only perforate in the aquifer layer
-    open = layers[hot_well.perforations.reservoir] .== aquifer_layer
-    hot_well.perforations.WI[.!open] .= 0.0
+    # Wells are only open in aquifer - provide well indices explicitly
+    rcells = hot_well.representation.perforations.reservoir
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in rcells]
+    WI[.!(layers[rcells] .== aquifer_layer)] .= 0.0
+    hot_well[:well_indices] = WI
     # Setup cold well
     xw_cold  = [well_distance/2 0.0 0.0; well_distance/2 0.0 depths[end]]
     cell = Jutul.find_enclosing_cells(msh, xw_cold)[1]
     ij = cell_ijk(msh, cell)[1:2]
     cold_well = setup_vertical_well(domain, ij[1], ij[2]; toe=k, simple_well=false, name = :Cold)
-    # Only perforate in the aquifer layer
-    open = layers[cold_well.perforations.reservoir] .== aquifer_layer
-    cold_well.perforations.WI[.!open] .= 0.0
+    # Wells are only open in aquifer - provide well indices explicitly
+    rcells = cold_well.representation.perforations.reservoir
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in rcells]
+    WI[.!(layers[rcells] .== aquifer_layer)] .= 0.0
+    cold_well[:well_indices] = WI
 
     # ## Setup reservoir model
-    model, _ = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal;
         wells = [hot_well, cold_well]
     )
