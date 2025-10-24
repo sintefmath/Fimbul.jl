@@ -293,6 +293,7 @@ function add_section_data_ags!(data, state, well, cells, seg_in, seg_out)
 end
 
 function get_ags_trajectory()
+    # AGS well setup provided by Alexander Rath (OMV)
     injector = [
         0	0	0;
         0	0	-25;

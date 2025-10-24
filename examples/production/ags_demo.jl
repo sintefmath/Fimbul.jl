@@ -4,6 +4,8 @@
 # circulation systems to extract geothermal energy from deep hot rock
 # formations, offering a novel approach to geothermal energy extraction that
 # doesn't require natural permeability or fracture stimulation.
+#
+# The AGS well setup for this example was provided by Alexander Rath (OMV)
 
 # Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul # Core reservoir simulation framework
