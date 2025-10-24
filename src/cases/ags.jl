@@ -6,7 +6,7 @@ function ags(;
     permeability = 1e-3 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
-    rate = 50litre/second,
+    rate = 25meter^3/hour,
     temperature_inj = convert_to_si(25, :Celsius),
     num_years = 50,
     report_interval = year/4,
@@ -54,7 +54,7 @@ function ags(;
     )
 
     # ## Set up model
-    wells = setup_ags_wells(domain, well_coords, well_connectivity)
+    wells, section_info = setup_ags_wells(domain, well_coords, well_connectivity)
 
     model = setup_reservoir_model(
         domain, :geothermal; wells = wells)
@@ -82,7 +82,12 @@ function ags(;
     # ## Create and return the complete simulation case
     case = JutulCase(model, dt, forces; state0 = state0)
 
-    return case
+    info = Dict(
+        :description => "AGS closed-loop geothermal system",
+        :sections => section_info,
+    )
+
+    return case, info
 
 end
 
@@ -132,6 +137,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
     wcells = []
     rcells = []
     neighbors = []
+    cell_to_section = []
     wc0 = 0
     for (k, wc) in enumerate(well_coords)
         println("Processing well section $k/$(length(well_coords))")
@@ -146,12 +152,13 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         push!(wcells, wc)
         push!(directions, dir)
         push!(neighbors, vcat(wc[1:end-1]', wc[2:end]'))
-
+        push!(cell_to_section, fill(k, length(rc)))
         println("  Number of cells in section $k: ", length(rc))
     end
 
-    # return wcells, rcells, directions, neighbors
+    connection_segments = []
 
+    seg_no = 0
     for k = 1:length(well_coords)
         from = well_connectivity[k,1]
         if from != 0
@@ -159,7 +166,8 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
             if isnothing(ix)
                 error("Could not find connection from well section $from to well $k")
             end
-            neighbors[k] = hcat(neighbors[k], [wcells[from][ix], wcells[k][1]])
+            in_seg = [wcells[from][ix], wcells[k][1]]
+            neighbors[k] = hcat(in_seg, neighbors[k])
         end
         to = well_connectivity[k,2]
         if to != 0
@@ -167,14 +175,18 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
             if isnothing(ix)
                 error("Could not find connection from well section $k to well $to")
             end
-            neighbors[k] = hcat(neighbors[k], [wcells[k][end], wcells[to][ix]])
+            out_seg = [wcells[k][end], wcells[to][ix]]
+            neighbors[k] = hcat(neighbors[k], out_seg)
         end
+        push!(connection_segments, [1, size(neighbors[k], 2)].+seg_no)
+        seg_no += size(neighbors[k], 2)
     end
 
     rcells = vcat(rcells...)
     wcells = vcat(wcells...)
     directions = vcat(directions...)
     neighbors = hcat(neighbors...)
+    cell_to_section = vcat(cell_to_section...)
 
     # return rcells, wcells, directions, neighbors
 
@@ -200,8 +212,84 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
 
     wells = [w_supply, w_return]
 
-    return wells
+    section_info = (
+        cell_to_section = cell_to_section,
+        connection_segments = connection_segments
+    )
 
+    return wells, section_info
+
+end
+
+function get_section_data_ags(model, states, section_info, well=missing)
+
+    if ismissing(well)
+        model_names = keys(model.models)
+        supply_ix = findfirst(map(k -> contains(string(k), "_supply"), model_names))
+        well = model_names[supply_ix]
+    end
+
+    
+
+    section_data = Dict()
+
+    N = model.models[well].data_domain.representation.neighborship
+    cell_to_section = section_info.cell_to_section
+
+    num_sections = maximum(cell_to_section)
+
+    for section = 1:num_sections
+        cells = findall(section .== cell_to_section)
+        segs = section_info.connection_segments[section]
+        @assert any(N[:,segs[1]] .== cells[1])
+        @assert any(N[:,segs[2]] .== cells[end])
+
+        sd = Dict(
+            :Temperature => [],
+            :TotalMassFlux => [],
+            :Power => [],
+        )
+
+        for state in states
+
+            add_section_data_ags!(sd, state, well, cells, segs[1], segs[2])
+            if haskey(state, :substates)
+                map(substate -> add_section_data_ags!(
+                    sd, substate, well, cells, segs[1], segs[2]),
+                    state[:substates])
+            end
+
+        end
+        
+        for (key, _) in sd
+            println("Adding key $key to section_data")
+            if !haskey(section_data, key)
+                println("Creating new entry for key $key")
+                section_data[key] = Matrix{Float64}(
+                    undef, length(sd[:Temperature]), num_sections)
+            end
+            section_data[key][:, section] = sd[key]
+        end
+        
+        # println("Power section $section: ", section_data[:Power])
+    end
+
+    return section_data
+
+end
+
+function add_section_data_ags!(data, state, well, cells, seg_in, seg_out)
+    T = state[well][:Temperature][cells][end]
+    h_in = state[well][:FluidEnthalpy][cells][1]
+    h_out = state[well][:FluidEnthalpy][cells][end]
+
+    q_in = state[well][:TotalMassFlux][seg_in]
+    q_out = state[well][:TotalMassFlux][seg_out]
+    power = q_out*h_out-q_in*h_in
+
+    push!(data[:Temperature], T)
+    push!(data[:TotalMassFlux], q_out)
+    push!(data[:Power], power)
 end
 
 function get_ags_trajectory()
