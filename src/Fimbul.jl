@@ -3,6 +3,8 @@ module Fimbul
     # Meshing
     export fibonacci_pattern_2d
     export extruded_mesh, horizontal_fractured_mesh
+    # Wells
+    export setup_btes_well, setup_vertical_btes_well
     # Utils for setting up cases
     export make_utes_schedule
     export set_dirichlet_bcs
@@ -30,6 +32,8 @@ module Fimbul
     include("meshing/extruded.jl")
     include("meshing/fractured.jl")
     include("meshing/utils.jl")
+    # Wells
+    include("wells/btes.jl")
     # Cases
     include("cases/utils.jl")
     include("cases/analytical.jl")

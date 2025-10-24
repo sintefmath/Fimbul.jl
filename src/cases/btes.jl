@@ -104,11 +104,11 @@ function btes(;
         trajectory = [xw[1] xw[2] 0.0; xw[1] xw[2] depths[end]]
         cells = Jutul.find_enclosing_cells(mesh, trajectory, n = 100)
         filter!(c -> layers[c] ∈ well_layers, cells)
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:u1)
+        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:simple)
         push!(well_models, w_sup, w_ret)
     end
     # Make the model
-    model, parameters = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal,
         wells = well_models,
     );
