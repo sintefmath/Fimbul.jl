@@ -20,7 +20,7 @@ using GLMakie # Visualization
 using LBFGSB # Optimization
 
 # # Set up model
-# We use the first realization of the EGG benchmark model [egg](@cite), and
+# We use the first realization of the EGG benchmark model [egg_model](@cite), and
 # place a well doublet near the center of the domain. The fluid model is a
 # single-phase water system with PVT formulations taken from the
 # [NIST](https://webbook.nist.gov/chemistry/fluid/) database, which can be
