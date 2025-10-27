@@ -26,7 +26,7 @@ meter, hour, day, watt = si_units(:meter, :hour, :day, :watt);
 # rate of 50 L/s at an injection temperature of 25°C. The simulation will
 # output results four times per year for detailed analysis.
 reports_per_year = 4 # Output frequency for results analysis
-case, info = Fimbul.ags(;
+case = Fimbul.ags(;
     rate = 25meter^3/hour, # Water circulation rate
     temperature_inj = convert_to_si(25.0, :Celsius), # Injection temperature
     num_years = 50, # Years of operation
@@ -146,7 +146,7 @@ plot_well_results(results.wells)
 # analysis helps to understand how effectively the two laterals exchange heat with
 # the reservoir and contribute to overall energy production.
 section_data = Fimbul.get_section_data_ags(
-    case.model, results.result.states, info[:sections], :AGS_supply)
+    case, results.result.states, :AGS_supply)
 
 # ### Set up plotting utilities
 colors = collect(cgrad(:BrBg, 8, categorical = true))[[2, end-1]]

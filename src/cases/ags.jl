@@ -79,15 +79,17 @@ function ags(;
         report_interval = report_interval,
         schedule_args...)
 
-    # ## Create and return the complete simulation case
-    case = JutulCase(model, dt, forces; state0 = state0)
-
+    # ## Additional case info
     info = Dict(
         :description => "AGS closed-loop geothermal system",
+        :wells_coords => well_coords,
         :sections => section_info,
     )
 
-    return case, info
+    # ## Create and return the complete simulation case
+    case = JutulCase(model, dt, forces; state0 = state0, input_data = info)
+
+    return case
 
 end
 
@@ -109,7 +111,6 @@ function ags_gmsh(well_coords, depths; hxy_min, mesh_args...)
         xw = [Tuple(x) for x in eachrow(unique(wc[:, 1:2], dims=1))]
         for cc in cell_constraints
             cor = [norm(collect(x) .- collect(y), 2) for x in xw, y in cc]
-            println("Minimum distance between wells: ", cor)
             xw = [xw[i] for i in eachindex(xw) if all(cor[i, :] .>= Δ)]
         end
         push!(cell_constraints, xw)
@@ -221,15 +222,16 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
 
 end
 
-function get_section_data_ags(model, states, section_info, well=missing)
+function get_section_data_ags(case, states, well=missing)
 
+    model = case.model
     if ismissing(well)
         model_names = keys(model.models)
         supply_ix = findfirst(map(k -> contains(string(k), "_supply"), model_names))
         well = model_names[supply_ix]
     end
 
-    
+    section_info = case.input_data[:sections]
 
     section_data = Dict()
 
@@ -262,16 +264,13 @@ function get_section_data_ags(model, states, section_info, well=missing)
         end
         
         for (key, _) in sd
-            println("Adding key $key to section_data")
             if !haskey(section_data, key)
-                println("Creating new entry for key $key")
                 section_data[key] = Matrix{Float64}(
                     undef, length(sd[:Temperature]), num_sections)
             end
             section_data[key][:, section] = sd[key]
         end
         
-        # println("Power section $section: ", section_data[:Power])
     end
 
     return section_data
