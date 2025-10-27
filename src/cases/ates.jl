@@ -39,7 +39,6 @@ Create an Aquifer Thermal Energy Storage (ATES) simulation case.
 
 # Returns
 A `JutulCase` for ATES
-```
 """
 function ates(;
     well_distance = missing,
@@ -235,7 +234,7 @@ function ates(;
     # Set up forces for rest periods (no active wells)
     forces_rest = setup_reservoir_forces(model; bc = bc)
     # Create UTES operational schedule
-    dt, forces = make_utes_schedule(
+    dt, forces, timestamps = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest,
         charge_period = charge_period,
         discharge_period = discharge_period;
@@ -250,6 +249,7 @@ function ates(;
     info[:thermal_radius] = thermal_radius
     info[:layers] = layers
     info[:aquifer_layer] = aquifer_layer
+    info[:timestamps] = timestamps
 
     # ## Create and return the complete simulation case
     case = JutulCase(model, dt, forces; state0 = state0, input_data = info)
