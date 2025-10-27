@@ -242,9 +242,19 @@ function ates(;
         utes_schedule_args...
     )
 
+    # ## Additional info
+    info = Dict()
+    info[:description] = "Aquifer Thermal Energy Storage (ATES) case "*
+    "generated using Fimbul.ates()"
+    info[:well_distance] = well_distance
+    info[:thermal_radius] = thermal_radius
+    info[:layers] = layers
+    info[:aquifer_layer] = aquifer_layer
+
     # ## Create and return the complete simulation case
-    case = JutulCase(model, dt, forces; state0 = state0)
-    return case, layers
+    case = JutulCase(model, dt, forces; state0 = state0, input_data = info)
+
+    return case
 
 end
 

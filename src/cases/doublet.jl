@@ -140,7 +140,14 @@ function geothermal_doublet(;
     dt = year/n;
     dt = fill(dt, n*num_years)
 
-    case = JutulCase(model, dt, forces; state0 = state0)
+    # ## Additional case info
+    info = Dict(
+        :description => "Geothermal doublet system set up using Fimbul.doublet()",
+        :well_coords => well_coords
+    )
+    
+    # ## Create and return the complete simulation case
+    case = JutulCase(model, dt, forces; state0 = state0, input_data = info)
 
     return case
 
