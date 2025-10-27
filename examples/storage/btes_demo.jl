@@ -48,8 +48,12 @@ fig
 
 # ## Set up reservoir simulator
 # We configure the simulator with specific tolerances and timestep controls to
-# handle the challenging thermal transients in the BTES system.
+# handle the challenging thermal transients in the BTES system. Since almost all
+# of the challenging dynamics occurs in the wellbores, we also add a
+# "preconditioning" strategy that starts each timestep by solving the well
+# equations with fixed reservoir conditions.
 simulator, config = setup_reservoir_simulator(case;
+    presolve_wells = true,
     tol_cnv = 1e-2,
     tol_mb = 1e-6,
     timesteps = :auto,
