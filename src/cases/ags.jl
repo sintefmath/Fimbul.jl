@@ -1,3 +1,50 @@
+"""
+    ags(; kwargs...)
+
+Create an Advanced Geothermal System (AGS) simulation case.
+
+# Keyword Arguments
+
+## Well trajectory parameters
+- `well_coords`: A vector of matrices specifying the (x,y,z) coordinates of each
+  well section. Default is the AGS well trajectory given by
+  `get_ags_trajectory()`.
+- `well_connectivity`: A matrix specifying the connectivity between well sections.
+  Each row corresponds to a well section, with the first column indicating the
+  index of the section from which it receives flow (0 if none), and the second
+  column indicating the index of the section to which it sends flow (0 if none).
+  Default is the connectivity for the AGS well trajectory given by
+  `get_ags_trajectory()`. Note that each connection should only be specified once.
+
+## Geological parameters
+- `depths`: Vector of depths defining layer boundaries [m]
+- `porosity`: Porosity as scalar or one value for each layer [-]
+- `permeability`: Permeability as scalar or one value for each layer [m²]
+- `rock_thermal_conductivity`: Thermal conductivity as scalar or one value for each layer [W/(m·K)]
+- `rock_heat_capacity`: Rock heat capacity as scalar or one value for each layer [J/(kg·K)]
+
+## Thermal Parameters
+- `temperature_surface = 10°C`: Surface temperature [K]
+- `thermal_gradient = 0.03`: Geothermal gradient [K/m]
+
+## Operational Parameters
+- `rate = 25 m³/h`: Injection/production rate [m³/s]
+- `temperature_inj = 25°C`: Injection temperature [K]
+- `num_years = 50`: Total simulation time [years]
+- `report_interval = year/4`: Reporting interval [s]
+- `schedule_args`: Additional arguments passed to make_schedule
+
+## Mesh Parameters
+- `hz`: Vector of vertical cell sizes for each layer [m]. If `missing`, a default
+  sizing is used.
+- `hxy_min = 25.0`: Minimum horizontal cell size [m]
+- `hxy_max = 250.0`: Maximum horizontal cell size [m]
+- `mesh_args`: Additional arguments passed to Fimbul.extruded_mesh
+
+# Returns
+A `JutulCase` for AGS
+```
+"""
 function ags(;
     well_coords = first(get_ags_trajectory()),
     well_connectivity = last(get_ags_trajectory()),
@@ -6,6 +53,8 @@ function ags(;
     permeability = 1e-3 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
+    temperature_surface = convert_to_si(10, :Celsius),
+    thermal_gradient = 0.03Kelvin/meter,
     rate = 25meter^3/hour,
     temperature_inj = convert_to_si(25, :Celsius),
     num_years = 50,
@@ -14,6 +63,7 @@ function ags(;
     hz = missing,
     hxy_min = 25.0,
     hxy_max = 250.0,
+    mesh_args = NamedTuple()
 )
 
     # ## Set up mesh
@@ -26,7 +76,7 @@ function ags(;
         hz[.!ok] = dz[.!ok]./5
     end
     msh, layers = ags_gmsh(well_coords, depths;
-        hz = hz, hxy_min = hxy_min, hxy_max = hxy_max)
+        hz = hz, hxy_min = hxy_min, hxy_max = hxy_max, mesh_args...)
 
     # ## Set up reservoir domain
     num_layers = length(depths)-1
@@ -58,7 +108,11 @@ function ags(;
 
     model = setup_reservoir_model(
         domain, :geothermal; wells = wells)
-    bc, state0 = set_dirichlet_bcs(model, pressure_surface = 10atm)
+    bc, state0 = set_dirichlet_bcs(model;
+        pressure_surface = 10atm,
+        temperature_surface = temperature_surface,
+        geothermal_gradient = thermal_gradient,
+    )
 
     rho = reservoir_model(model).system.rho_ref[1]
     # Injector: inject cooled water at a rate equal to production
