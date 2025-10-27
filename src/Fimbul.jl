@@ -37,14 +37,7 @@ module Fimbul
     # Wells
     include("wells/btes.jl")
     # Cases
-    include("cases/utils.jl")
-    include("cases/analytical.jl")
-    include("cases/doublet.jl")
-    include("cases/egs.jl")
-    include("cases/ags.jl")
-    include("cases/ates.jl")
-    include("cases/btes.jl")
-    include("cases/egg_geothermal.jl")
+    include("cases/cases.jl")
     # Optimization
     include("optimization/objectives.jl")
     # Other utilities
