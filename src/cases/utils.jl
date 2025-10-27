@@ -1,6 +1,3 @@
-atm = si_unit(:atm)
-year, day = si_units(:year, :day)
-
 """
     make_schedule(forces, periods; start_year=missing, num_years=1, report_interval=14day)
 

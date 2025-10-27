@@ -1,7 +1,3 @@
-meter = si_unit(:meter)
-hour, day = si_units(:hour, :day)
-darcy = si_unit(:darcy)
-
 """
     geothermal_doublet(;  <keyword arguments>)
 

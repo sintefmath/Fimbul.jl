@@ -1,6 +1,22 @@
-meter = si_unit(:meter)
-day = si_unit(:day)
+"""
+    egs(well_coords, fracture_radius, fracture_spacing; kwargs...)
 
+# Arguments
+- `well_coords`: Array of well coordinates. Each well is defined by an 3x3
+  matrix of (x,y,z) coordinates interpreted as top/heel/toe. The current
+  implementation assumes that the laterals from heel to toe are perfectly
+  horizontal. The first well is the injector, and subsequent trajectories define
+  the producer legs.
+- `fracture_radius`: Radius of EGS fractures, centered at the mean of all well
+  laterals, as see in the y/z plane
+- `fracture_spacing`: Spacing between the fractures along the well laterals 
+
+# Keyword arguments
+- `well_names`: Names of the wells. Defaults to :Injector and :Producer
+- `fracture_aperture`: Aperture of fractures [mm]
+- `poros`
+
+"""
 function egs(well_coords, fracture_radius, fracture_spacing;
     well_names = missing,
     fracture_aperture=0.5e-3,

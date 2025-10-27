@@ -1,10 +1,3 @@
-# Useful SI units
-meter, = si_units(:meter)
-atm, = si_units(:atm)
-kilogram = si_unit(:kilogram)
-second, hour, year = si_units(:second, :hour, :year)
-Kelvin, joule, watt, = si_units(:Kelvin, :joule, :watt)
-
 """
     analytical_1d(; <keyword arguments>)
 

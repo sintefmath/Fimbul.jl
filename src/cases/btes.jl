@@ -1,10 +1,3 @@
-to_kelvin = T -> convert_to_si(T, :Celsius)
-second, year, day = si_units(:second, :year, :day)
-meter = si_unit(:meter)
-litre = si_unit(:litre)
-Kelvin = si_unit(:Kelvin)
-darcy = si_unit(:darcy)
-
 """
     btes(; <keyword arguments>)
 
