@@ -208,7 +208,7 @@ function build_fimbul_docs(
             modules = [Fimbul],
             authors = "Øystein Klemetsdal <oystein.klemetsdal@sintef.no> and contributors",
             repo = "https://github.com/sintefmath/Fimbul.jl/blob/{commit}{path}#{line}",
-            warnonly = true,
+            warnonly = false,
             sitename = "Fimbul.jl",
             checkdocs = :exports,
             plugins = [bib],
