@@ -12,12 +12,15 @@ egg_geothermal
 
 ## Geothermal energy production
 ```@docs
-egg_geothermal_doublet
 geothermal_doublet
+egs_geothermal
+ags_geothermal
+egg_geothermal_doublet
 ```
 
 ## Underground thermal energy storage
 ```@docs
-egg_ates
+ates
 btes
+egg_ates
 ```
