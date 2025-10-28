@@ -46,6 +46,7 @@ end
 
 end
 
+using Dates
 @testset "Schedule from time periods" begin
 
     start_year = 2025
