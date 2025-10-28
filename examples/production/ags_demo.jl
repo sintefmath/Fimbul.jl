@@ -97,7 +97,7 @@ results = simulate_reservoir(case; simulator = sim, config = cfg)
 # understand the AGS performance, thermal depletion patterns, and energy
 # production characteristics throughout the 50-year operational period.
 
-# ## Reservoir state evolution
+# ### Reservoir state evolution
 # It is often most informative to visualize the deviation from the initial
 # conditions to highlight the  extent of the thermal depletion zones around the
 # AGS system. We compute the change in reservoir variables to the initial state
@@ -170,7 +170,7 @@ function plot_lateral_data!(ax, time, data; stacked = false)
 end
 
 # Plot lateral temperature and power over time
-fig = Figure(size = (800, 400))
+fig = Figure(size = (800, 800))
 time = results.time ./ si_unit(:year)
 
 ax_tmp = Axis( # Panel 1: Lateral temperature
