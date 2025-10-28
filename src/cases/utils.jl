@@ -1,12 +1,67 @@
+function make_schedule(forces, durations::Vector{Float64};
+    num_reports = missing,
+    report_interval = missing,
+    num_cycles = 1
+    )
+
+    num_periods = length(durations)
+    @assert num_periods > 0 "At one period is required"
+    @assert length(forces) == num_periods "Number of forces must match number of periods"
+    @assert all(durations .> 0.0) "All durations must be positive"
+
+    has_num_reports = !ismissing(num_reports)
+    has_report_interval = !ismissing(report_interval)
+    if has_num_reports && has_report_interval
+        error("Specify either report_interval or num_reports, not both")
+    elseif !has_num_reports && !has_report_interval
+        num_reports = fill(5, num_periods)
+        report_interval = fill(missing, num_periods)
+    elseif has_num_reports
+        if num_reports isa Real
+            num_reports = fill(Int(num_reports), num_periods)
+        end
+        report_interval = fill(missing, num_periods)
+        @assert length(num_reports) == num_periods "Length of num_reports must match number of periods"
+    elseif has_report_interval
+        if report_interval isa Real
+            report_interval = fill(report_interval, num_periods)
+        end
+        num_reports = fill(missing, num_periods)
+        @assert length(report_interval) == num_periods "Length of report_interval must match number of periods"
+    end
+
+    forces0 = copy(forces)
+    dt, forces = Float64[], Any[]
+    for (f, d, n, r) in zip(forces0, durations, num_reports, report_interval)
+        if !ismissing(n)
+            # Number of reports specified
+        elseif !ismissing(r)
+            # Report interval specified
+            n = max(Int(ceil(d/r)), 1)
+        else
+            error("Either num_reports or report_interval must be specified")
+        end
+        push!(dt, fill(d/n, n)...)
+        push!(forces, fill(f, n)...)
+    end
+
+    dt = repeat(dt, num_cycles)
+    forces = repeat(forces, num_cycles)
+    timestamps = cumsum([0.0; dt])
+
+    return dt, forces, timestamps
+
+end
+
 """
     make_schedule(forces, periods; start_year=missing, num_years=1, report_interval=14day)
 
 Create a simulation schedule with time steps and forces for multi-period
-reservoir simulations.
+reservoir simulations using actual dates to define periods.
 
 This function generates a detailed schedule based on user-defined periods and
 associated forcing conditions. It automatically handles multi-year simulations
-with periodic patterns and provides flexible time step control within each
+with periodic patterns and provides fleible time step control within each
 period.
 
 # Arguments
@@ -14,7 +69,7 @@ period.
   should contain well controls, boundary conditions, or other simulation drivers
   for the corresponding period.
 - `periods`: Vector of time period definitions. Length should be one more than
-  `forces` to define period boundaries. Periods can be specified as month
+  `forces` to define period boundaries. Periods can be specified with month
   numbers, (month, day) tuples, (month, day, hour) tuples, or month name
   strings.
 
@@ -36,13 +91,15 @@ period.
 # Define seasonal operations: charge in summer, rest in winter
 forces = [charge_controls, rest_controls]
 periods = ["June", "September", "December"]  # June-Sep charge, Sep-Dec rest
-dt, forces, times = make_schedule(forces, periods;num_years=3, report_interval=7day)
+dt, forces, times = make_schedule(forces, periods;
+    num_years=3, report_interval=7si_unit(:day))
 ```
 """
 function make_schedule(forces, periods;
     start_year = missing,
     num_years = 1,
-    report_interval = 14day
+    report_interval = missing,
+    num_reports = missing
     )
 
     start_year = ismissing(start_year) ? Dates.year(now()) : start_year
@@ -52,22 +109,27 @@ function make_schedule(forces, periods;
     @assert num_periods > 0 "At least one period is required"
     @assert length(forces) == num_periods "Number of forces must match number of periods"
 
-    if length(report_interval) == 1
+    if num_reports isa Real || ismissing(num_reports)
+        num_reports = fill(num_reports, num_periods)
+    end
+    @assert length(num_reports) == num_periods "Length of num_reports must match number of periods"
+    if report_interval isa Real || ismissing(report_interval)
         report_interval = fill(report_interval, num_periods)
     end
+    @assert length(report_interval) == num_periods "Length of report_interval must match number of periods"
 
     dt, force_vec, timestamps = Float64[], [], DateTime[]
     for year in years
         periods_year = Fimbul.process_periods(year, periods)
+        if num_years > 1
+            @assert periods_year[end] == periods_year[1] + Year(1) "The periods must make up a full year if num_years > 1"
+        end
         for k in eachindex(periods_year)[1:end-1]
             start_time, end_time = periods_year[k], periods_year[k+1]
             Δt = Dates.value(end_time - start_time)*1e-3
-            dt_k = report_interval[k]
-            n_step = max(1, Int(round(Δt/dt_k)))
-            dt_k = Δt/n_step
-            dt_k, forces_k = fill(dt_k, n_step), fill(forces[k], n_step)
-            dts = Dates.Millisecond(Int(round(Δt/n_step*1e3)))
-            ts = start_time:dts:(end_time - dts)
+            dt_k, forces_k, ts = make_schedule([forces[k]], [Δt]; 
+                num_reports = num_reports[k], report_interval = report_interval[k], num_cycles = 1)
+            ts = start_time .+ Millisecond.(round.(ts[1:end-1]*1e3))
             push!(dt, dt_k...)
             push!(force_vec, forces_k...)
             push!(timestamps, ts...)
@@ -85,8 +147,6 @@ end
     make_utes_schedule(forces_charge, forces_discharge, forces_rest; kwargs...)
 
 Create a specialized schedule for Underground Thermal Energy Storage (UTES)
-systems including ATES (Aquifer Thermal Energy Storage) and BTES (Borehole
-Thermal Energy Storage).
 
 This function generates a three-phase operational schedule typical for thermal energy storage:
 1. **Charging phase**: Inject hot water to store thermal energy
@@ -97,16 +157,21 @@ The schedule automatically handles seasonal operations with user-defined charge
 and discharge periods, typically aligned with energy availability (summer
 charging) and demand (winter discharging).
 
+NOTE: The function does not validate that the provided forcing conditions are
+appropriate for UTES operations. It is up to the user to ensure that the
+`forces_charge`, `forces_discharge`, and `forces_rest` inputs contain suitable
+well controls.
+
 # Arguments
 - `forces_charge`: Forcing conditions during charging phase (hot water injection)
 - `forces_discharge`: Forcing conditions during discharging phase (thermal energy extraction)  
-- `forces_rest`: Forcing conditions during rest periods (no activity well activity)
+- `forces_rest`: Forcing conditions during rest periods (no well activity)
 
 # Keyword Arguments
-- `charge_period::Vector{String}=["June", "September"]`: Start and end months
-  for charging. Can be month names (strings) or month numbers.
-- `discharge_period::Vector{String}=["December", "March"]`: Start and end months
-  for discharging.
+- `charge_period=["June", "September"]`: Start and end of charging phase (see
+  `make_schedule` for valid formats)
+- `discharge_period=["December", "March"]`: Start and end of discharging phase (see
+  `make_schedule` for valid formats)
 - `start_year::Union{Int,Missing}=missing`: Starting year for simulation.
   Defaults to current year.
 - `num_years::Int=5`: Number of operational years to simulate.
@@ -126,7 +191,7 @@ dt, forces, times = make_utes_schedule(
     charge_period = ["June", "September"],
     discharge_period = ["December", "March"], 
     num_years = 5,
-    report_interval = 7day
+    report_interval = 7si_unit(:day)
 )
 ```
 
