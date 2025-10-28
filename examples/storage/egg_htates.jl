@@ -34,8 +34,7 @@ using LBFGSB # Optimization
 # supporting well injecting water at 10°C at a BHP of 45 bar. For the remaining
 # months, the system is left to rest with no external forces applied. This cycle
 # of charge -- rest -- discharge -- rest is repeated for a total of 5 years.
-hifi = egg_ates(;
-    use_bc = false, report_interval = si_unit(:year)/12/4)
+hifi = egg_ates(; use_bc = false, num_reports = 12)
 
 # ## Visualize the model
 # We visualize the model interactively using `plot_reservoir`.
@@ -144,8 +143,8 @@ for (k, v) in opt_config
             :WellIndices, :WellIndicesThermal
             ]
             vi[:active] = k in wells
-            vi[:rel_min] = 1e-4
-            vi[:rel_max] = 1e2
+            vi[:rel_min] = 1e-3
+            vi[:rel_max] = 1e1
         else
             vi[:active] = false
         end

@@ -221,7 +221,7 @@ function egg_ates(;
     charge_period = ["June", "September"],
     discharge_period = ["December", "March"],
     num_years = 5,
-    report_interval = si_unit(:year)/12,
+    num_reports = 12,
     utes_schedule_args = NamedTuple(),
     kwargs...
     )
@@ -269,7 +269,8 @@ function egg_ates(;
         charge_period = charge_period,
         discharge_period = discharge_period,
         num_years = num_years,
-        report_interval = report_interval
+        num_reports = num_reports,
+        utes_schedule_args...
     )
 
     # ## Return case
