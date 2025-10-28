@@ -13,7 +13,7 @@ using GLMakie
 # to September) with hot water at 90°C, and discharged during winter months
 # (October to March) with cold water at 10°C. This seasonal operation is
 # simulated over a 4-year period to study the thermal energy storage performance.
-case, sectors = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
+case = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
     charge_period = ["April", "September"],
     discharge_period = ["October", "March"],
     num_years = 4,
@@ -33,7 +33,7 @@ azimuth = 0, elevation = π/2)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 colors = Makie.wong_colors()
 lns, labels = [], String[]
-for (sno, (sector, wells)) in enumerate(sectors)
+for (sno, (sector, wells)) in enumerate(case.input_data[:sectors])
     for (wno, wname) in enumerate(wells)
         well = case.model.models[wname].domain.representation
         l = plot_well!(ax, msh, well; color = colors[sno], fontsize = 0)
@@ -94,8 +94,10 @@ plot_well_results(results.wells, field = :temperature)
 # cycles to see how the thermal plume grows. For better visualization, we only
 # display cells below 50 m depth with temperatures above 15°C (warmer than the
 # natural ground temperature).
-dstep = Int64.(length(case.dt)/(4*2))
-steps = dstep:2*dstep:length(case.dt)
+using Dates
+charge_end = Dates.monthname.(case.input_data[:timestamps]) .== "October" .&&
+    Dates.day.(case.input_data[:timestamps]) .== 1
+steps = findall(charge_end)
 fig = Figure(size = (1000, 750))
 geo = tpfv_geometry(msh)
 bottom = geo.cell_centroids[3,:] .>= 50.0
@@ -150,6 +152,7 @@ end
 
 fig = Figure(size = (1000, 750))
 sector = 1
+sectors = case.input_data[:sectors]
 
 # ### Temperature evolution during the first charging cycle
 # We first visualize how thermal energy propagates through the wellbore network
