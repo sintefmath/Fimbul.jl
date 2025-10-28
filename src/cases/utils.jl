@@ -1,3 +1,34 @@
+"""
+    make_schedule(forces, durations::Vector{Float64};
+    num_reports = missing,
+    report_interval = missing,
+    num_cycles = 1
+    )
+
+Create a simulation schedule from a set of durations and associated forces.
+
+This function generates a detailed schedule based on user-defined durations
+and associated forcing conditions. It allows for flexible reporting intervals
+within each period and supports repeating the schedule for multiple cycles.
+
+# Arguments
+- `forces`: Vector of forcing conditions, one for each period
+- `durations`: Vector of durations (in seconds) for each period
+
+# Keyword Arguments
+- `num_reports::Union{Int,Vector{Int},Missing}=missing`: Number of reports
+  desired within each period. Can be a single integer applied to all periods or a
+  vector specifying the number of reports for each period. If `missing`, the
+  function will use `report_interval` instead.
+- `report_interval::Union{Real,Vector{Real},Missing}=missing`: Time interval
+  (in seconds) between reports within each period. Can be a single value applied to
+  all periods or a vector specifying the interval for each period. If `missing`,
+  the function will use `num_reports` instead.
+- `num_cycles::Int=1`: Number of times to repeat the entire schedule.
+
+NOTE: Either `num_reports` or `report_interval` must be specified, but not both.
+If none are provided, the function defaults to 5 reports per period.
+"""
 function make_schedule(forces, durations::Vector{Float64};
     num_reports = missing,
     report_interval = missing,
