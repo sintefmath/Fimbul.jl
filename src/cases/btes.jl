@@ -6,29 +6,23 @@ Setup function for borehole thermal energy storage (BTES) system.
 # Keyword arguments
 - `num_wells = 48`: Number of wells in the BTES system.
 - `num_sections = 6`: Number of sections in the BTES system. The system is
-  divided into equal circle sectors, and all wells in each sector are coupled in
-  series.
-- `well_spacing = 5.0`: Horizontal spacing between wells in meters.
-- `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers in meters.
+  divided into equal circle sectors, and all wells in each sector are coupled in series.
+- `well_spacing = 5.0`: Horizontal spacing between wells [m].
+- `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [1, 2]`: Layers in which the wells are placed
-- `density = [30, 2580, 2580]*kilogram/meter^3`: Rock density in the layers.
-- `thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin`: Thermal
-  conductivity in the layers.
-- `heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin`: Heat capacity in the
-  layers.
-- `geothermal_gradient = 0.03Kelvin/meter`: Geothermal gradient.
-- `temperature_charge = to_kelvin(90.0)`: Injection temperature during charging.
-- `temperature_discharge = to_kelvin(10.0)`: Injection temperature during
-  discharging.
-- `rate_charge = 0.5litre/second`: Injection rate during charging.
-- `rate_discharge = rate_charge`: Injection rate during discharging.
-- `temperature_surface = to_kelvin(10.0)`: Temperature at the surface.
+- `density = [30, 2580, 2580]: Rock density in the layers [kg/m³].
+- `thermal_conductivity = [0.034, 3.7, 3.7]: Thermal conductivity in the layers [W/(m⋅K)].
+- `heat_capacity = [1500, 900, 900]`: Heat capacity in the layers [J/(kg⋅K)].
+- `geothermal_gradient = 0.03 K/m`: Geothermal gradient [K/m].
+- `temperature_charge = 90 °C/363.15 K`: Injection temperature during charging [K].
+- `temperature_discharge = 10 °C/283.15 K`: Injection temperature during discharging [K].
+- `rate_charge = 0.5 l/s`: Injection rate during charging [m³/s].
+- `rate_discharge = rate_charge`: Injection rate during discharging [m³/s].
+- `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
 - `num_years = 5`: Number of years to run the simulation.
-- `charge_period = ["June", "September"]`: Period during which
-  the system is charged.
-- `discharge_period = ["December", "March"]`: Period during which
-  the system is discharged.
-- `report_interval = 14day`: Reporting interval for the simulation.
+- `charge_period = ["June", "September"]`: Period during which the system is charged.
+- `discharge_period = ["December", "March"]`: Period during which the system is discharged.
+- `report_interval = 14 day`: Reporting interval for the simulation.
 - `utes_schedule_args = NamedTuple()`: Additional arguments for the UTES schedule.
 - `n_z = [3, 8, 3]`: Number of layers in the vertical direction for each layer.
 - `n_xy = 3`: Number of layers in the horizontal direction for each layer.

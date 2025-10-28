@@ -1,5 +1,5 @@
 """
-    ates(; kwargs...)
+    ates(; <keyword arguments>)
 
 Create an Aquifer Thermal Energy Storage (ATES) simulation case.
 
