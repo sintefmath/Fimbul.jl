@@ -13,8 +13,8 @@ egg_geothermal
 ## Geothermal energy production
 ```@docs
 geothermal_doublet
-egs_geothermal
-ags_geothermal
+egs
+ags
 egg_geothermal_doublet
 ```
 
