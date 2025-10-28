@@ -6,7 +6,7 @@ module Fimbul
     # Wells
     export setup_btes_well, setup_vertical_btes_well
     # Utils for setting up cases
-    export make_utes_schedule
+    export make_schedule, make_utes_schedule
     export set_dirichlet_bcs
     # Visualization
     export plot_well_data!, plot_mswell_values!
