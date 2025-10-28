@@ -123,13 +123,13 @@ function btes(;
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    control_charge, control_discharge, sections = setup_controls(model, num_sectors,
+    control_charge, control_discharge, sectors = setup_controls(model, num_sectors,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge);
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
     forces_rest = setup_reservoir_forces(model, bc=bc)
     # Make schedule
-    dt, forces = make_utes_schedule(
+    dt, forces, timestamps = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest;
         charge_period = charge_period,
         discharge_period = discharge_period,
@@ -138,9 +138,15 @@ function btes(;
         utes_schedule_args...,
     )
 
+    # ## Useful case info
+    info = Dict()
+    info[:description] = "Borehole thermal energy storage (BTES) case set up using Fimbul.btes()"
+    info[:sectors] = sectors
+    info[:timestamps] = timestamps
+
     # ## Assemble and return model
-    case = JutulCase(model, dt, forces, state0 = state0)
-    return case, sections
+    case = JutulCase(model, dt, forces, state0 = state0, input_data = info)
+    return case
 
 end
 
