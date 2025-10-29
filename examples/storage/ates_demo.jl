@@ -40,7 +40,7 @@ darcy = si_unit(:darcy);
 # realistic geological and operational parameters for a medium-scale ATES
 # installation with 400m well spacing.
 num_years = 5
-case, layers = Fimbul.ates(;
+case = Fimbul.ates(;
     well_distance = 400.0, # Distance between wells [m]
     temperature_charge = convert_to_si(85, :Celsius),   # Hot injection temperature
     temperature_discharge = convert_to_si(20, :Celsius), # Cold injection temperature
@@ -67,7 +67,7 @@ colors = [:red, :blue]  # Hot well = red, Cold well = blue
 for (i, (k, w)) in enumerate(wells)
     plot_well!(ax, msh, w, color = colors[i], linewidth = 6)
 end
-plot_cell_data!(ax, msh, layers,
+plot_cell_data!(ax, msh, case.input_data[:layers],
     colormap = :rainbow,
     alpha = 0.3)
 fig
@@ -247,6 +247,7 @@ fig_wells
 
 # Extract temperature along a horizontal line in the aquifer layer
 # This transect passes through the center of the aquifer between the two wells
+layers = case.input_data[:layers]
 ijk = [cell_ijk(msh, c) for c in 1:number_of_cells(msh)]
 j = div(maximum(getindex.(ijk, 2)) + minimum(getindex.(ijk, 2)), 2)
 k = div(maximum(getindex.(ijk[layers.==3], 3)) + minimum(getindex.(ijk[layers.==3], 3)), 2)
@@ -270,7 +271,10 @@ function plot_aquifer_temperature!(fig, T_line, stage, cycle)
     else
         steps = dch_start[cycle]:dch_stop[cycle]
     end
-    colors = cgrad(:seaborn_icefire_gradient, length(steps), categorical = true)
+    colors = cgrad(:RdBu, length(steps), categorical = true)
+    if stage == "Charging"
+        colors = reverse(colors)
+    end
     for (n, T_n) in enumerate(T_line[steps])
         T_n = convert_from_si.(T_n, :Celsius)
         lines!(ax, x, T_n, color = colors[n], linewidth = 3, 

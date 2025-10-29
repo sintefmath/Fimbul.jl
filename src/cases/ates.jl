@@ -1,5 +1,5 @@
 """
-    ates(; kwargs...)
+    ates(; <keyword arguments>)
 
 Create an Aquifer Thermal Energy Storage (ATES) simulation case.
 
@@ -39,7 +39,6 @@ Create an Aquifer Thermal Energy Storage (ATES) simulation case.
 
 # Returns
 A `JutulCase` for ATES
-```
 """
 function ates(;
     well_distance = missing,
@@ -134,19 +133,23 @@ function ates(;
     ij = cell_ijk(msh, cell)[1:2]
     hot_well = setup_vertical_well(domain, ij[1], ij[2]; toe=k, simple_well=false, name = :Hot)
     # Only perforate in the aquifer layer
-    open = layers[hot_well.perforations.reservoir] .== aquifer_layer
-    hot_well.perforations.WI[.!open] .= 0.0
+    hot_rcells = hot_well.representation.perforations.reservoir
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in hot_rcells]
+    WI[layers[hot_rcells] .!== aquifer_layer] .= 0.0
+    hot_well[:well_indices] = WI
     # Setup cold well
     xw_cold  = [well_distance/2 0.0 0.0; well_distance/2 0.0 depths[end]]
     cell = Jutul.find_enclosing_cells(msh, xw_cold)[1]
     ij = cell_ijk(msh, cell)[1:2]
     cold_well = setup_vertical_well(domain, ij[1], ij[2]; toe=k, simple_well=false, name = :Cold)
     # Only perforate in the aquifer layer
-    open = layers[cold_well.perforations.reservoir] .== aquifer_layer
-    cold_well.perforations.WI[.!open] .= 0.0
+    cold_rcells = cold_well.representation.perforations.reservoir
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in cold_rcells]
+    WI[layers[cold_rcells] .!== aquifer_layer] .= 0.0
+    cold_well[:well_indices] = WI
 
     # ## Setup reservoir model
-    model, _ = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal;
         wells = [hot_well, cold_well]
     )
@@ -231,16 +234,27 @@ function ates(;
     # Set up forces for rest periods (no active wells)
     forces_rest = setup_reservoir_forces(model; bc = bc)
     # Create UTES operational schedule
-    dt, forces = make_utes_schedule(
+    dt, forces, timestamps = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest,
         charge_period = charge_period,
         discharge_period = discharge_period;
         utes_schedule_args...
     )
 
+    # ## Additional info
+    info = Dict()
+    info[:description] = "Aquifer Thermal Energy Storage (ATES) case "*
+    "generated using Fimbul.ates()"
+    info[:well_distance] = well_distance
+    info[:thermal_radius] = thermal_radius
+    info[:layers] = layers
+    info[:aquifer_layer] = aquifer_layer
+    info[:timestamps] = timestamps
+
     # ## Create and return the complete simulation case
-    case = JutulCase(model, dt, forces; state0 = state0)
-    return case, layers
+    case = JutulCase(model, dt, forces; state0 = state0, input_data = info)
+
+    return case
 
 end
 

@@ -48,7 +48,7 @@ function egg_geothermal(;
     end
 
     # ## Set up reservoir model
-    model, parameters = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal,
         thermal = true,
         wells = wells
@@ -90,7 +90,7 @@ function egg_geothermal(;
     forces = setup_reservoir_forces(model, bc = bc)
     
     # ## Return case
-    return JutulCase(model, [dt], [forces], state0 = state0, parameters = parameters)
+    return JutulCase(model, [dt], [forces], state0 = state0)
 
 end
 
@@ -221,7 +221,7 @@ function egg_ates(;
     charge_period = ["June", "September"],
     discharge_period = ["December", "March"],
     num_years = 5,
-    report_interval = si_unit(:year)/12,
+    num_reports = 12,
     utes_schedule_args = NamedTuple(),
     kwargs...
     )
@@ -269,29 +269,9 @@ function egg_ates(;
         charge_period = charge_period,
         discharge_period = discharge_period,
         num_years = num_years,
-        report_interval = report_interval
+        num_reports = num_reports,
+        utes_schedule_args...
     )
-    # # Set up timesteps and assign forces to each timestep
-    # dt_vec = Float64[]
-    # forces = []
-    # month = si_unit(:year)/12
-    # n_step = Int(round(month/report_interval))
-    # dt = month/n_step
-    # for year in 1:num_years
-    #     for mno in vcat(6:12, 1:5)
-    #         mname = monthname(mno)
-    #         if mname in discharge_months
-    #             push!(dt_vec, fill(dt, n_step)...)
-    #             push!(forces, fill(forces_discharge, n_step)...)
-    #         elseif mname in charge_months
-    #             push!(dt_vec, fill(dt, n_step)...)
-    #             push!(forces, fill(forces_charge, n_step)...)
-    #         else
-    #             push!(dt_vec, fill(dt, n_step)...)
-    #             push!(forces, fill(forces_rest, n_step)...)
-    #         end
-    #     end
-    # end
 
     # ## Return case
     case = JutulCase(case0.model, dt, forces, 

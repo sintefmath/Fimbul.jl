@@ -13,7 +13,7 @@ using GLMakie
 # The injector and producer wells are placed 100 m apart at the top, and run
 # parallel down to 800 m depth before they diverge to a distance of 1000 m at
 # 2500 m depth.
-case, plot_args = geothermal_doublet();
+case = geothermal_doublet();
 
 # ## Inspect model
 # We first plot the computational mesh and wells. The mesh is refined around
@@ -21,7 +21,7 @@ case, plot_args = geothermal_doublet();
 # aquifer.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (1200, 800))
-ax = Axis3(fig[1, 1], zreversed = true, aspect = plot_args.aspect)
+ax = Axis3(fig[1, 1], zreversed = true, aspect = :data)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 1.0)
 wells = get_model_wells(case.model)
 for (k, w) in wells
@@ -31,7 +31,7 @@ fig
 
 # ### Plot reservoir properties
 # Next, we visualize the reservoir interactively.
-plot_reservoir(case.model; plot_args...)
+plot_reservoir(case.model; aspect = :data)
 
 # ## Simulate geothermal energy production
 # We simulate the geothermal doublet for 200 years. The producer is set to
@@ -47,7 +47,7 @@ results = simulate_reservoir(case; info_level = 0)
 # We first plot the reservoir state interactively. You can notice how the
 # cold front propagates from the injector well by filtering out high values.
 plot_reservoir(case.model, results.states;
-colormap = :seaborn_icefire_gradient, key = :Temperature, plot_args...)
+colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
 
 # ### Plot well output
 # Next, we plot the well output to examine the production rates and temperatures.
@@ -72,7 +72,7 @@ for (n, state) in enumerate(states)
     geo = geo, linewidth = 4, color = colors[n], alpha = 0.25)
 end
 # Highlight selected timesteps with solid lines and labels
-timesteps = [7, 21, 65, 200]
+timesteps = [12, 25, 50, 100]
 for n in timesteps
     T = convert_from_si.(states[n][:Producer][:Temperature], :Celsius)
     plot_mswell_values!(ax, case.model, :Producer, T;
@@ -99,7 +99,7 @@ for state in results.states
     push!(Δstates, Δstate)
 end
 plot_reservoir(case.model, Δstates;
-colormap = :seaborn_icefire_gradient, key = :Temperature, plot_args...)
+colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
 
 # ### 3D visualization of temperature changes
 # Finally, we plot the change in temperature at the same timesteps highlighted in

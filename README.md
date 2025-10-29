@@ -38,6 +38,24 @@ The first time you run this code, Julia will compile the packages, which may tak
 >[!NOTE]
 >Interactive plotting requires `GLMakie`, which may not work if you are running Julia over SSH.
 
+## Citing
+
+The current main work describing `Fimbul.jl` is [*Fimbul.jl – Fast, Flexible, Robust, and Differentiable Geothermal Energy Simulation in Julia*, available through EarthDoc](https://doi.org/10.3997/2214-4609.202521164):
+
+```bibtex
+@inproceedings{Klemetsdal2025,
+  title = {Fimbul.jl – Fast,  Flexible,  Robust,  and Differentiable Geothermal Energy Simulation in Julia},
+  DOI = {10.3997/2214-4609.202521164},
+  booktitle = {Sixth EAGE Global Energy Transition Conference &amp; Exhibition (GET 2025)},
+  publisher = {European Association of Geoscientists & Engineers},
+  author = {Klemetsdal,  Ø. and Andersen,  O. and Møyner,  O.},
+  year = {2025},
+  pages = {1–5}
+}<>
+```
+
+[DOI link to extended abstract.](https://doi.org/10.3997/2214-4609.202521164) If you use Fimbul in your work, please cite this work.
+
 ## License
 
 Fimbul.jl is licensed under the MIT License. See [LICENSE](LICENSE) for details.

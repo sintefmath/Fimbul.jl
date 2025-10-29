@@ -1,10 +1,3 @@
-to_kelvin = T -> convert_to_si(T, :Celsius)
-second, year, day = si_units(:second, :year, :day)
-meter = si_unit(:meter)
-litre = si_unit(:litre)
-Kelvin = si_unit(:Kelvin)
-darcy = si_unit(:darcy)
-
 """
     btes(; <keyword arguments>)
 
@@ -13,29 +6,23 @@ Setup function for borehole thermal energy storage (BTES) system.
 # Keyword arguments
 - `num_wells = 48`: Number of wells in the BTES system.
 - `num_sections = 6`: Number of sections in the BTES system. The system is
-  divided into equal circle sectors, and all wells in each sector are coupled in
-  series.
-- `well_spacing = 5.0`: Horizontal spacing between wells in meters.
-- `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers in meters.
+  divided into equal circle sectors, and all wells in each sector are coupled in series.
+- `well_spacing = 5.0`: Horizontal spacing between wells [m].
+- `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [1, 2]`: Layers in which the wells are placed
-- `density = [30, 2580, 2580]*kilogram/meter^3`: Rock density in the layers.
-- `thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin`: Thermal
-  conductivity in the layers.
-- `heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin`: Heat capacity in the
-  layers.
-- `geothermal_gradient = 0.03Kelvin/meter`: Geothermal gradient.
-- `temperature_charge = to_kelvin(90.0)`: Injection temperature during charging.
-- `temperature_discharge = to_kelvin(10.0)`: Injection temperature during
-  discharging.
-- `rate_charge = 0.5litre/second`: Injection rate during charging.
-- `rate_discharge = rate_charge`: Injection rate during discharging.
-- `temperature_surface = to_kelvin(10.0)`: Temperature at the surface.
+- `density = [30, 2580, 2580]: Rock density in the layers [kg/m³].
+- `thermal_conductivity = [0.034, 3.7, 3.7]: Thermal conductivity in the layers [W/(m⋅K)].
+- `heat_capacity = [1500, 900, 900]`: Heat capacity in the layers [J/(kg⋅K)].
+- `geothermal_gradient = 0.03 K/m`: Geothermal gradient [K/m].
+- `temperature_charge = 90 °C/363.15 K`: Injection temperature during charging [K].
+- `temperature_discharge = 10 °C/283.15 K`: Injection temperature during discharging [K].
+- `rate_charge = 0.5 l/s`: Injection rate during charging [m³/s].
+- `rate_discharge = rate_charge`: Injection rate during discharging [m³/s].
+- `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
 - `num_years = 5`: Number of years to run the simulation.
-- `charge_period = ["June", "September"]`: Period during which
-  the system is charged.
-- `discharge_period = ["December", "March"]`: Period during which
-  the system is discharged.
-- `report_interval = 14day`: Reporting interval for the simulation.
+- `charge_period = ["June", "September"]`: Period during which the system is charged.
+- `discharge_period = ["December", "March"]`: Period during which the system is discharged.
+- `report_interval = 14 day`: Reporting interval for the simulation.
 - `utes_schedule_args = NamedTuple()`: Additional arguments for the UTES schedule.
 - `n_z = [3, 8, 3]`: Number of layers in the vertical direction for each layer.
 - `n_xy = 3`: Number of layers in the horizontal direction for each layer.
@@ -51,11 +38,11 @@ function btes(;
     thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
     heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
     geothermal_gradient = 0.03Kelvin/meter,
-    temperature_charge = to_kelvin(90.0),
-    temperature_discharge = to_kelvin(10.0),
+    temperature_charge = convert_to_si(90.0, :Celsius),
+    temperature_discharge = convert_to_si(10.0, :Celsius),
     rate_charge = 0.5litre/second,
     rate_discharge = rate_charge,
-    temperature_surface = to_kelvin(10.0),
+    temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 4,
     charge_period = ["June", "September"],
     discharge_period = ["December", "March"],
@@ -104,11 +91,11 @@ function btes(;
         trajectory = [xw[1] xw[2] 0.0; xw[1] xw[2] depths[end]]
         cells = Jutul.find_enclosing_cells(mesh, trajectory, n = 100)
         filter!(c -> layers[c] ∈ well_layers, cells)
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:u1)
+        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:simple)
         push!(well_models, w_sup, w_ret)
     end
     # Make the model
-    model, parameters = setup_reservoir_model(
+    model = setup_reservoir_model(
         domain, :geothermal,
         wells = well_models,
     );
@@ -136,13 +123,13 @@ function btes(;
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    control_charge, control_discharge, sections = setup_controls(model, num_sectors,
+    control_charge, control_discharge, sectors = setup_controls(model, num_sectors,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge);
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
     forces_rest = setup_reservoir_forces(model, bc=bc)
     # Make schedule
-    dt, forces = make_utes_schedule(
+    dt, forces, timestamps = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest;
         charge_period = charge_period,
         discharge_period = discharge_period,
@@ -151,9 +138,15 @@ function btes(;
         utes_schedule_args...,
     )
 
+    # ## Useful case info
+    info = Dict()
+    info[:description] = "Borehole thermal energy storage (BTES) case set up using Fimbul.btes()"
+    info[:sectors] = sectors
+    info[:timestamps] = timestamps
+
     # ## Assemble and return model
-    case = JutulCase(model, dt, forces, state0 = state0)
-    return case, sections
+    case = JutulCase(model, dt, forces, state0 = state0, input_data = info)
+    return case
 
 end
 

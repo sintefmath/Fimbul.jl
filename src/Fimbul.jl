@@ -3,8 +3,10 @@ module Fimbul
     # Meshing
     export fibonacci_pattern_2d
     export extruded_mesh, horizontal_fractured_mesh
+    # Wells
+    export setup_btes_well, setup_vertical_btes_well
     # Utils for setting up cases
-    export make_utes_schedule
+    export make_schedule, make_utes_schedule
     export set_dirichlet_bcs
     # Visualization
     export plot_well_data!, plot_mswell_values!
@@ -13,6 +15,8 @@ module Fimbul
     # Cases
     export analytical_1d
     export geothermal_doublet
+    export egs
+    export ags
     export ates
     export btes
     export egg_geothermal, egg_geothermal_doublet, egg_ates
@@ -30,14 +34,10 @@ module Fimbul
     include("meshing/extruded.jl")
     include("meshing/fractured.jl")
     include("meshing/utils.jl")
+    # Wells
+    include("wells/btes.jl")
     # Cases
-    include("cases/utils.jl")
-    include("cases/analytical.jl")
-    include("cases/doublet.jl")
-    include("cases/ates.jl")
-    include("cases/btes.jl")
-    include("cases/egs.jl")
-    include("cases/egg_geothermal.jl")
+    include("cases/cases.jl")
     # Optimization
     include("optimization/objectives.jl")
     # Other utilities
