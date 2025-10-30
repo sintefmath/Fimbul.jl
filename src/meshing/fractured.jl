@@ -5,12 +5,10 @@ function horizontal_fractured_mesh(cell_constraints, depths, num_fractures;
         kwargs...
     )
 
-    if length(num_fractures) == 1
-        @assert length(depths) == 4
-        num_fractures = [0, num_fractures, 0]
-    end
+    num_layers = length(depths) - 1
+    @assert length(num_fractures) == num_layers
     if !ismissing(hz)
-        @assert length(hz) == length(depths)-1
+        @assert length(hz) == length(num_fractures)
     end
 
     interp_per_layer = !(interpolation isa Symbol)
