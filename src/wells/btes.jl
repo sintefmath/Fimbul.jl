@@ -217,7 +217,6 @@ function set_default_btes_thermal_indices!(well::DataDomain)
         seg = findall(well.representation.neighborship[2, :] .== cno)
         pcno = well.representation.neighborship[1, seg[1]]
         println("pcno = $pcno")
-        # @assert length(pcno) == 1
         volumes[pcno[1]] = vol_p
 
         pipe_spacing = well[:pipe_spacing, perf][pno]
