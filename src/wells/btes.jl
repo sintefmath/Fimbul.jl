@@ -1,6 +1,6 @@
 using LinearAlgebra
 
-## Utility functions for setting up BTES wells
+# Utility functions for setting up BTES wells
 function setup_btes_well(D::DataDomain, reservoir_cells;
     btes_type = :simple,
     name = :BTES, kwarg...)
