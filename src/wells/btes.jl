@@ -82,28 +82,35 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
     pipe_spacing = 60e-3,
     thermal_conductivity_grout = 2.3,
     thermal_conductivity_pipe = 0.38,
-    heat_capacity_grout = 420.0,
+    heat_capacity_grout = 1460,
     density_grout = 1500.0,
     kwarg...)
 
     ## Set up connectivity
+    reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
     nc_pipe = length(reservoir_cells)
     nc_grout = length(reservoir_cells)
+    nc_mid = div(nc_pipe, 2)
+    supply_ix = Int.(1:nc_mid)
+    return_ix = Int.(1:nc_mid) .+ nc_mid
 
     pipe_cells = (1:nc_pipe)
     grout_cells = (1:nc_grout) .+ nc_pipe
 
     pipe_to_pipe = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
     pipe_to_grout = vcat(pipe_cells', grout_cells')
-    grout_to_grout = vcat(grout_cells[1:end-1]', grout_cells[2:end]')
+    grout_to_grout = vcat(grout_cells[supply_ix]', reverse(grout_cells[return_ix]'))
 
-    N = hcat(pipe_to_pipe, pipe_to_grout)
+    N = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
 
     ## Set up segment flow models
     segment_models = Vector{Any}()
 
     # Set centers and depths
-    well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
+    xc_supply = cell_centers[:, reservoir_cells[supply_ix]] .+ [pipe_spacing/2, 0.0, 0.0]
+    xc_return = cell_centers[:, reservoir_cells[return_ix]] .- [pipe_spacing/2, 0.0, 0.0]
+    well_cell_centers = repeat(hcat(xc_supply, xc_return), 1, 2)
+    # well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
 
     # Add top node
     nseg = size(N,2)
@@ -111,8 +118,8 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
     # Set material thermal conducivities
     nr = length(reservoir_cells)
 
-    for seg in 1:nseg
-        if seg < nc_pipe
+    for seg in eachcol(N)
+        if all([c ∈ pipe_cells for c in seg])
             # Pipe segments use standard wellbore friction model
             seg_model = SegmentWellBoreFrictionHB()
         else
@@ -121,27 +128,41 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         push!(segment_models, seg_model)
     end
 
-    # nc = nc_pipe + nc_grout + 1
+    if pipe_thickness isa Number
+        pipe_thickness = fill(pipe_thickness, 2*nc_pipe)
+        pipe_thickness[grout_cells] .= 0.0
+    end
+
+    if thermal_conductivity_pipe isa Number
+        thermal_conductivity_pipe = fill(thermal_conductivity_pipe, 2*nc_pipe)
+        thermal_conductivity_pipe[grout_cells] .= 0.0
+    end
+
+    if thermal_conductivity_grout isa Number
+        thermal_conductivity_grout = fill(thermal_conductivity_grout, 2*nc_pipe)
+        thermal_conductivity_grout[pipe_cells] .= 0.0
+    end
 
     ## Set up supply and return wells
     args = (
         type = :closed_loop,
         simple_well = false,
+        WI = 0.0
+    )
+
+    supply_well = setup_well(D, reservoir_cells;
+        name = Symbol(name, "_supply"),
         neighborship = N,
         perforation_cells_well = collect(grout_cells),
         well_cell_centers = well_cell_centers,
         radius = radius_pipe_outer,
         casing_thickness = pipe_thickness,
-        WI = 0.0,
         thermal_conductivity_casing = thermal_conductivity_pipe,
         thermal_conductivity_grout = thermal_conductivity_grout,
         segment_models = segment_models,
         end_nodes = [nc_pipe],
-    )
-
-    supply_well = setup_well(D, reservoir_cells;
-        name = Symbol(name, "_supply"),
         args..., kwarg...)
+
     augment_btes_domain!(supply_well,
         radius_grout,
         pipe_spacing,
@@ -149,18 +170,12 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         density_grout
     )
     
-    return_well = setup_well(D, reservoir_cells;
+    return_well = setup_well(D, reservoir_cells[end];
         name = Symbol(name, "_return"),
         args...)
-    augment_btes_domain!(return_well,
-        radius_grout,
-        pipe_spacing,
-        heat_capacity_grout,
-        density_grout
-    )
 
     set_default_btes_thermal_indices!(supply_well)
-    set_default_btes_thermal_indices!(return_well)
+    # set_default_btes_thermal_indices!(return_well)
 
     return [supply_well, return_well]
 
@@ -179,10 +194,11 @@ function augment_btes_domain!(well::DataDomain,
     p = Perforations()
     f = Faces()
 
-    well[:radius_grout, p] = radius_grout
+    well[:radius_grout, c] = radius_grout
     well[:pipe_spacing, p] = pipe_spacing
-    well[:heat_capacity_grout, p] = heat_capacity_grout
-    well[:density_grout, p] = density_grout
+    # well[:heat_capacity_grout, p] = heat_capacity_grout
+    well[:casing_heat_capacity, c] = heat_capacity_grout
+    well[:casing_density, c] = density_grout
 
     treat_defaulted(x) = x
     treat_defaulted(::Missing) = NaN
@@ -201,47 +217,69 @@ function set_default_btes_thermal_indices!(well::DataDomain)
     face = Faces()
     perf = Perforations()
 
-    volumes = zeros(Float64, well.representation.num_nodes)
+    num_nodes = well.representation.num_nodes
+
+    hole_volumes = zeros(Float64, num_nodes)
+    casing_volumes = zeros(Float64, num_nodes)
+    grout_volumes = zeros(Float64, num_nodes)
+
+    pipe_cells = Int.(1:num_nodes/2)
+    grout_cells = Int.((num_nodes/2 + 1):num_nodes)
+    N = well.representation.neighborship
 
     rep = physical_representation(well)
-    for (pno, cno) in enumerate(rep.perforations.self)
-        r_grout = well[:radius_grout, perf][pno]
-        r_pipe_outer = well[:perforation_radius, perf][pno]
-        r_pipe_inner = r_pipe_outer - well[:casing_thickness, cell][cno]
-        length = well[:cell_length, cell][cno]
-        vol_p, vol_g = btes_volume(
-            BTESTypeU1(), length, r_grout, r_pipe_inner, r_pipe_outer
+    for (pno, grout_cell) in enumerate(rep.perforations.self)
+
+        @assert grout_cell ∈ grout_cells
+        segs = findall(N[2, :] .== grout_cell)
+        @assert length(segs) <= 2
+        seg_pg = segs[1]
+        pipe_cell = N[1, seg_pg]
+        @assert pipe_cell ∈ pipe_cells
+        seg_gg = nothing
+        if length(segs) > 1
+            seg_gg = segs[2]
+            other_grout_cell = N[1, seg_gg]
+        end
+
+        r_grout = well[:radius_grout, cell][grout_cell]
+        r_pipe_outer = well[:radius, cell][grout_cell]
+        r_pipe_inner = r_pipe_outer - well[:casing_thickness, cell][pipe_cell]
+        L = well[:cell_length, cell][pipe_cell]
+        vol_p, vol_w, vol_g = btes_volume(
+            BTESTypeU1(), L, r_grout, r_pipe_inner, r_pipe_outer
         )
-
-        volumes[pno] = vol_g
-        seg = findall(well.representation.neighborship[2, :] .== cno)
-        pcno = well.representation.neighborship[1, seg[1]]
-        println("pcno = $pcno")
-        volumes[pcno[1]] = vol_p
-
+       
+        hole_volumes[pipe_cell] = vol_p
+        hole_volumes[grout_cell] = 0.0
+        casing_volumes[pipe_cell] = 0.0
+        casing_volumes[grout_cell] = 0.0
+        grout_volumes[pipe_cell] = 0.0
+        grout_volumes[grout_cell] = vol_g
+        
         pipe_spacing = well[:pipe_spacing, perf][pno]
-        λg = well[:thermal_conductivity_grout, cell][cno]
-        λp = well[:thermal_conductivity_casing, cell][cno]
+        λg = well[:thermal_conductivity_grout, cell][grout_cell]
+        λp = well[:thermal_conductivity_casing, cell][pipe_cell]
         λpg, λgr, λgg = btes_thermal_conductivity(
             BTESTypeU1(),
-            r_grout, r_pipe_inner, r_pipe_outer, pipe_spacing, length, λg, λp)
-
-        if well[:material_thermal_conductivity, face][seg] == 0.0
-            well[:material_thermal_conductivity, face][seg] = λpg
-        end
+            r_grout, r_pipe_inner, r_pipe_outer, pipe_spacing, L, λg, λp)
 
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
         end
 
-        if isnan(well[:grout_grout_thermal_index, perf][pno])
-            well[:grout_grout_thermal_index, perf][pno] = λgg
+        if well[:material_thermal_conductivity, face][seg_pg] == 0.0
+            well[:material_thermal_conductivity, face][seg_pg] = λpg
         end
 
-        println("Perforation $pno: vol_p = $vol_p, vol_g = $vol_g, L = $length "*
-            "λpg = $λpg, λgr = $λgr, λgg = $λgg")
+        if seg_gg !== nothing && well[:material_thermal_conductivity, face][seg_gg] == 0.0
+            well[:material_thermal_conductivity, face][seg_gg] = λgg
+        end
     end
 
+    well[:volume_override_hole, cell] = hole_volumes
+    well[:volume_override_casing, cell] = casing_volumes
+    well[:volume_override_grouting, cell] = grout_volumes
 end
 
 # Conveience types for multiple dispatching
@@ -253,10 +291,12 @@ function btes_volume(type::BTESTypeU1, length, radius_grout, radius_pipe_inner, 
     # Compute pipe and grout volume
     L = length
     rg, rp_in, rp_out = radius_grout, radius_pipe_inner, radius_pipe_outer
-    vol_p = π*rp_in^2*L
-    vol_g = π*rg^2*L/2 - vol_p
+    vol_hole = π*rp_in^2*L
+    vol_pipe = π*rp_out^2*L
+    vol_wall = vol_pipe - vol_hole
+    vol_grout = π*rg^2*L/2 - vol_pipe
 
-    return vol_p, vol_g, L
+    return vol_hole, vol_wall, vol_grout, L
 
 end
 
@@ -286,12 +326,16 @@ function btes_thermal_conductivity(type::BTESTypeU1,
     Rar = acosh((2*w^2 - dp_out^2)/dp_out^2)/(2*π*λg)
     Rgg = 2*Rgr*(Rar - 2*x*Rg)/(2*Rgr - Rar + 2*x*Rg)
 
-    println("Rpg = $Rpg, Rgr = $Rgr, Rgg = $Rgg")
+    # println("Rpg = $Rpg, Rgr = $Rgr, Rgg = $Rgg")
 
     # Compute thermal conducivities
-    λpg = L*2*π*rp_in/Rpg
-    λgr = L*π*rg/Rgr
-    λgg = L*2*rg/Rgg
+    # λpg = L*2*π*rp_in/Rpg
+    # λgr = L*π*rg/Rgr
+    # λgg = L*2*rg/Rgg
+
+    λpg = L/Rpg
+    λgr = L/Rgr
+    λgg = L/Rgg
 
     return λpg, λgr, λgg
 
