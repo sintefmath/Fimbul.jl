@@ -1,5 +1,9 @@
 using LinearAlgebra
 
+# Conveience types for multiple dispatching
+abstract type AbstractBTESType end
+struct BTESTypeU1 <: AbstractBTESType end
+
 # Utility functions for setting up BTES wells
 function setup_btes_well(D::DataDomain, reservoir_cells;
     btes_type = :simple,
@@ -163,7 +167,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         end_nodes = [nc_pipe],
         args..., kwarg...)
 
-    augment_btes_domain!(supply_well,
+    augment_btes_domain!(BTESTypeU1(), supply_well,
         radius_grout,
         pipe_spacing,
         heat_capacity_grout,
@@ -243,11 +247,11 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
         end
 
         r_grout = well[:radius_grout, cell][grout_cell]
-        r_pipe_outer = well[:radius, cell][grout_cell]
-        r_pipe_inner = r_pipe_outer - well[:casing_thickness, cell][pipe_cell]
+        r_pipe = well[:radius, cell][grout_cell]
+        pipe_thickness = well[:casing_thickness, cell][pipe_cell]
         L = well[:cell_length, cell][pipe_cell]
         vol_p, vol_w, vol_g = btes_volume(
-            BTESTypeU1(), L, r_grout, r_pipe_inner, r_pipe_outer
+            BTESTypeU1(), L, r_grout, r_pipe, pipe_thickness
         )
        
         hole_volumes[pipe_cell] = vol_p
@@ -262,7 +266,7 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
         λp = well[:thermal_conductivity_casing, cell][pipe_cell]
         λpg, λgr, λgg = btes_thermal_conductivity(
             BTESTypeU1(),
-            r_grout, r_pipe_inner, r_pipe_outer, pipe_spacing, L, λg, λp)
+            r_grout, r_pipe, pipe_thickness, pipe_spacing, L, λg, λp)
 
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
@@ -282,15 +286,11 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
     well[:volume_override_grouting, cell] = grout_volumes
 end
 
-# Conveience types for multiple dispatching
-abstract type AbstractBTESType end
-struct BTESTypeU1 <: AbstractBTESType end
-
-function btes_volume(type::BTESTypeU1, length, radius_grout, radius_pipe_inner, radius_pipe_outer)
+function btes_volume(type::BTESTypeU1, length, radius_grout, radius_pipe, pipe_thickness)
 
     # Compute pipe and grout volume
     L = length
-    rg, rp_in, rp_out = radius_grout, radius_pipe_inner, radius_pipe_outer
+    rg, rp_in, rp_out = radius_grout, radius_pipe - pipe_thickness, radius_pipe
     vol_hole = π*rp_in^2*L
     vol_pipe = π*rp_out^2*L
     vol_wall = vol_pipe - vol_hole
