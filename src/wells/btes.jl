@@ -77,7 +77,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
     cell_centers = D[:cell_centroids],
     name = :BTES,
     radius_grout = 65e-3,
-    radius_pipe_outer = 15e-3,
+    radius_pipe = 15e-3,
     pipe_thickness = 3e-3,
     pipe_spacing = 60e-3,
     thermal_conductivity_grout = 2.3,
@@ -155,7 +155,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         neighborship = N,
         perforation_cells_well = collect(grout_cells),
         well_cell_centers = well_cell_centers,
-        radius = radius_pipe_outer,
+        radius = radius_pipe,
         casing_thickness = pipe_thickness,
         thermal_conductivity_casing = thermal_conductivity_pipe,
         thermal_conductivity_grout = thermal_conductivity_grout,
@@ -174,14 +174,14 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         name = Symbol(name, "_return"),
         args...)
 
-    set_default_btes_thermal_indices!(supply_well)
+    set_default_btes_thermal_indices!(BTESTypeU1(), supply_well)
     # set_default_btes_thermal_indices!(return_well)
 
     return [supply_well, return_well]
 
 end
 
-function augment_btes_domain!(well::DataDomain,
+function augment_btes_domain!(type::BTESTypeU1, well::DataDomain,
     radius_grout,
     pipe_spacing,
     heat_capacity_grout,
@@ -211,7 +211,7 @@ function augment_btes_domain!(well::DataDomain,
 
 end
 
-function set_default_btes_thermal_indices!(well::DataDomain)
+function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
     
     cell = Cells()
     face = Faces()
@@ -301,9 +301,11 @@ function btes_volume(type::BTESTypeU1, length, radius_grout, radius_pipe_inner, 
 end
 
 function btes_thermal_conductivity(type::BTESTypeU1, 
-    radius_grout, radius_pipe_inner, radius_pipe_outer, pipe_spacing, length,
+    radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing, length,
     thermal_conductivity_grout, thermal_conductivity_pipe)
     # Conveient short-hand notation
+    radius_pipe_outer = radius_pipe
+    radius_pipe_inner = radius_pipe - wall_thickness_pipe
     rg, rp_in, rp_out, w, L = 
         radius_grout, radius_pipe_inner, radius_pipe_outer, pipe_spacing, length
     λg, λp = thermal_conductivity_grout, thermal_conductivity_pipe
@@ -325,13 +327,6 @@ function btes_thermal_conductivity(type::BTESTypeU1,
     # Grout-to-grout thermal resistance
     Rar = acosh((2*w^2 - dp_out^2)/dp_out^2)/(2*π*λg)
     Rgg = 2*Rgr*(Rar - 2*x*Rg)/(2*Rgr - Rar + 2*x*Rg)
-
-    # println("Rpg = $Rpg, Rgr = $Rgr, Rgg = $Rgg")
-
-    # Compute thermal conducivities
-    # λpg = L*2*π*rp_in/Rpg
-    # λgr = L*π*rg/Rgr
-    # λgg = L*2*rg/Rgg
 
     λpg = L/Rpg
     λgr = L/Rgr
