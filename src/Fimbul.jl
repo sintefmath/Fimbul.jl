@@ -36,6 +36,7 @@ module Fimbul
     include("meshing/utils.jl")
     # Wells
     include("wells/btes.jl")
+    include("wells/btes_coaxial.jl")
     # Cases
     include("cases/cases.jl")
     # Optimization

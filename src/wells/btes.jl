@@ -15,6 +15,9 @@ function setup_btes_well(D::DataDomain, reservoir_cells;
     elseif btes_type == :u1
         # U-type BTES well with grout annulus
         return setup_btes_well_u1(D, reservoir_cells; name = name, kwarg...)
+    elseif btes_type == :coaxial
+        # Coaxial BTES well with grout annulus
+        return Fimbul.setup_btes_well_coaxial(D, reservoir_cells; name = name, kwarg...)
     else
         # Unknown BTES type
         error("Unknown BTES type: $btes_type")
@@ -47,7 +50,7 @@ end
 function setup_btes_well_simple(D::DataDomain, reservoir_cells;
     name = :BTES,
     radius_pipe = 20e-3,
-    pipe_thickness = 2.5e-3,
+    wall_thickness = 2.5e-3,
     grouting_thickness = 50e-3,
     thermal_conductivity_pipe = 0.35,
     kwarg...)
@@ -56,7 +59,7 @@ function setup_btes_well_simple(D::DataDomain, reservoir_cells;
     args = (
         WI = 0.0,
         radius = radius_pipe,
-        casing_thickness = pipe_thickness,
+        casing_thickness = wall_thickness,
         grouting_thickness = grouting_thickness,
         thermal_conductivity_casing = thermal_conductivity_pipe,
         end_nodes = [length(reservoir_cells)],
@@ -82,7 +85,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
     name = :BTES,
     radius_grout = 65e-3,
     radius_pipe = 15e-3,
-    pipe_thickness = 3e-3,
+    wall_thickness = 3e-3,
     pipe_spacing = 60e-3,
     thermal_conductivity_grout = 2.3,
     thermal_conductivity_pipe = 0.38,
@@ -132,9 +135,14 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         push!(segment_models, seg_model)
     end
 
-    if pipe_thickness isa Number
-        pipe_thickness = fill(pipe_thickness, 2*nc_pipe)
-        pipe_thickness[grout_cells] .= 0.0
+    if radius_pipe isa Number
+        radius_pipe = fill(radius_pipe, 2*nc_pipe)
+        radius_pipe[grout_cells] .= 0.0
+    end
+
+    if wall_thickness isa Number
+        wall_thickness = fill(wall_thickness, 2*nc_pipe)
+        wall_thickness[grout_cells] .= 0.0
     end
 
     if thermal_conductivity_pipe isa Number
@@ -159,8 +167,8 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         neighborship = N,
         perforation_cells_well = collect(grout_cells),
         well_cell_centers = well_cell_centers,
-        radius = radius_pipe,
-        casing_thickness = pipe_thickness,
+        cell_radius = radius_pipe - wall_thickness,
+        casing_thickness = wall_thickness,
         thermal_conductivity_casing = thermal_conductivity_pipe,
         thermal_conductivity_grout = thermal_conductivity_grout,
         segment_models = segment_models,
@@ -247,11 +255,11 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
         end
 
         r_grout = well[:radius_grout, cell][grout_cell]
-        r_pipe = well[:radius, cell][grout_cell]
-        pipe_thickness = well[:casing_thickness, cell][pipe_cell]
+        r_pipe = well[:radius, cell][pipe_cell]
+        wall_thickness = well[:casing_thickness, cell][pipe_cell]
         L = well[:cell_length, cell][pipe_cell]
         vol_p, vol_w, vol_g = btes_volume(
-            BTESTypeU1(), L, r_grout, r_pipe, pipe_thickness
+            BTESTypeU1(), L, r_grout, r_pipe, wall_thickness
         )
        
         hole_volumes[pipe_cell] = vol_p
@@ -266,7 +274,7 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
         λp = well[:thermal_conductivity_casing, cell][pipe_cell]
         λpg, λgr, λgg = btes_thermal_conductivity(
             BTESTypeU1(),
-            r_grout, r_pipe, pipe_thickness, pipe_spacing, L, λg, λp)
+            r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, L, λg, λp)
 
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
@@ -286,11 +294,11 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
     well[:volume_override_grouting, cell] = grout_volumes
 end
 
-function btes_volume(type::BTESTypeU1, length, radius_grout, radius_pipe, pipe_thickness)
+function btes_volume(type::BTESTypeU1, length, radius_grout, radius_pipe, wall_thickness)
 
     # Compute pipe and grout volume
     L = length
-    rg, rp_in, rp_out = radius_grout, radius_pipe - pipe_thickness, radius_pipe
+    rg, rp_in, rp_out = radius_grout, radius_pipe - wall_thickness, radius_pipe
     vol_hole = π*rp_in^2*L
     vol_pipe = π*rp_out^2*L
     vol_wall = vol_pipe - vol_hole
