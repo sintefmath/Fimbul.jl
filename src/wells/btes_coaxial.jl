@@ -16,27 +16,35 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
     kwarg...)
 
     ## Set up connectivity
-    reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
-    nc_pipe = length(reservoir_cells)
-    nc_grout = length(reservoir_cells)÷2
+    nc_pipe = length(reservoir_cells)*2
+    nc_grout = length(reservoir_cells)
     nc_mid = div(nc_pipe, 2)
     inner_ix = Int.(1:nc_mid)
     outer_ix = Int.(1:nc_mid) .+ nc_mid
+    nc_r = length(reservoir_cells)
 
-    pipe_cells = (1:nc_pipe)
-    grout_cells = (1:nc_grout) .+ nc_pipe
+    pipe_cells_inner = (1:nc_r)
+    pipe_cells_outer = (1:nc_r) .+ nc_r
+    grout_cells = (1:nc_r) .+ 2*nc_r
+    pipe_cells = vcat(pipe_cells_inner, pipe_cells_outer)
+
+    # pipe_cells = (1:nc_pipe)
+    # grout_cells = (1:nc_grout) .+ nc_pipe
     num_cells = nc_pipe + nc_grout
 
-    pipe_to_pipe = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
-    pipe_to_grout = vcat(pipe_cells[outer_ix]', grout_cells')
+    inner_conn = vcat(pipe_cells_inner[1:end-1]', pipe_cells_inner[2:end]')
+    outer_conn = vcat(pipe_cells_outer[1:end-1]', pipe_cells_outer[2:end]')
+    bottom_conn = [pipe_cells_inner[end]', pipe_cells_outer[end]']
+    pipe_to_pipe_conn = vcat(pipe_cells_inner[1:end-1]', pipe_cells_outer[1:end-1]')
+    pipe_to_grout_conn = vcat(pipe_cells_outer', grout_cells')
     
-    N = hcat(pipe_to_pipe, pipe_to_grout)
+    N = hcat(inner_conn, outer_conn, bottom_conn, pipe_to_pipe_conn, pipe_to_grout_conn)
 
     ## Set up segment flow models
     segment_models = Vector{Any}()
 
     # Set centers and depths
-    well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
+    well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
     
     # Add top node
     nseg = size(N,2)
@@ -44,8 +52,9 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
     # Set material thermal conducivities
     nr = length(reservoir_cells)
 
-    for seg in eachcol(N)
-        if all([c ∈ pipe_cells for c in seg])
+    flow_segs = size(inner_conn, 2) + size(outer_conn, 2) + size(bottom_conn, 2)
+    for s in 1:nseg
+        if s <= flow_segs
             # Pipe segments use standard wellbore friction model
             seg_model = SegmentWellBoreFrictionHB()
         else
@@ -89,17 +98,16 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
         thermal_conductivity_casing = thermal_conductivity_pipe,
         thermal_conductivity_grout = thermal_conductivity_grout,
         segment_models = segment_models,
-        end_nodes = [nc_pipe],
+        end_nodes = [nc_r+1],
         args..., kwarg...)
 
-    augment_btes_domain!(supply_well,
+    augment_btes_domain!(BTESTypeCoaxial(), supply_well,
         radius_grout,
-        pipe_spacing,
         heat_capacity_grout,
         density_grout
     )
     
-    return_well = setup_well(D, reservoir_cells[end];
+    return_well = setup_well(D, reservoir_cells[1];
         name = Symbol(name, "_return"),
         args...)
 
@@ -155,18 +163,24 @@ function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDoma
     outer_pipe_cells = Int.(1:nc) .+ nc
     grout_cells = Int.(1:nc) .+ 2*nc
     N = well.representation.neighborship
-
+    println("N:\n")
+    display(N)
     rep = physical_representation(well)
     for (pno, grout_cell) in enumerate(rep.perforations.self)
 
+        println("pno = $pno, grout_cell = $grout_cell")
         @assert grout_cell ∈ grout_cells
         seg_pg = findall(N[2, :] .== grout_cell)
+        println("seg_pg = $(N[:, seg_pg])")
         @assert length(seg_pg) == 1
-        outer_pipe_cell = N[1, seg_pg[1]]
+        seg_pg = seg_pg[1]
+        outer_pipe_cell = N[1, seg_pg]
         @assert outer_pipe_cell ∈ outer_pipe_cells
         seg_pp = findall(N[2, :] .== outer_pipe_cell)
-        @assert length(seg_pp) == 1
-        inner_pipe_cell = N[1, seg_pp[1]]
+        println("seg_pp = $(N[:, seg_pp[end]])")
+        @assert length(seg_pp) <= 2
+        seg_pp = seg_pp[end]
+        inner_pipe_cell = N[1, seg_pp]
         @assert inner_pipe_cell ∈ inner_pipe_cells
 
         r_grout = well[:radius_grout, cell][grout_cell]
@@ -193,10 +207,14 @@ function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDoma
         grout_volumes[grout_cell] = vol_g
         
         λg = well[:thermal_conductivity_grout, cell][grout_cell]
-        λp = well[:thermal_conductivity_casing, cell][pipe_cell]
+        λpi = well[:thermal_conductivity_casing, cell][inner_pipe_cell]
+        λpo = well[:thermal_conductivity_casing, cell][outer_pipe_cell]
         λpp, λpg, λgr = btes_thermal_conductivity(
             BTESTypeCoaxial(),
-            r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, L, λg, λp)
+            r_grout,
+            r_inner_pipe + wall_thickness_inner, wall_thickness_inner,
+            r_outer_pipe + wall_thickness_outer, wall_thickness_outer,
+            L, λg, λpi, λpo)
 
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
