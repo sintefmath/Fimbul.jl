@@ -8,9 +8,9 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
     wall_thickness_inner = 3e-3,
     radius_outer_pipe = 20e-3,
     wall_thickness_outer = 3e-3,
-    thermal_conductivity_grout = 2.3,
-    thermal_conductivity_inner_pipe = 0.38,
-    thermal_conductivity_outer_pipe = 0.38,
+    grouting_thermal_conductivity = 2.3,
+    inner_pipe_thermal_conductivity = 0.38,
+    outer_pipe_thermal_conductivity = 0.38,
     heat_capacity_grout = 1460,
     density_grout = 1500.0,
     kwarg...)
@@ -73,13 +73,12 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
     wall_thickness[inner_ix] .= wall_thickness_inner
     wall_thickness[outer_ix] .= wall_thickness_outer
 
-    thermal_conductivity_pipe = zeros(num_cells)
-    thermal_conductivity_pipe[inner_ix] .= thermal_conductivity_inner_pipe
-    thermal_conductivity_pipe[outer_ix] .= thermal_conductivity_outer_pipe
+    λ_pipe = zeros(num_cells)
+    λ_pipe[inner_ix] .= inner_pipe_thermal_conductivity
+    λ_pipe[outer_ix] .= outer_pipe_thermal_conductivity
 
-    thermal_conductivity_grout0 = thermal_conductivity_grout
-    thermal_conductivity_grout = zeros(num_cells)
-    thermal_conductivity_grout[grout_cells] .= thermal_conductivity_grout0
+    λ_grout = zeros(num_cells)
+    λ_grout[grout_cells] .= grouting_thermal_conductivity
 
     ## Set up supply and return wells
     args = (
@@ -95,8 +94,8 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
         well_cell_centers = well_cell_centers,
         cell_radius = cell_radius,
         casing_thickness = wall_thickness,
-        thermal_conductivity_casing = thermal_conductivity_pipe,
-        thermal_conductivity_grout = thermal_conductivity_grout,
+        casing_thermal_conductivity = λ_pipe,
+        grouting_thermal_conductivity = λ_grout,
         segment_models = segment_models,
         end_nodes = [nc_r+1],
         args..., kwarg...)
@@ -132,8 +131,8 @@ function augment_btes_domain!(type::BTESTypeCoaxial, well::DataDomain,
 
     well[:radius_grout, c] = radius_grout
     # well[:heat_capacity_grout, p] = heat_capacity_grout
-    well[:casing_heat_capacity, c] = heat_capacity_grout
-    well[:casing_density, c] = density_grout
+    well[:material_heat_capacity, c] = heat_capacity_grout
+    well[:material_density, c] = density_grout
 
     treat_defaulted(x) = x
     treat_defaulted(::Missing) = NaN
@@ -206,9 +205,9 @@ function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDoma
         grout_volumes[outer_pipe_cell] = 0.0
         grout_volumes[grout_cell] = vol_g
         
-        λg = well[:thermal_conductivity_grout, cell][grout_cell]
-        λpi = well[:thermal_conductivity_casing, cell][inner_pipe_cell]
-        λpo = well[:thermal_conductivity_casing, cell][outer_pipe_cell]
+        λg = well[:grouting_thermal_conductivity, cell][grout_cell]
+        λpi = well[:casing_thermal_conductivity, cell][inner_pipe_cell]
+        λpo = well[:casing_thermal_conductivity, cell][outer_pipe_cell]
         λpp, λpg, λgr = btes_thermal_conductivity(
             BTESTypeCoaxial(),
             r_grout,

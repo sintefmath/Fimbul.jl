@@ -79,53 +79,54 @@ function setup_btes_well_simple(D::DataDomain, reservoir_cells;
 
 end
 
-
 function setup_btes_well_u1(D::DataDomain, reservoir_cells;
     cell_centers = D[:cell_centroids],
+    neighborship = missing,
+    pipe_cells = missing,
+    grout_cells = missing,
+    well_cell_centers = missing,
     name = :BTES,
     radius_grout = 65e-3,
     radius_pipe = 15e-3,
     wall_thickness = 3e-3,
     pipe_spacing = 60e-3,
-    thermal_conductivity_grout = 2.3,
-    thermal_conductivity_pipe = 0.38,
+    grouting_thermal_conductivity = 2.3,
+    pipe_thermal_conductivity = 0.38,
     heat_capacity_grout = 1460,
     density_grout = 1500.0,
     kwarg...)
 
     ## Set up connectivity
-    reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
-    nc_pipe = length(reservoir_cells)
-    nc_grout = length(reservoir_cells)
-    nc_mid = div(nc_pipe, 2)
-    supply_ix = Int.(1:nc_mid)
-    return_ix = Int.(1:nc_mid) .+ nc_mid
+    if ismissing(neighborship)
+        if !ismissing(pipe_cells) && !ismissing(grout_cells)
+            error("Provide either neighborship, pipe_cells and grout_cells, or none of them.")
+        end
+        reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
+        nc_pipe = length(reservoir_cells)
+        nc_grout = length(reservoir_cells)
+        nc_mid = div(nc_pipe, 2)
+        supply_ix = Int.(1:nc_mid)
+        return_ix = Int.(1:nc_mid) .+ nc_mid
 
-    pipe_cells = (1:nc_pipe)
-    grout_cells = (1:nc_grout) .+ nc_pipe
+        pipe_cells = collect(1:nc_pipe)
+        grout_cells = collect(1:nc_grout) .+ nc_pipe
 
-    pipe_to_pipe = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
-    pipe_to_grout = vcat(pipe_cells', grout_cells')
-    grout_to_grout = vcat(grout_cells[supply_ix]', reverse(grout_cells[return_ix]'))
+        pipe_to_pipe = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
+        pipe_to_grout = vcat(pipe_cells', grout_cells')
+        grout_to_grout = vcat(grout_cells[supply_ix]', reverse(grout_cells[return_ix]'))
 
-    N = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
+        neighborship = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
 
+        well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
+    else
+        if ismissing(pipe_cells) || ismissing(grout_cells)
+            error("If neighborship is provided, pipe_cells and grout_cells must also be provided.")
+        end
+    end
     ## Set up segment flow models
     segment_models = Vector{Any}()
 
-    # Set centers and depths
-    xc_supply = cell_centers[:, reservoir_cells[supply_ix]] .+ [pipe_spacing/2, 0.0, 0.0]
-    xc_return = cell_centers[:, reservoir_cells[return_ix]] .- [pipe_spacing/2, 0.0, 0.0]
-    well_cell_centers = repeat(hcat(xc_supply, xc_return), 1, 2)
-    # well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
-
-    # Add top node
-    nseg = size(N,2)
-
-    # Set material thermal conducivities
-    nr = length(reservoir_cells)
-
-    for seg in eachcol(N)
+    for seg in eachcol(neighborship)
         if all([c ∈ pipe_cells for c in seg])
             # Pipe segments use standard wellbore friction model
             seg_model = SegmentWellBoreFrictionHB()
@@ -135,24 +136,25 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         push!(segment_models, seg_model)
     end
 
+    nc = maximum(neighborship)
     if radius_pipe isa Number
-        radius_pipe = fill(radius_pipe, 2*nc_pipe)
+        radius_pipe = fill(radius_pipe, nc)
         radius_pipe[grout_cells] .= 0.0
     end
 
     if wall_thickness isa Number
-        wall_thickness = fill(wall_thickness, 2*nc_pipe)
+        wall_thickness = fill(wall_thickness, nc)
         wall_thickness[grout_cells] .= 0.0
     end
 
-    if thermal_conductivity_pipe isa Number
-        thermal_conductivity_pipe = fill(thermal_conductivity_pipe, 2*nc_pipe)
-        thermal_conductivity_pipe[grout_cells] .= 0.0
+    if pipe_thermal_conductivity isa Number
+        pipe_thermal_conductivity = fill(pipe_thermal_conductivity, nc)
+        pipe_thermal_conductivity[grout_cells] .= 0.0
     end
 
-    if thermal_conductivity_grout isa Number
-        thermal_conductivity_grout = fill(thermal_conductivity_grout, 2*nc_pipe)
-        thermal_conductivity_grout[pipe_cells] .= 0.0
+    if grouting_thermal_conductivity isa Number
+        grouting_thermal_conductivity = fill(grouting_thermal_conductivity, nc)
+        grouting_thermal_conductivity[pipe_cells] .= 0.0
     end
 
     ## Set up supply and return wells
@@ -164,15 +166,15 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
 
     supply_well = setup_well(D, reservoir_cells;
         name = Symbol(name, "_supply"),
-        neighborship = N,
-        perforation_cells_well = collect(grout_cells),
+        neighborship = neighborship,
+        perforation_cells_well = grout_cells,
         well_cell_centers = well_cell_centers,
         cell_radius = radius_pipe - wall_thickness,
         casing_thickness = wall_thickness,
-        thermal_conductivity_casing = thermal_conductivity_pipe,
-        thermal_conductivity_grout = thermal_conductivity_grout,
+        casing_thermal_conductivity = pipe_thermal_conductivity,
+        grouting_thermal_conductivity = grouting_thermal_conductivity,
         segment_models = segment_models,
-        end_nodes = [nc_pipe],
+        end_nodes = [pipe_cells[end]],
         args..., kwarg...)
 
     augment_btes_domain!(BTESTypeU1(), supply_well,
@@ -186,7 +188,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         name = Symbol(name, "_return"),
         args...)
 
-    set_default_btes_thermal_indices!(BTESTypeU1(), supply_well)
+    set_default_btes_thermal_indices!(BTESTypeU1(), supply_well, pipe_cells, grout_cells)
     # set_default_btes_thermal_indices!(return_well)
 
     return [supply_well, return_well]
@@ -209,8 +211,8 @@ function augment_btes_domain!(type::BTESTypeU1, well::DataDomain,
     well[:radius_grout, c] = radius_grout
     well[:pipe_spacing, p] = pipe_spacing
     # well[:heat_capacity_grout, p] = heat_capacity_grout
-    well[:casing_heat_capacity, c] = heat_capacity_grout
-    well[:casing_density, c] = density_grout
+    well[:material_heat_capacity, c] = heat_capacity_grout
+    well[:material_density, c] = density_grout
 
     treat_defaulted(x) = x
     treat_defaulted(::Missing) = NaN
@@ -223,7 +225,7 @@ function augment_btes_domain!(type::BTESTypeU1, well::DataDomain,
 
 end
 
-function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
+function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain, pipe_cells, grout_cells)
     
     cell = Cells()
     face = Faces()
@@ -235,8 +237,8 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
     casing_volumes = zeros(Float64, num_nodes)
     grout_volumes = zeros(Float64, num_nodes)
 
-    pipe_cells = Int.(1:num_nodes/2)
-    grout_cells = Int.((num_nodes/2 + 1):num_nodes)
+    # pipe_cells = Int.(1:num_nodes/2)
+    # grout_cells = Int.((num_nodes/2 + 1):num_nodes)
     N = well.representation.neighborship
 
     rep = physical_representation(well)
@@ -270,8 +272,8 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain)
         grout_volumes[grout_cell] = vol_g
         
         pipe_spacing = well[:pipe_spacing, perf][pno]
-        λg = well[:thermal_conductivity_grout, cell][grout_cell]
-        λp = well[:thermal_conductivity_casing, cell][pipe_cell]
+        λg = well[:grouting_thermal_conductivity, cell][grout_cell]
+        λp = well[:casing_thermal_conductivity, cell][pipe_cell]
         λpg, λgr, λgg = btes_thermal_conductivity(
             BTESTypeU1(),
             r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, L, λg, λp)
