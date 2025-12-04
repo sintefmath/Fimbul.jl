@@ -80,11 +80,13 @@ function setup_btes_well_simple(D::DataDomain, reservoir_cells;
 end
 
 function setup_btes_well_u1(D::DataDomain, reservoir_cells;
+    return_reservoir_cell = reservoir_cells[1],
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells = missing,
     grout_cells = missing,
     well_cell_centers = missing,
+    end_nodes = missing,
     name = :BTES,
     radius_grout = 65e-3,
     radius_pipe = 15e-3,
@@ -118,6 +120,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         neighborship = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
 
         well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
+        end_nodes = [pipe_cells[end]]
     else
         if ismissing(pipe_cells) || ismissing(grout_cells)
             error("If neighborship is provided, pipe_cells and grout_cells must also be provided.")
@@ -174,7 +177,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         casing_thermal_conductivity = pipe_thermal_conductivity,
         grouting_thermal_conductivity = grouting_thermal_conductivity,
         segment_models = segment_models,
-        end_nodes = [pipe_cells[end]],
+        end_nodes = end_nodes,
         args..., kwarg...)
 
     augment_btes_domain!(BTESTypeU1(), supply_well,
@@ -184,7 +187,7 @@ function setup_btes_well_u1(D::DataDomain, reservoir_cells;
         density_grout
     )
     
-    return_well = setup_well(D, reservoir_cells[end];
+    return_well = setup_well(D, return_reservoir_cell;
         name = Symbol(name, "_return"),
         args...)
 
@@ -288,6 +291,21 @@ function set_default_btes_thermal_indices!(type::BTESTypeU1, well::DataDomain, p
 
         if seg_gg !== nothing && well[:material_thermal_conductivity, face][seg_gg] == 0.0
             well[:material_thermal_conductivity, face][seg_gg] = λgg
+        end
+    end
+
+    for pipe_cell in pipe_cells
+        if hole_volumes[pipe_cell] == 0.0
+            # This pipe cell was not assigned a volume, likely because it is not
+            # connected to a grout cell. Assign a default volume based on geometry.
+            r_pipe = well[:radius, cell][pipe_cell]
+            wall_thickness = well[:casing_thickness, cell][pipe_cell]
+            L = well[:cell_length, cell][pipe_cell]
+            vol_p, vol_w, vol_g = btes_volume(
+                BTESTypeU1(), L, 0.0, r_pipe, wall_thickness
+            )
+            hole_volumes[pipe_cell] = vol_p
+            casing_volumes[pipe_cell] = 0.0
         end
     end
 
