@@ -1,10 +1,18 @@
 function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
-    cell_centers = D[:cell_centroids],
     name = :CL,
+    return_reservoir_cell = reservoir_cells[1],
+    cell_centers = D[:cell_centroids],
+    neighborship = missing,
+    pipe_cells_inner = missing,
+    pipe_cells_outer = missing,
+    grout_cells = missing,
+    well_cell_centers = missing,
+    segment_models = missing,
+    end_nodes = missing,
     radius_grout = 65e-3,
-    radius_inner_pipe = 15e-3,
+    radius_pipe_inner = 15e-3,
+    radius_pipe_outer = 20e-3,
     wall_thickness_inner = 3e-3,
-    radius_outer_pipe = 20e-3,
     wall_thickness_outer = 3e-3,
     grouting_thermal_conductivity = 2.3,
     inner_pipe_thermal_conductivity = 0.38,
@@ -13,81 +21,77 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     density_grout = 1500.0,
     kwarg...)
 
-    ## Set up connectivity
-    nc_pipe = length(reservoir_cells)*2
-    nc_grout = length(reservoir_cells)
-    nc_mid = div(nc_pipe, 2)
-    inner_ix = Int.(1:nc_mid)
-    outer_ix = Int.(1:nc_mid) .+ nc_mid
-    nc_r = length(reservoir_cells)
 
-    pipe_cells_inner = (1:nc_r)
-    pipe_cells_outer = (1:nc_r) .+ nc_r
-    grout_cells = (1:nc_r) .+ 2*nc_r
-    pipe_cells = vcat(pipe_cells_inner, pipe_cells_outer)
-
-    # pipe_cells = (1:nc_pipe)
-    # grout_cells = (1:nc_grout) .+ nc_pipe
-    num_cells = nc_pipe + nc_grout
-
-    inner_conn = vcat(pipe_cells_inner[1:end-1]', pipe_cells_inner[2:end]')
-    outer_conn = vcat(pipe_cells_outer[1:end-1]', pipe_cells_outer[2:end]')
-    bottom_conn = [pipe_cells_inner[end]', pipe_cells_outer[end]']
-    pipe_to_pipe_conn = vcat(pipe_cells_inner[1:end-1]', pipe_cells_outer[1:end-1]')
-    pipe_to_grout_conn = vcat(pipe_cells_outer', grout_cells')
-    
-    N = hcat(inner_conn, outer_conn, bottom_conn, pipe_to_pipe_conn, pipe_to_grout_conn)
-
-    ## Set up segment flow models
-    segment_models = Vector{Any}()
-
-    # Set centers and depths
-    well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
-    
-    # Add top node
-    nseg = size(N,2)
-
-    # Set material thermal conducivities
-    nr = length(reservoir_cells)
-
-    flow_segs = size(inner_conn, 2) + size(outer_conn, 2) + size(bottom_conn, 2)
-    for s in 1:nseg
-        if s <= flow_segs
-            # Pipe segments use standard wellbore friction model
-            seg_model = SegmentWellBoreFrictionHB()
-        else
-            seg_model = JutulDarcy.ClosedSegment()
+     if ismissing(neighborship)
+        if !ismissing(pipe_cells_inner) && !ismissing(pipe_cells_outer) && !ismissing(grout_cells)
+            error(["Provide either neighborship, pipe_cells_inner, pipe_cells_outer, grout_cells, ",
+                "well_cell_centers, end_nodes, or none of them."])
         end
-        push!(segment_models, seg_model)
+        # Set inner/outer pipe and grout cells
+        nc_pipe = length(reservoir_cells)*2
+        nc_grout = length(reservoir_cells)
+        nc_r = length(reservoir_cells)
+        pipe_cells_inner = collect(1:nc_r)
+        pipe_cells_outer = pipe_cells_inner .+ nc_r
+        grout_cells = pipe_cells_outer .+ nc_r
+        # Set connectivity
+        num_cells = nc_pipe + nc_grout
+        pi2pi = vcat(pipe_cells_inner[1:end-1]', pipe_cells_inner[2:end]')
+        po2po = vcat(pipe_cells_outer[1:end-1]', pipe_cells_outer[2:end]')
+        pi2po_bottom = [pipe_cells_inner[end]', pipe_cells_outer[end]']
+        pi2po = vcat(pipe_cells_inner[1:end-1]', pipe_cells_outer[1:end-1]')
+        po2g = vcat(pipe_cells_outer', grout_cells')
+        neighborship = hcat(pi2pi, po2po, pi2po_bottom, pi2po, po2g)
+        # Set centers and end nodes
+        well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
+        end_nodes = [nc_r+1]
     end
 
+    if ismissing(segment_models)
+        # Set up segment flow models
+        segment_models = Vector{Any}()
+        flow_segs = size(pi2pi, 2) + size(po2po, 2) + size(pi2po_bottom, 2)
+        nseg = size(neighborship,2)
+        for s in 1:nseg
+            if s <= flow_segs
+                # Pipe segments use standard wellbore friction model
+                seg_model = SegmentWellBoreFrictionHB()
+            else
+                seg_model = JutulDarcy.ClosedSegment()
+            end
+            push!(segment_models, seg_model)
+        end
+    end
+
+    # Set cell radii
     cell_radius = zeros(num_cells)
     cell_radius_inner = zeros(num_cells)
-    cell_radius[inner_ix] .= radius_inner_pipe - wall_thickness_inner
-    cell_radius[outer_ix] .= radius_outer_pipe - wall_thickness_outer
-    cell_radius_inner[outer_ix] .= radius_inner_pipe
-    
+    cell_radius[pipe_cells_inner] .= radius_pipe_inner - wall_thickness_inner
+    cell_radius[pipe_cells_outer] .= radius_pipe_outer - wall_thickness_outer
+    cell_radius_inner[pipe_cells_outer] .= radius_pipe_inner
+    # Set casing thicknesses
     wall_thickness = zeros(num_cells)
-    wall_thickness[inner_ix] .= wall_thickness_inner
-    wall_thickness[outer_ix] .= wall_thickness_outer
-
+    wall_thickness[pipe_cells_inner] .= wall_thickness_inner
+    wall_thickness[pipe_cells_outer] .= wall_thickness_outer
+    # Set pipe wall thermal conductivities
     λ_pipe = zeros(num_cells)
-    λ_pipe[inner_ix] .= inner_pipe_thermal_conductivity
-    λ_pipe[outer_ix] .= outer_pipe_thermal_conductivity
-
+    λ_pipe[pipe_cells_inner] .= inner_pipe_thermal_conductivity
+    λ_pipe[pipe_cells_outer] .= outer_pipe_thermal_conductivity
+    # Set grouting thermal conductivities
     λ_grout = zeros(num_cells)
     λ_grout[grout_cells] .= grouting_thermal_conductivity
 
-    ## Set up supply and return wells
+    # Common well arguments
     args = (
         type = :closed_loop,
         simple_well = false,
         WI = 0.0
     )
 
+    # Setup supply well
     supply_well = setup_well(D, reservoir_cells;
         name = Symbol(name, "_supply"),
-        neighborship = N,
+        neighborship = neighborship,
         perforation_cells_well = collect(grout_cells),
         well_cell_centers = well_cell_centers,
         cell_radius = cell_radius,
@@ -95,21 +99,22 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         casing_thermal_conductivity = λ_pipe,
         grouting_thermal_conductivity = λ_grout,
         segment_models = segment_models,
-        end_nodes = [nc_r+1],
+        end_nodes = end_nodes,
         args..., kwarg...)
-
+    # Augment supply well with closed loop specific data
     augment_closed_loop_domain_coaxial!(supply_well,
         radius_grout,
         heat_capacity_grout,
         density_grout
     )
-    
+    # Set default thermal indices
+    set_default_closed_loop_thermal_indices_coaxial!(supply_well)
+
+    # Setup return well
     return_well = setup_well(D, reservoir_cells[1];
         name = Symbol(name, "_return"),
+        WIth = 0.0,
         args...)
-
-    set_default_closed_loop_thermal_indices_coaxial!(supply_well)
-    # set_default_btes_thermal_indices!(return_well)
 
     return [supply_well, return_well]
 
@@ -128,7 +133,6 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
     f = Faces()
 
     well[:radius_grout, c] = radius_grout
-    # well[:heat_capacity_grout, p] = heat_capacity_grout
     well[:material_heat_capacity, c] = heat_capacity_grout
     well[:material_density, c] = density_grout
 
@@ -144,7 +148,7 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
 end
 
 function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
-    
+
     cell = Cells()
     face = Faces()
     perf = Perforations()
@@ -191,7 +195,7 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
             r_inner_pipe + wall_thickness_inner, wall_thickness_inner,
             r_outer_pipe + wall_thickness_outer, wall_thickness_outer
         )
-       
+
         hole_volumes[inner_pipe_cell] = vol_ip
         hole_volumes[outer_pipe_cell] = vol_op
         hole_volumes[grout_cell] = 0.0
@@ -201,7 +205,7 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
         grout_volumes[inner_pipe_cell] = 0.0
         grout_volumes[outer_pipe_cell] = 0.0
         grout_volumes[grout_cell] = vol_g
-        
+
         λg = well[:grouting_thermal_conductivity, cell][grout_cell]
         λpi = well[:casing_thermal_conductivity, cell][inner_pipe_cell]
         λpo = well[:casing_thermal_conductivity, cell][outer_pipe_cell]
@@ -257,7 +261,7 @@ end
 
 function closed_loop_thermal_conductivity_coaxial(
     radius_grout,
-    radius_inner_pipe, wall_thickness_inner_pipe, 
+    radius_inner_pipe, wall_thickness_inner_pipe,
     radius_outer_pipe, wall_thickness_outer_pipe,
     length,
     thermal_conductivity_grout,
@@ -293,7 +297,7 @@ function closed_loop_thermal_conductivity_coaxial(
     R_pp = R_ai + R_ci
     R_pg = R_ao + R_co + R_cg
     R_gr = (1-x)*R_g
-    
+
     λpp = L/R_pp
     λpg = L/R_pg
     λgr = L/R_gr
