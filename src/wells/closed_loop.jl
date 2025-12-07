@@ -43,6 +43,22 @@ function setup_vertical_closed_loop_well(D::DataDomain, i, j;
     return setup_closed_loop_well(D, reservoir_cells; kwarg...)
 end
 
+function setup_btes_well(D::DataDomain, reservoir_cells;
+    name = :BTES, kwarg...)
+
+    return setup_closed_loop_well(D, reservoir_cells;
+        name = name, kwarg...)
+
+end
+
+function setup_vertical_btes_well(D::DataDomain, i, j;
+    name = :BTES, heel = 1, toe = missing, kwarg...)
+
+    return setup_vertical_closed_loop_well(D, i, j;
+        name = name, heel = heel, toe = toe, kwarg...)
+
+end
+
 function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
     name = :BTES,
     radius_pipe = 20e-3,
