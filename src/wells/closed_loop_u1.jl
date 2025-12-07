@@ -1,12 +1,13 @@
 function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
+    name = :CL,
     return_reservoir_cell = reservoir_cells[1],
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells = missing,
     grout_cells = missing,
     well_cell_centers = missing,
+    segment_models = missing,
     end_nodes = missing,
-    name = :CL,
     radius_grout = 65e-3,
     radius_pipe = 15e-3,
     wall_thickness = 3e-3,
@@ -48,15 +49,17 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     end
 
     # Set up segment flow models
-    segment_models = Vector{Any}()
-    for seg in eachcol(neighborship)
-        if all([c ∈ pipe_cells for c in seg])
-            # Pipe segments use standard wellbore friction model
-            seg_model = SegmentWellBoreFrictionHB()
-        else
-            seg_model = JutulDarcy.ClosedSegment()
+    if ismissing(segment_models)
+        segment_models = Vector{Any}()
+        for seg in eachcol(neighborship)
+            if all([c ∈ pipe_cells for c in seg])
+                # Pipe segments use standard wellbore friction model
+                seg_model = SegmentWellBoreFrictionHB()
+            else
+                seg_model = JutulDarcy.ClosedSegment()
+            end
+            push!(segment_models, seg_model)
         end
-        push!(segment_models, seg_model)
     end
 
     # Setup pipe radius
