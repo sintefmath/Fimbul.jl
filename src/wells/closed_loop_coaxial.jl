@@ -1,8 +1,6 @@
-struct BTESTypeCoaxial <: AbstractBTESType end
-
-function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
+function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     cell_centers = D[:cell_centroids],
-    name = :BTES,
+    name = :CL,
     radius_grout = 65e-3,
     radius_inner_pipe = 15e-3,
     wall_thickness_inner = 3e-3,
@@ -100,7 +98,7 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
         end_nodes = [nc_r+1],
         args..., kwarg...)
 
-    augment_btes_domain!(BTESTypeCoaxial(), supply_well,
+    augment_closed_loop_domain_coaxial!(supply_well,
         radius_grout,
         heat_capacity_grout,
         density_grout
@@ -110,14 +108,14 @@ function setup_btes_well_coaxial(D::DataDomain, reservoir_cells;
         name = Symbol(name, "_return"),
         args...)
 
-    set_default_btes_thermal_indices!(BTESTypeCoaxial(), supply_well)
+    set_default_closed_loop_thermal_indices_coaxial!(supply_well)
     # set_default_btes_thermal_indices!(return_well)
 
     return [supply_well, return_well]
 
 end
 
-function augment_btes_domain!(type::BTESTypeCoaxial, well::DataDomain,
+function augment_closed_loop_domain_coaxial!(well::DataDomain,
     radius_grout,
     heat_capacity_grout,
     density_grout;
@@ -145,7 +143,7 @@ function augment_btes_domain!(type::BTESTypeCoaxial, well::DataDomain,
 
 end
 
-function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDomain)
+function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
     
     cell = Cells()
     face = Faces()
@@ -188,8 +186,7 @@ function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDoma
         r_outer_pipe = well[:radius, cell][outer_pipe_cell]
         wall_thickness_outer = well[:casing_thickness, cell][outer_pipe_cell]
         L = well[:cell_length, cell][inner_pipe_cell]
-        vol_ip, vol_iw, vol_op, vol_ow, vol_g, L = btes_volume(
-            BTESTypeCoaxial(),
+        vol_ip, vol_iw, vol_op, vol_ow, vol_g, L = closed_loop_volume_coaxial(
             L, r_grout,
             r_inner_pipe + wall_thickness_inner, wall_thickness_inner,
             r_outer_pipe + wall_thickness_outer, wall_thickness_outer
@@ -208,8 +205,7 @@ function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDoma
         λg = well[:grouting_thermal_conductivity, cell][grout_cell]
         λpi = well[:casing_thermal_conductivity, cell][inner_pipe_cell]
         λpo = well[:casing_thermal_conductivity, cell][outer_pipe_cell]
-        λpp, λpg, λgr = btes_thermal_conductivity(
-            BTESTypeCoaxial(),
+        λpp, λpg, λgr = closed_loop_thermal_conductivity_coaxial(
             r_grout,
             r_inner_pipe + wall_thickness_inner, wall_thickness_inner,
             r_outer_pipe + wall_thickness_outer, wall_thickness_outer,
@@ -233,7 +229,7 @@ function set_default_btes_thermal_indices!(type::BTESTypeCoaxial, well::DataDoma
     well[:volume_override_grouting, cell] = grout_volumes
 end
 
-function btes_volume(type::BTESTypeCoaxial,
+function closed_loop_volume_coaxial(
     length,
     radius_grout,
     radius_inner_pipe, wall_thickness_inner_pipe,
@@ -259,7 +255,7 @@ function btes_volume(type::BTESTypeCoaxial,
 
 end
 
-function btes_thermal_conductivity(type::BTESTypeCoaxial,
+function closed_loop_thermal_conductivity_coaxial(
     radius_grout,
     radius_inner_pipe, wall_thickness_inner_pipe, 
     radius_outer_pipe, wall_thickness_outer_pipe,
