@@ -7,7 +7,7 @@ second, day = si_units(:second, :day)
 Kelvin, Joule, Watt = si_units(:kelvin, :joule, :watt)
 darcy = si_unit(:darcy)
 
-## Operation conditions
+## Operating conditions
 T_in = convert_to_si(80.0, :Celsius)
 T_rock = convert_to_si(10.0, :Celsius)
 Q = 21.86*meter^3/day
@@ -112,6 +112,7 @@ function setup_btes_single(type; nz = 100, n_step = 1, inlet = :outer)
     )
 
     forces = setup_reservoir_forces(model; control=controls, bc = bc)
+    rg = well_args.radius_grout
     time = 5/4*2*rg*(ϕ*ρf*Cpf + (1 - ϕ)*ρr*Cpr)/(ϕ*λf + (1 - ϕ)*λr)*10
     dt = fill(time/n_step, n_step)
     state0 = setup_reservoir_state(model; Pressure = 5*atm, Temperature = T_rock)
@@ -122,32 +123,53 @@ function setup_btes_single(type; nz = 100, n_step = 1, inlet = :outer)
 end
 
 ##
-function plot_btes!(ax, case, simulated, analytical)
+function plot_btes(case, simulated, analytical)
+
+    fig = Figure(size = (800, 600))
+    ax = Axis(fig[1, 1], 
+    title = "BTES Temperature", xlabel = "Temperature", ylabel = "Depth",
+    yreversed = true)
 
     well = case.model.models[:BTES_supply].data_domain
     za = analytical[:z]
     sections = last.(well[:section]) |> unique |> collect
-
-    sprops = (color = :darkred, linewidth = 2)
-    aprops = (color = :black, linewidth = 8, linestyle = :dash)
-
+    # colors = cgrad(:Paired_10, 10, categorical=true)
+    # colors = cgrad(:BrBg, 5, categorical=true)[[1,2,end-1,end]]
+    colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4,3]]
     sim_temp = convert_from_si.(
         simulated.result.states[end][:BTES_supply][:Temperature], :Celsius)
-    for section in sections
-        
+    section_handles = []
+    solution_handles = []
+    section_names = String[]
+    solution_names = String[]
+    for (i, section) in enumerate(sections)
+        # Section name for printing
+        name = titlecase(replace(string(section), "_" => " "))
+        # Plot analytical solution
         Ta = convert_from_si.(analytical[section].(za), :Celsius)
-        lines!(ax, Ta, za; aprops...)
-        
+        la = lines!(ax, Ta, za; color=colors[i], linewidth = 8, linestyle = :dash, label=name)
+        # Plot numerical solution
         cells = last.(well[:section]) .== section
         Tn = sim_temp[cells]
         zn = well[:cell_centroids][3, cells]
-        lines!(ax, Tn, zn; sprops...)
+        ln = lines!(ax, Tn, zn; color=colors[i], linewidth = 2)
+        push!(section_handles, la)
+        push!(section_names, name)
+        if i == 1
+           push!(solution_handles, la, ln)
+           push!(solution_names, "Analytical", "Numerical")
+        end
     end
+    Legend(fig[1, 2], [section_handles, solution_handles], [section_names, solution_names],
+        ["Sections", "Solutions"]; orientation = :vertical)
 
+
+    return fig
+    
 end
 
 ##
-case = setup_btes_single(:u1; nz=100)
+case_u1 = setup_btes_single(:u1; nz=100)
 sim, cfg = setup_reservoir_simulator(case;
 initial_dt = 1.0);
 sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
@@ -161,22 +183,17 @@ analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
     geo_u1.wall_thickness_pipe, geo_u1.pipe_spacing, λg, geo_u1.pipe_thermal_conductivity)
 analytical_u1[:z] = collect(range(0, L, step=0.1));
 
-
+##
+fig = plot_btes(case_u1, res_u1, analytical_u1)
 
 ##
-fig = Figure(size = (800, 600))
-ax = Axis(fig[1, 1], title = "BTES U1 Temperature", xlabel = "Temperature", ylabel = "Depth", yreversed = true)
-plot_btes!(ax, case, res, analytical_u1)
-fig
-
-##
-case = setup_btes_single(:coaxial; nz=100, inlet = :outer)
-sim, cfg = setup_reservoir_simulator(case;
+case_coax_outer = setup_btes_single(:coaxial; nz=100, inlet = :outer)
+sim, cfg = setup_reservoir_simulator(case_coax_outer;
 initial_dt = 1.0);
 sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
     relative = false, model = :BTES_supply)
 push!(cfg[:timestep_selectors], sel);
-res_coax_outer = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
+res_coax_outer = simulate_reservoir(case_coax_outer; simulator = sim, config = cfg, info_level = 2)
 
 ##
 analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
@@ -188,19 +205,16 @@ analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
 analytical_coax_outer[:z] = collect(range(0, L, step=0.1));
 
 ##
-fig = Figure(size = (800, 600))
-ax = Axis(fig[1, 1], title = "BTES Coaxial Temperature", xlabel = "Temperature", ylabel = "Depth", yreversed = true)
-plot_btes!(ax, case, res_coax_outer, analytical_coax_outer)
-fig
+plot_btes(case_coax_outer, res_coax_outer, analytical_coax_outer)
 
 ##
-case = setup_btes_single(:coaxial; nz=100, inlet = :inner)
-sim, cfg = setup_reservoir_simulator(case;
+case_coax_inner = setup_btes_single(:coaxial; nz=100, inlet = :inner)
+sim, cfg = setup_reservoir_simulator(case_coax_inner;
 initial_dt = 1.0);
 sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
     relative = false, model = :BTES_supply)
 push!(cfg[:timestep_selectors], sel);
-res_coax_inner = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
+res_coax_inner = simulate_reservoir(case_coax_inner; simulator = sim, config = cfg, info_level = 2)
 
 ##
 analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
@@ -212,98 +226,4 @@ analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
 analytical_coax_inner[:z] = collect(range(0, L, step=0.1));
 
 ##
-fig = Figure(size = (800, 600))
-ax = Axis(fig[1, 1], title = "BTES Coaxial Temperature", xlabel = "Temperature", ylabel = "Depth", yreversed = true)
-plot_btes!(ax, case, res_coax_inner, analytical_coax_inner)
-fig
-
-
-
-
-
-
-
-
-
-##
-sol = Fimbul.temperature_u1(Q, T_in, T_rock,
-    ρf, Cpf, L, rg, rp, wtp, ps, λg, λp)
-    
-
-function compute_error(res, case, Tsol)
-    well = case.model.models[:BTES_supply].data_domain
-    Tnum = convert_from_si.(res.result.states[end][:BTES_supply][:Temperature], :Celsius)
-    znum = well[:cell_centroids][3,:]
-    dz = well[:cell_length]
-
-    err_l2 = 0.0
-    err_inf = -Inf
-    for section in (:pipe_supply, :pipe_return, :grout_supply, :grout_return)
-        cells = last.(well[:section]) .== section
-        # dz = diff(vcat(0.0, zs))
-        Ts = convert_from_si.(Tsol[section].(znum[cells]), :Celsius)
-        Tn = Tnum[cells]
-        dz_s = dz[cells]
-        e_l2 = sqrt(sum((Tn .- Ts).^2.0.*dz_s)./sum(dz_s))
-        e_inf = maximum(abs.(Tn .- Ts))
-        err_l2 += e_l2
-        err_inf = max(err_inf, e_inf)
-        println("Max error in section $section: $e_inf °C")
-    end
-    return err_l2, err_inf
-end
-
-errors = Dict(:l2 => Float64[], :inf => Float64[])
-cell_size = Float64[]
-num_cells = 5*2.0.^(0:5)
-for nz = num_cells
-    println("Running with nz = $nz")
-    case = setup_btes_single(Int(nz))
-    sim, cfg = setup_reservoir_simulator(case;
-    initial_dt = 1.0);
-    sel = VariableChangeTimestepSelector(:Temperature, 5.0; 
-        relative = false, model = :BTES_supply)
-    push!(cfg[:timestep_selectors], sel);
-    res = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 1)
-    
-    err_l2, err_inf = compute_error(res, case, Tsol)
-    push!(errors[:l2], err_l2)
-    push!(errors[:inf], err_inf)
-    push!(cell_size, L/Int(nz))
-end
-
-##
-fig = Figure(size = (800, 600))
-ax = Axis(fig[1, 1]; xreversed=true, xscale = log2, yscale = log2, aspect = AxisAspect(1),
-title = "L² Error", xlabel = "Cell size (m)")
-lines!(ax, cell_size, errors[:l2]; linewidth = 2, color = :black)
-scatter!(ax, cell_size, errors[:l2]; markersize = 10, color = :black)
-
-ax = Axis(fig[1, 2]; xreversed=true, xscale = log2, yscale = log2, aspect = AxisAspect(1),
-title = "L∞ Error", xlabel = "Cell size (m)")
-lines!(ax, cell_size, errors[:inf]; linewidth = 2, color = :black)
-scatter!(ax, cell_size, errors[:inf]; markersize = 10, color = :black)
-fig
-
-##
-rg = 50e-3
-rp_out = 25e-3
-rp_in = 12e-3
-wtp_out = 4.0e-3
-wtp_in = 3e-3
-sol = Fimbul.analytical_closed_loop_coaxial(Q, Tin, Trock,
-    ρf, Cpf, L, rg, rp_in, wtp_in, rp_out, wtp_out, λg, λp, λp; inlet = :outer)
-
-
-fig = Figure(size = (800, 600))
-ax = Axis(fig[1, 1]; yreversed=true)
-aprops = (color = :black, linewidth = 8, linestyle = :dash)
-
-plot_analytical! = (ax, section) -> begin
-    lines!(ax, convert_from_si.(sol[section].(zsol), :Celsius), zsol; aprops...)
-end
-
-for section in (:pipe_inner, :pipe_outer, :grout)
-    plot_analytical!(ax, section)
-end
-fig
+plot_btes(case_coax_inner, res_coax_inner, analytical_coax_inner)
