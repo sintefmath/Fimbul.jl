@@ -122,21 +122,6 @@ function setup_btes_single(type; nz = 100, n_step = 1, inlet = :outer)
 end
 
 ##
-case = setup_btes_single(:u1; nz=100)
-sim, cfg = setup_reservoir_simulator(case;
-initial_dt = 1.0);
-sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
-    relative = false, model = :BTES_supply)
-push!(cfg[:timestep_selectors], sel);
-res_u1 = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
-
-##
-analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
-    ρf, Cpf, L, geo_u1.radius_grout, geo_u1.radius_pipe,
-    geo_u1.wall_thickness_pipe, geo_u1.pipe_spacing, λg, geo_u1.pipe_thermal_conductivity)
-analytical_u1[:z] = collect(range(0, L, step=0.1));
-
-##
 function plot_btes!(ax, case, simulated, analytical)
 
     well = case.model.models[:BTES_supply].data_domain
@@ -160,6 +145,23 @@ function plot_btes!(ax, case, simulated, analytical)
     end
 
 end
+
+##
+case = setup_btes_single(:u1; nz=100)
+sim, cfg = setup_reservoir_simulator(case;
+initial_dt = 1.0);
+sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
+    relative = false, model = :BTES_supply)
+push!(cfg[:timestep_selectors], sel);
+res_u1 = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
+
+##
+analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
+    ρf, Cpf, L, geo_u1.radius_grout, geo_u1.radius_pipe,
+    geo_u1.wall_thickness_pipe, geo_u1.pipe_spacing, λg, geo_u1.pipe_thermal_conductivity)
+analytical_u1[:z] = collect(range(0, L, step=0.1));
+
+
 
 ##
 fig = Figure(size = (800, 600))
