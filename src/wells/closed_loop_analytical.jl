@@ -14,7 +14,7 @@ function temperature_closed_loop_pipe(u, T_in, T_rock, ρ, Cp, A, L, R1Δ, R2Δ,
     T_out = (T_in*(f1(L) .+ f2(L)) .+ I_supp(L) .+ I_ret(L))/(f3(L) .- f2(L))
     T_supply = z -> T_in*f1(z) .+ T_out*f2(z) .+ I_supp(z)
     T_return = z -> -T_in*f2(z) .+ T_out*f3(z) .- I_ret(z)
-    
+
     return T_supply, T_return
 
 end
@@ -36,7 +36,8 @@ function f_functions(u, ρ, Cp, A, R1Δ, R2Δ, R12Δ)
     return (f1, f2, f3, f4, f5)
 end
 
-function analytical_closed_loop_u1(rate, temperature_in, temperature_rock, density_fluid, heat_capacity_fluid,
+function analytical_closed_loop_u1(rate, temperature_in, temperature_rock,
+    density_fluid, heat_capacity_fluid,
     length, radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
     thermal_conductivity_grout, thermal_conductivity_pipe)
 
@@ -53,10 +54,10 @@ function analytical_closed_loop_u1(rate, temperature_in, temperature_rock, densi
         Tps, Tpr, temperature_rock, Rpg, Rgr, Rgg)
     
     sol = Dict()
-    sol[:pipe_supply] = Tps
-    sol[:pipe_return] = Tpr
-    sol[:grout_supply] = Tgs
-    sol[:grout_return] = Tgr
+    sol[:pipe_left] = Tps
+    sol[:pipe_right] = Tpr
+    sol[:grout_left] = Tgs
+    sol[:grout_right] = Tgr
 
     return sol
 
@@ -77,32 +78,79 @@ function temperature_grout_u1(T_supply, T_return, T_rock, Rpg, Rgr, Rgg)
 
     u1 = 1/Rpg + 1/Rgr + 1/Rgg
     Tgs = z -> (
-        Trock/Rgr + 
+        T_rock/Rgr + 
         T_return(z)/Rpg + 
-        (Trock/Rgr + Tsupply(z)/Rpg)*u1*Rgg
+        (T_rock/Rgr + T_supply(z)/Rpg)*u1*Rgg
         )*Rgg/
         ((Rgg*u1)^2-1)
 
     Tgr = z -> (
         Tgs(z)/Rgg + 
         T_return(z)/Rpg + 
-        Trock/Rgr
+        T_rock/Rgr
         )*1/u1
 
     return Tgs, Tgr
 
 end
 
-function analytical_closed_loop_coaxial()
+function analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
+    density_fluid, heat_capacity_fluid,
+    length, radius_grout,
+    radius_inner_pipe, wall_thickness_inner_pipe,
+    radius_outer_pipe, wall_thickness_outer_pipe,
+    thermal_conductivity_grout,
+    thermal_conductivity_inner_pipe,
+    thermal_conductivity_outer_pipe;
+    inlet = :outer)
 
+    Rpp, Rpg, Rgr = closed_loop_thermal_resistance_coaxial(
+        radius_grout,
+        radius_inner_pipe, wall_thickness_inner_pipe,
+        radius_outer_pipe, wall_thickness_outer_pipe,
+        thermal_conductivity_grout,
+        thermal_conductivity_inner_pipe,
+        thermal_conductivity_outer_pipe
+    )
+    if inlet == :outer
+        A = π*((radius_outer_pipe - wall_thickness_outer_pipe)^2 - radius_inner_pipe^2)
+    elseif inlet == :inner
+        A = π*(radius_inner_pipe - wall_thickness_inner_pipe)^2
+    else
+        error("Inlet must be :outer or :inner")
+    end
+    u = rate/A
+    Tps, Tpr = temperature_pipe_coaxial(
+        u, temperature_in, temperature_rock,
+        density_fluid, heat_capacity_fluid,
+        A, length, Rpg, Rgr, Rpp, inlet
+    )
+    
+    To = inlet == :inner ? Tpr : Tps
+    Ti = inlet == :inner ? Tps : Tpr
+    Tg = temperature_grout_coaxial(
+        To, temperature_rock, Rpg, Rgr)
+    
+    sol = Dict()
+    sol[:pipe_inner] = Ti
+    sol[:pipe_outer] = To
+    sol[:grout] = Tg
 
+    return sol
 
 end
 
-function temperature_pipe_coaxial(u, T_in, T_rock, ρ, Cp, A, L, Rpg, Rgr, Rpp)
+function temperature_pipe_coaxial(u, T_in, T_rock, ρ, Cp, A, L, Rpg, Rgr, Rpp, inlet)
 
-    R1Δ = Rpg + Rgr
-    R2Δ = Inf
+    if inlet == :outer
+        R1Δ = Rpg + Rgr
+        R2Δ = Inf
+    elseif inlet == :inner
+        R1Δ = Inf
+        R2Δ = Rpg + Rgr
+    else
+        error("Inlet must be :outer or :inner")
+    end
     R12Δ = Rpp
 
     return temperature_closed_loop_pipe(u, T_in, T_rock, ρ, Cp, A, L, R1Δ, R2Δ, R12Δ)
@@ -112,7 +160,6 @@ end
 function temperature_grout_coaxial(T_annulus, T_rock, Rpg, Rgr)
 
     T_grout = z -> Rpg/(Rpg + Rgr)*(T_rock - T_annulus(z)) + T_annulus(z)
-
     return T_grout
 
 end
