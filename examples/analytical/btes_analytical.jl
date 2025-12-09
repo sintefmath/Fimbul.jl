@@ -8,8 +8,8 @@ Kelvin, Joule, Watt = si_units(:kelvin, :joule, :watt)
 darcy = si_unit(:darcy)
 
 ## Operation conditions
-Tin = convert_to_si(80.0, :Celsius)
-Trock = convert_to_si(10.0, :Celsius)
+T_in = convert_to_si(80.0, :Celsius)
+T_rock = convert_to_si(10.0, :Celsius)
 Q = 21.86*meter^3/day
 
 # Fluid
@@ -30,15 +30,31 @@ Cpg = 1500.0*Joule/(kilogram*Kelvin) # Grout
 λg = 2.3*Watt/(meter*Kelvin) # Grout
 λp = 0.38*Watt/(meter*Kelvin) # Pipe
 
-# Geometry
+# BTES geometries
 L = 100.0*meter # BTES length
-rg = 65e-3*meter # Grout radius
-rp = 16e-3*meter # Pipe outer radius
-wtp = 2.9e-3*meter # Pipe wall thickness
-ps = 60e-3*meter # Pipe spacing
+
+geo_u1 = ( # U1 geometry
+    closed_loop_type = :u1,
+    radius_grout = 65e-3*meter, # Grout radius
+    radius_pipe = 16e-3*meter, # Pipe outer radius
+    wall_thickness_pipe = 2.9e-3*meter, # Pipe wall thickness
+    pipe_spacing = 60e-3*meter, # Pipe spacing
+    pipe_thermal_conductivity = λp, # Pipe thermal conductivity
+)
+
+geo_coax = ( # Coaxial geometry
+    closed_loop_type = :coaxial,
+    radius_grout = 50e-3*meter, # Grout radius
+    radius_pipe_inner = 12e-3*meter, # Inner pipe outer radius
+    wall_thickness_pipe_inner = 3e-3*meter, # Inner pipe wall thickness
+    radius_pipe_outer = 25e-3*meter, # Outer pipe outer radius
+    wall_thickness_pipe_outer = 4e-3*meter, # Outer pipe wall thickness
+    inner_pipe_thermal_conductivity = λp, # Pipe thermal conductivity
+    outer_pipe_thermal_conductivity = λp # Pipe thermal conductivity
+)
 
 ##
-function setup_btes_single(nz = 100, n_step = 1)
+function setup_btes_single(type; nz = 100, n_step = 1, inlet = :outer)
 
     dims = (1,1,nz) 
     Δ = (100000.0*dims[3]/L, 100000.0*dims[3]/L, L)
@@ -53,16 +69,17 @@ function setup_btes_single(nz = 100, n_step = 1)
         permeability = K
     )
 
-    #
+    if type == :u1
+        well_args = geo_u1
+    elseif type == :coaxial
+        well_args = geo_coax
+    else
+        error("Unknown closed loop type: $type")
+    end
     wells = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
-        closed_loop_type = :u1,
-        radius_grout = rg, 
-        pipe_spacing = ps,
-        radius_pipe = rp,
-        wall_thickness = wtp,
+        well_args...,
         grouting_density = ρg,
         grouting_heat_capacity = Cpg,
-        pipe_thermal_conductivity = λp,
         grouting_thermal_conductivity = λg
     )
 
@@ -70,27 +87,34 @@ function setup_btes_single(nz = 100, n_step = 1)
     sys = SinglePhaseSystem(AqueousPhase(), reference_density = ρf)
     model = setup_reservoir_model(reservoir, sys; wells = wells, thermal = true)
 
-    #
+    ## Injection control
     rate_target = TotalRateTarget(Q)
-    ctrl_charge = InjectorControl(rate_target, [1.0], 
-        density=ρf, temperature=Tin)
-
-    # BHP control for return side
+    ctrl_inj = InjectorControl(rate_target, [1.0], 
+        density=ρf, temperature=T_in)
+    ## BHP control for return side
     bhp_target = BottomHolePressureTarget(5.0*atm)
-    ctrl_ret = ProducerControl(bhp_target);
+    ctrl_prod = ProducerControl(bhp_target);
     geo = tpfv_geometry(msh)
     bc_cells = geo.boundary_neighbors
     domain = reservoir_model(model).data_domain
-    bc = flow_boundary_condition(bc_cells, domain, 5.0*atm, Trock)
+    bc = flow_boundary_condition(bc_cells, domain, 5.0*atm, T_rock)
+
+    if type == :coaxial && inlet == :outer
+        ctrl_supply = ctrl_prod
+        ctrl_return = ctrl_inj
+    else
+        ctrl_supply = ctrl_inj
+        ctrl_return = ctrl_prod
+    end
     controls = Dict(
-        :BTES_supply => ctrl_charge,
-        :BTES_return => ctrl_ret
+        :BTES_supply => ctrl_supply,
+        :BTES_return => ctrl_return
     )
 
     forces = setup_reservoir_forces(model; control=controls, bc = bc)
     time = 5/4*2*rg*(ϕ*ρf*Cpf + (1 - ϕ)*ρr*Cpr)/(ϕ*λf + (1 - ϕ)*λr)*10
     dt = fill(time/n_step, n_step)
-    state0 = setup_reservoir_state(model; Pressure = 5*atm, Temperature = Trock)
+    state0 = setup_reservoir_state(model; Pressure = 5*atm, Temperature = T_rock)
     case = JutulCase(model, dt, forces; state0 = state0)
 
     return case
@@ -98,52 +122,109 @@ function setup_btes_single(nz = 100, n_step = 1)
 end
 
 ##
-case = setup_btes_single(100)
+case = setup_btes_single(:u1; nz=100)
 sim, cfg = setup_reservoir_simulator(case;
 initial_dt = 1.0);
 sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
     relative = false, model = :BTES_supply)
 push!(cfg[:timestep_selectors], sel);
-res = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
+res_u1 = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
 
 ##
-Tsol = Fimbul.analytical_closed_loop_u1(Q, Tin, Trock,
-ρf, Cpf, L, rg, rp, wtp, ps, λg, λp)
-zsol = collect(range(0, L, step=0.1));
+analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
+    ρf, Cpf, L, geo_u1.radius_grout, geo_u1.radius_pipe,
+    geo_u1.wall_thickness_pipe, geo_u1.pipe_spacing, λg, geo_u1.pipe_thermal_conductivity)
+analytical_u1[:z] = collect(range(0, L, step=0.1));
 
 ##
-using GLMakie
+function plot_btes!(ax, case, simulated, analytical)
 
-well = case.model.models[:BTES_supply].data_domain
+    well = case.model.models[:BTES_supply].data_domain
+    za = analytical[:z]
+    sections = last.(well[:section]) |> unique |> collect
 
+    sprops = (color = :darkred, linewidth = 2)
+    aprops = (color = :black, linewidth = 8, linestyle = :dash)
+
+    sim_temp = convert_from_si.(
+        simulated.result.states[end][:BTES_supply][:Temperature], :Celsius)
+    for section in sections
+        
+        Ta = convert_from_si.(analytical[section].(za), :Celsius)
+        lines!(ax, Ta, za; aprops...)
+        
+        cells = last.(well[:section]) .== section
+        Tn = sim_temp[cells]
+        zn = well[:cell_centroids][3, cells]
+        lines!(ax, Tn, zn; sprops...)
+    end
+
+end
+
+##
 fig = Figure(size = (800, 600))
-ax = Axis(fig[1, 1]; yreversed=true)
-z = collect(range(0, 100.0, step=0.1))
-
-Tnum = convert_from_si.(res.result.states[end][:BTES_supply][:Temperature], :Celsius)
-znum = well[:cell_centroids][3,:]
-
-sprops = (color = :darkred, linewidth = 2)
-aprops = (color = :black, linewidth = 8, linestyle = :dash)
-
-plot_analytical! = (ax, section) -> begin
-    lines!(ax, convert_from_si.(Tsol[section].(zsol), :Celsius), zsol; aprops...)
-end
-
-plot_numerical! = (ax, section) -> begin 
-    cells = last.(well[:section]) .== section
-    lines!(ax, Tnum[cells], znum[cells]; sprops...)
-end
-
-for section in (:pipe_supply, :pipe_return, :grout_supply, :grout_return)
-    plot_analytical!(ax, section)
-    plot_numerical!(ax, section)
-end
-
+ax = Axis(fig[1, 1], title = "BTES U1 Temperature", xlabel = "Temperature", ylabel = "Depth", yreversed = true)
+plot_btes!(ax, case, res, analytical_u1)
 fig
 
 ##
-sol = Fimbul.temperature_u1(Q, Tin, Trock,
+case = setup_btes_single(:coaxial; nz=100, inlet = :outer)
+sim, cfg = setup_reservoir_simulator(case;
+initial_dt = 1.0);
+sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
+    relative = false, model = :BTES_supply)
+push!(cfg[:timestep_selectors], sel);
+res_coax_outer = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
+
+##
+analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
+    ρf, Cpf, L, geo_coax.radius_grout,
+    geo_coax.radius_pipe_inner, geo_coax.wall_thickness_pipe_inner,
+    geo_coax.radius_pipe_outer, geo_coax.wall_thickness_pipe_outer,
+    λg, geo_coax.inner_pipe_thermal_conductivity, geo_coax.outer_pipe_thermal_conductivity,
+    inlet = :outer)
+analytical_coax_outer[:z] = collect(range(0, L, step=0.1));
+
+##
+fig = Figure(size = (800, 600))
+ax = Axis(fig[1, 1], title = "BTES Coaxial Temperature", xlabel = "Temperature", ylabel = "Depth", yreversed = true)
+plot_btes!(ax, case, res_coax_outer, analytical_coax_outer)
+fig
+
+##
+case = setup_btes_single(:coaxial; nz=100, inlet = :inner)
+sim, cfg = setup_reservoir_simulator(case;
+initial_dt = 1.0);
+sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
+    relative = false, model = :BTES_supply)
+push!(cfg[:timestep_selectors], sel);
+res_coax_inner = simulate_reservoir(case; simulator = sim, config = cfg, info_level = 2)
+
+##
+analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
+    ρf, Cpf, L, geo_coax.radius_grout,
+    geo_coax.radius_pipe_inner, geo_coax.wall_thickness_pipe_inner,
+    geo_coax.radius_pipe_outer, geo_coax.wall_thickness_pipe_outer,
+    λg, geo_coax.inner_pipe_thermal_conductivity, geo_coax.outer_pipe_thermal_conductivity,
+    inlet = :inner)
+analytical_coax_inner[:z] = collect(range(0, L, step=0.1));
+
+##
+fig = Figure(size = (800, 600))
+ax = Axis(fig[1, 1], title = "BTES Coaxial Temperature", xlabel = "Temperature", ylabel = "Depth", yreversed = true)
+plot_btes!(ax, case, res_coax_inner, analytical_coax_inner)
+fig
+
+
+
+
+
+
+
+
+
+##
+sol = Fimbul.temperature_u1(Q, T_in, T_rock,
     ρf, Cpf, L, rg, rp, wtp, ps, λg, λp)
     
 
@@ -200,4 +281,27 @@ ax = Axis(fig[1, 2]; xreversed=true, xscale = log2, yscale = log2, aspect = Axis
 title = "L∞ Error", xlabel = "Cell size (m)")
 lines!(ax, cell_size, errors[:inf]; linewidth = 2, color = :black)
 scatter!(ax, cell_size, errors[:inf]; markersize = 10, color = :black)
+fig
+
+##
+rg = 50e-3
+rp_out = 25e-3
+rp_in = 12e-3
+wtp_out = 4.0e-3
+wtp_in = 3e-3
+sol = Fimbul.analytical_closed_loop_coaxial(Q, Tin, Trock,
+    ρf, Cpf, L, rg, rp_in, wtp_in, rp_out, wtp_out, λg, λp, λp; inlet = :outer)
+
+
+fig = Figure(size = (800, 600))
+ax = Axis(fig[1, 1]; yreversed=true)
+aprops = (color = :black, linewidth = 8, linestyle = :dash)
+
+plot_analytical! = (ax, section) -> begin
+    lines!(ax, convert_from_si.(sol[section].(zsol), :Celsius), zsol; aprops...)
+end
+
+for section in (:pipe_inner, :pipe_outer, :grout)
+    plot_analytical!(ax, section)
+end
 fig
