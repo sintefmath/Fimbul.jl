@@ -203,7 +203,7 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         wall_thickness = well[:casing_thickness, cell][pipe_cell]
         L = well[:cell_length, cell][pipe_cell]
         vol_p, vol_w, vol_g = closed_loop_volume_u1(
-            L, r_grout, r_pipe, wall_thickness
+            L, r_grout, r_pipe + wall_thickness, wall_thickness
         )
        
         hole_volumes[pipe_cell] = vol_p
@@ -211,7 +211,7 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         casing_volumes[pipe_cell] = 0.0
         casing_volumes[grout_cell] = 0.0
         grout_volumes[pipe_cell] = 0.0
-        grout_volumes[grout_cell] = vol_g + vol_w
+        grout_volumes[grout_cell] = vol_g
         
         pipe_spacing = well[:pipe_spacing, perf][pno]
         λg = well[:grouting_thermal_conductivity, cell][grout_cell]
@@ -244,7 +244,7 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
             wall_thickness = well[:casing_thickness, cell][pipe_cell]
             L = well[:cell_length, cell][pipe_cell]
             vol_p, vol_w, vol_g = closed_loop_volume_u1(
-                L, 0.0, r_pipe, wall_thickness
+                L, 0.0, r_pipe + wall_thickness, wall_thickness
             )
             hole_volumes[pipe_cell] = vol_p
             casing_volumes[pipe_cell] = 0.0
@@ -266,7 +266,7 @@ function closed_loop_volume_u1(length, radius_grout, radius_pipe, wall_thickness
     vol_wall = vol_pipe - vol_hole
     vol_grout = π*rg^2*L/2 - vol_pipe
 
-    return vol_hole, vol_wall, vol_grout, L
+    return vol_hole, vol_wall, vol_grout
 
 end
 
