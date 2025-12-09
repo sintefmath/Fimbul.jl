@@ -105,6 +105,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         perforation_cells_well = collect(grout_cells),
         well_cell_centers = well_cell_centers,
         cell_radius = cell_radius,
+        cell_radius_inner = cell_radius_inner,
         casing_thickness = wall_thickness,
         casing_thermal_conductivity = λ_pipe,
         grouting_thermal_conductivity = λ_grout,
