@@ -5,6 +5,7 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     neighborship = missing,
     pipe_cells = missing,
     grout_cells = missing,
+    section = missing,
     well_cell_centers = missing,
     segment_models = missing,
     end_nodes = missing,
@@ -14,8 +15,8 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     pipe_spacing = 60e-3,
     grouting_thermal_conductivity = 2.3,
     pipe_thermal_conductivity = 0.38,
-    heat_capacity_grout = 1460,
-    density_grout = 1500.0,
+    grouting_heat_capacity = 1500,
+    grouting_density = 2000.0,
     kwarg...)
 
     if ismissing(neighborship)
@@ -38,8 +39,20 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
         grout_to_grout = vcat(grout_cells[down_ix]', reverse(grout_cells[up_ix]'))
         neighborship = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
         # Set up well cell centers and end nodes
-        well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 2)
+        wc_supply = cell_centers[:, reservoir_cells[1:nc_mid]] .- [pipe_spacing/2, 0.0, 0.0]
+        wc_return = cell_centers[:, reservoir_cells[nc_mid+1:end]] .+ [pipe_spacing/2, 0.0, 0.0]
+        well_cell_centers = repeat(hcat(wc_supply, wc_return), 1, 2)
         end_nodes = [pipe_cells[end]]
+        # Set section for easy lookup
+        if !ismissing(section)
+            @warn(["section argument is ignored when neighborship is not provided. ",
+                "Sections will be created automatically."])
+        end
+        section = Vector{Any}(undef, nc_pipe + nc_grout)
+        section[pipe_cells[down_ix]] .= [(1, :pipe_supply)]
+        section[pipe_cells[up_ix]] .= [(1, :pipe_return)]
+        section[grout_cells[down_ix]] .= [(1, :grout_supply)]
+        section[grout_cells[up_ix]] .= [(1, :grout_return)]
     else
         if ismissing(pipe_cells) || ismissing(grout_cells) || 
             ismissing(well_cell_centers) || ismissing(end_nodes) 
@@ -107,8 +120,9 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     augment_closed_loop_domain_u1!(supply_well,
         radius_grout,
         pipe_spacing,
-        heat_capacity_grout,
-        density_grout
+        grouting_heat_capacity,
+        grouting_density;
+        section = section
     )
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_u1!(
@@ -126,10 +140,11 @@ end
 function augment_closed_loop_domain_u1!(well::DataDomain,
     radius_grout,
     pipe_spacing,
-    heat_capacity_grout,
-    density_grout;
+    grouting_heat_capacity,
+    grouting_density;
     pipe_grout_thermal_index = missing,
-    grout_grout_thermal_index = missing
+    grout_grout_thermal_index = missing,
+    section = missing
 )
 
     c = Cells()
@@ -138,8 +153,8 @@ function augment_closed_loop_domain_u1!(well::DataDomain,
 
     well[:radius_grout, c] = radius_grout
     well[:pipe_spacing, p] = pipe_spacing
-    well[:material_heat_capacity, c] = heat_capacity_grout
-    well[:material_density, c] = density_grout
+    well[:material_heat_capacity, c] = grouting_heat_capacity
+    well[:material_density, c] = grouting_density
 
     treat_defaulted(x) = x
     treat_defaulted(::Missing) = NaN
@@ -149,6 +164,10 @@ function augment_closed_loop_domain_u1!(well::DataDomain,
     λgg = treat_defaulted(grout_grout_thermal_index)
     well[:pipe_grout_thermal_index, p] = λpg
     well[:grout_grout_thermal_index, p] = λgg
+
+    if !ismissing(section)
+        well[:section, c] = section
+    end
 
 end
 
@@ -192,7 +211,7 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         casing_volumes[pipe_cell] = 0.0
         casing_volumes[grout_cell] = 0.0
         grout_volumes[pipe_cell] = 0.0
-        grout_volumes[grout_cell] = vol_g
+        grout_volumes[grout_cell] = vol_g + vol_w
         
         pipe_spacing = well[:pipe_spacing, perf][pno]
         λg = well[:grouting_thermal_conductivity, cell][grout_cell]
