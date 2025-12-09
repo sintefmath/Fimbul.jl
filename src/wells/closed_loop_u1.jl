@@ -197,8 +197,12 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         pipe_spacing = well[:pipe_spacing, perf][pno]
         λg = well[:grouting_thermal_conductivity, cell][grout_cell]
         λp = well[:casing_thermal_conductivity, cell][pipe_cell]
-        λpg, λgr, λgg = closed_loop_thermal_conductivity_u1(
-            r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, L, λg, λp)
+
+        Rpg, Rgr, Rgg = closed_loop_thermal_resistance_u1(
+            r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, λg, λp)
+        λpg = L/Rpg
+        λgr = L/Rgr
+        λgg = L/Rgg
 
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
@@ -247,14 +251,14 @@ function closed_loop_volume_u1(length, radius_grout, radius_pipe, wall_thickness
 
 end
 
-function closed_loop_thermal_conductivity_u1(
-    radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing, length,
+function closed_loop_thermal_resistance_u1(
+    radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
     thermal_conductivity_grout, thermal_conductivity_pipe)
     # Conveient short-hand notation
     radius_pipe_outer = radius_pipe
     radius_pipe_inner = radius_pipe - wall_thickness_pipe
-    rg, rp_in, rp_out, w, L = 
-        radius_grout, radius_pipe_inner, radius_pipe_outer, pipe_spacing, length
+    rg, rp_in, rp_out, w = 
+        radius_grout, radius_pipe_inner, radius_pipe_outer, pipe_spacing
     λg, λp = thermal_conductivity_grout, thermal_conductivity_pipe
 
     ## Compute thermal resistances
@@ -275,10 +279,6 @@ function closed_loop_thermal_conductivity_u1(
     Rar = acosh((2*w^2 - dp_out^2)/dp_out^2)/(2*π*λg)
     Rgg = 2*Rgr*(Rar - 2*x*Rg)/(2*Rgr - Rar + 2*x*Rg)
 
-    λpg = L/Rpg
-    λgr = L/Rgr
-    λgg = L/Rgg
-
-    return λpg, λgr, λgg
+    return Rpg, Rgr, Rgg
 
 end
