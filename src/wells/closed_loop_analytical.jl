@@ -37,6 +37,37 @@ function f_functions(u, ρ, Cp, A, R1Δ, R2Δ, R12Δ)
 end
 
 function analytical_closed_loop_u1(rate, temperature_in, temperature_rock,
+    density_fluid, heat_capacity_fluid, well::DataDomain)
+
+    # Identify pipe and grout cells
+    section = well[:section]
+    is_pipe_cell = last.(section) .== :pipe_left
+    is_grout_cell = last.(section) .== :grout_left
+    # Get length
+    length = sum(well[:cell_length][is_pipe_cell])
+    # Get pipe outer radius
+    rp_i = well[:radius][is_pipe_cell][1]
+    wall_thickness_pipe = well[:casing_thickness][is_pipe_cell][1]
+    radius_pipe = rp_i + wall_thickness_pipe
+    # Get grout radius
+    L = well[:cell_length][is_grout_cell][1]
+    vg = well[:volume_override_grouting][is_grout_cell][1]
+    vp = radius_pipe^2*π*L
+    radius_grout = sqrt((2*vg + 2*vp)/(π*L))
+    # Get other parameters
+    pipe_spacing = maximum(well[:pipe_spacing])
+    thermal_conductivity_grout = maximum(well[:grouting_thermal_conductivity])
+    thermal_conductivity_pipe = maximum(well[:casing_thermal_conductivity])
+
+    return analytical_closed_loop_u1(
+        rate, temperature_in, temperature_rock,
+        density_fluid, heat_capacity_fluid,
+        length, radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
+        thermal_conductivity_grout, thermal_conductivity_pipe)
+
+end
+
+function analytical_closed_loop_u1(rate, temperature_in, temperature_rock,
     density_fluid, heat_capacity_fluid,
     length, radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
     thermal_conductivity_grout, thermal_conductivity_pipe)
@@ -91,6 +122,57 @@ function temperature_grout_u1(T_supply, T_return, T_rock, Rpg, Rgr, Rgg)
         )*1/u1
 
     return Tgs, Tgr
+
+end
+
+function analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
+    density_fluid, heat_capacity_fluid, well::DataDomain; kwargs...)
+
+    # Identify pipe and grout cells
+    section = well[:section]
+    is_inner_pipe_cell = last.(section) .== :pipe_inner
+    is_outer_pipe_cell = last.(section) .== :pipe_outer
+    is_grout_cell = last.(section) .== :grout
+    # Get length
+    length = sum(well[:cell_length][is_inner_pipe_cell])
+    # Get pipe radii and wall thicknesses
+    radius_inner_pipe = well[:radius_inner][is_outer_pipe_cell][1]
+    wall_thickness_inner_pipe = well[:casing_thickness][is_inner_pipe_cell][1]
+    rpo_i = well[:radius][is_outer_pipe_cell][1]
+    wall_thickness_outer_pipe = well[:casing_thickness][is_outer_pipe_cell][1]
+    radius_outer_pipe = rpo_i + wall_thickness_outer_pipe
+    # Get grout radius
+    L = well[:cell_length][is_grout_cell][1]
+    vg = well[:volume_override_grouting][is_grout_cell][1]
+    radius_grout = sqrt((vg + radius_outer_pipe^2*pi*L)/(π*L))
+    # Get other parameters
+    thermal_conductivity_grout = maximum(well[:grouting_thermal_conductivity])
+    thermal_conductivity_inner_pipe = maximum(well[:casing_thermal_conductivity][is_inner_pipe_cell])
+    thermal_conductivity_outer_pipe = maximum(well[:casing_thermal_conductivity][is_outer_pipe_cell])
+
+    println("""
+    radius_inner_pipe: $radius_inner_pipe
+    wall_thickness_inner_pipe: $wall_thickness_inner_pipe
+    radius_outer_pipe: $radius_outer_pipe
+    wall_thickness_outer_pipe: $wall_thickness_outer_pipe
+    radius_grout: $radius_grout
+    length: $length
+    thermal_conductivity_grout: $thermal_conductivity_grout
+    thermal_conductivity_inner_pipe: $thermal_conductivity_inner_pipe
+    thermal_conductivity_outer_pipe: $thermal_conductivity_outer_pipe
+    """)
+
+    # return nothing
+
+    return analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
+    density_fluid, heat_capacity_fluid,
+    length, radius_grout,
+    radius_inner_pipe, wall_thickness_inner_pipe,
+    radius_outer_pipe, wall_thickness_outer_pipe,
+    thermal_conductivity_grout,
+    thermal_conductivity_inner_pipe,
+    thermal_conductivity_outer_pipe;
+    kwargs...)
 
 end
 
