@@ -6,6 +6,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     pipe_cells_inner = missing,
     pipe_cells_outer = missing,
     grout_cells = missing,
+    section = missing,
     well_cell_centers = missing,
     segment_models = missing,
     end_nodes = missing,
@@ -24,8 +25,9 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
 
      if ismissing(neighborship)
         if !ismissing(pipe_cells_inner) && !ismissing(pipe_cells_outer) && !ismissing(grout_cells)
-            error(["Provide either neighborship, pipe_cells_inner, pipe_cells_outer, grout_cells, ",
-                "well_cell_centers, end_nodes, or none of them."])
+            error("""Provide either neighborship, pipe_cells_inner,
+                pipe_cells_outer, grout_cells, "well_cell_centers, end_nodes, or
+                none of them.""")
         end
         # Set inner/outer pipe and grout cells
         nc_pipe = length(reservoir_cells)*2
@@ -45,6 +47,14 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         # Set centers and end nodes
         well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
         end_nodes = [nc_r+1]
+        if !ismissing(section)
+            warn(["section argument is ignored when neighborship is not provided. ",
+                "Sections will be created automatically."])
+        end
+        section = Vector{Any}(undef, nc_pipe + nc_grout)
+        section[pipe_cells_inner] .= [(1, :pipe_inner)]
+        section[pipe_cells_outer] .= [(1, :pipe_outer)]
+        section[grout_cells] .= [(1, :grout)]
     end
 
     if ismissing(segment_models)
@@ -160,60 +170,59 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
     grout_volumes = zeros(Float64, num_nodes)
 
     nc = Int.(num_nodes/3)
-    inner_pipe_cells = Int.(1:nc)
-    outer_pipe_cells = Int.(1:nc) .+ nc
+    pipe_cells_inner = Int.(1:nc)
+    pipe_cells_outer = Int.(1:nc) .+ nc
     grout_cells = Int.(1:nc) .+ 2*nc
     N = well.representation.neighborship
-    println("N:\n")
     display(N)
     rep = physical_representation(well)
-    for (pno, grout_cell) in enumerate(rep.perforations.self)
+    for (pno, gc) in enumerate(rep.perforations.self)
 
-        println("pno = $pno, grout_cell = $grout_cell")
-        @assert grout_cell ∈ grout_cells
-        seg_pg = findall(N[2, :] .== grout_cell)
-        println("seg_pg = $(N[:, seg_pg])")
+        @assert gc ∈ grout_cells
+        seg_pg = findall(N[2, :] .== gc)
         @assert length(seg_pg) == 1
         seg_pg = seg_pg[1]
-        outer_pipe_cell = N[1, seg_pg]
-        @assert outer_pipe_cell ∈ outer_pipe_cells
-        seg_pp = findall(N[2, :] .== outer_pipe_cell)
-        println("seg_pp = $(N[:, seg_pp[end]])")
+        pc_out = N[1, seg_pg]
+        @assert pc_out ∈ pipe_cells_outer
+        seg_pp = findall(N[2, :] .== pc_out)
         @assert length(seg_pp) <= 2
         seg_pp = seg_pp[end]
-        inner_pipe_cell = N[1, seg_pp]
-        @assert inner_pipe_cell ∈ inner_pipe_cells
+        pc_in = N[1, seg_pp]
+        @assert pc_in ∈ pipe_cells_inner
 
-        r_grout = well[:radius_grout, cell][grout_cell]
-        r_inner_pipe = well[:radius, cell][inner_pipe_cell]
-        wall_thickness_inner = well[:casing_thickness, cell][inner_pipe_cell]
-        r_outer_pipe = well[:radius, cell][outer_pipe_cell]
-        wall_thickness_outer = well[:casing_thickness, cell][outer_pipe_cell]
-        L = well[:cell_length, cell][inner_pipe_cell]
+        r_grout = well[:radius_grout, cell][gc]
+        r_inner_pipe = well[:radius, cell][pc_in]
+        wall_thickness_inner = well[:casing_thickness, cell][pc_in]
+        r_outer_pipe = well[:radius, cell][pc_out]
+        wall_thickness_outer = well[:casing_thickness, cell][pc_out]
+        L = well[:cell_length, cell][pc_in]
         vol_ip, vol_iw, vol_op, vol_ow, vol_g, L = closed_loop_volume_coaxial(
             L, r_grout,
             r_inner_pipe + wall_thickness_inner, wall_thickness_inner,
             r_outer_pipe + wall_thickness_outer, wall_thickness_outer
         )
 
-        hole_volumes[inner_pipe_cell] = vol_ip
-        hole_volumes[outer_pipe_cell] = vol_op
-        hole_volumes[grout_cell] = 0.0
-        casing_volumes[inner_pipe_cell] = vol_iw
-        casing_volumes[outer_pipe_cell] = vol_ow
-        casing_volumes[grout_cell] = 0.0
-        grout_volumes[inner_pipe_cell] = 0.0
-        grout_volumes[outer_pipe_cell] = 0.0
-        grout_volumes[grout_cell] = vol_g
+        hole_volumes[pc_in] = vol_ip
+        hole_volumes[pc_out] = vol_op
+        hole_volumes[gc] = 0.0
+        casing_volumes[pc_in] = vol_iw
+        casing_volumes[pc_out] = vol_ow
+        casing_volumes[gc] = 0.0
+        grout_volumes[pc_in] = 0.0
+        grout_volumes[pc_out] = 0.0
+        grout_volumes[gc] = vol_g
 
-        λg = well[:grouting_thermal_conductivity, cell][grout_cell]
-        λpi = well[:casing_thermal_conductivity, cell][inner_pipe_cell]
-        λpo = well[:casing_thermal_conductivity, cell][outer_pipe_cell]
-        λpp, λpg, λgr = closed_loop_thermal_conductivity_coaxial(
+        λg = well[:grouting_thermal_conductivity, cell][gc]
+        λpi = well[:casing_thermal_conductivity, cell][pc_in]
+        λpo = well[:casing_thermal_conductivity, cell][pc_out]
+        Rpp, Rpg, Rgr = closed_loop_thermal_resistance_coaxial(
             r_grout,
             r_inner_pipe + wall_thickness_inner, wall_thickness_inner,
             r_outer_pipe + wall_thickness_outer, wall_thickness_outer,
-            L, λg, λpi, λpo)
+            λg, λpi, λpo)
+        λpp = L/Rpp
+        λpg = L/Rpg
+        λgr = L/Rgr
 
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
@@ -259,23 +268,21 @@ function closed_loop_volume_coaxial(
 
 end
 
-function closed_loop_thermal_conductivity_coaxial(
+function closed_loop_thermal_resistance_coaxial(
     radius_grout,
     radius_inner_pipe, wall_thickness_inner_pipe,
     radius_outer_pipe, wall_thickness_outer_pipe,
-    length,
     thermal_conductivity_grout,
     thermal_conductivity_inner_pipe,
     thermal_conductivity_outer_pipe
     )
 
-    r_g, r_ipi, r_ipo, r_opi, r_opo, L =
+    r_g, r_ipi, r_ipo, r_opi, r_opo =
         radius_grout,
         radius_inner_pipe - wall_thickness_inner_pipe,
         radius_inner_pipe,
         radius_outer_pipe - wall_thickness_outer_pipe,
-        radius_outer_pipe,
-        length
+        radius_outer_pipe
 
     λ_g, λ_pi, λ_po =
     thermal_conductivity_grout,
@@ -290,18 +297,13 @@ function closed_loop_thermal_conductivity_coaxial(
 
     d_g, d_opo = 2*r_g, 2*r_opo
     x = log(sqrt((d_g^2 + d_opo^2)/(2*d_opo^2)))/log(d_g/d_opo)
-    println("x = $x")
     R_g = log(d_g/d_opo)/(2*π*λ_g)
     R_cg = x*R_g
 
-    R_pp = R_ai + R_ci
-    R_pg = R_ao + R_co + R_cg
-    R_gr = (1-x)*R_g
+    Rpp = R_ai + R_ci
+    Rpg = R_ao + R_co + R_cg
+    Rgr = (1-x)*R_g
 
-    λpp = L/R_pp
-    λpg = L/R_pg
-    λgr = L/R_gr
-
-    return λpp, λpg, λgr
+    return Rpp, Rpg, Rgr
 
 end
