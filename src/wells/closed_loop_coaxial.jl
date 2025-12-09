@@ -13,13 +13,13 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     radius_grout = 65e-3,
     radius_pipe_inner = 15e-3,
     radius_pipe_outer = 20e-3,
-    wall_thickness_inner = 3e-3,
-    wall_thickness_outer = 3e-3,
+    wall_thickness_pipe_inner = 3e-3,
+    wall_thickness_pipe_outer = 3e-3,
     grouting_thermal_conductivity = 2.3,
     inner_pipe_thermal_conductivity = 0.38,
     outer_pipe_thermal_conductivity = 0.38,
-    heat_capacity_grout = 1460,
-    density_grout = 1500.0,
+    grouting_heat_capacity = 1460,
+    grouting_density = 1500.0,
     kwarg...)
 
 
@@ -76,13 +76,13 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     # Set cell radii
     cell_radius = zeros(num_cells)
     cell_radius_inner = zeros(num_cells)
-    cell_radius[pipe_cells_inner] .= radius_pipe_inner - wall_thickness_inner
-    cell_radius[pipe_cells_outer] .= radius_pipe_outer - wall_thickness_outer
+    cell_radius[pipe_cells_inner] .= radius_pipe_inner - wall_thickness_pipe_inner
+    cell_radius[pipe_cells_outer] .= radius_pipe_outer - wall_thickness_pipe_outer
     cell_radius_inner[pipe_cells_outer] .= radius_pipe_inner
     # Set casing thicknesses
     wall_thickness = zeros(num_cells)
-    wall_thickness[pipe_cells_inner] .= wall_thickness_inner
-    wall_thickness[pipe_cells_outer] .= wall_thickness_outer
+    wall_thickness[pipe_cells_inner] .= wall_thickness_pipe_inner
+    wall_thickness[pipe_cells_outer] .= wall_thickness_pipe_outer
     # Set pipe wall thermal conductivities
     λ_pipe = zeros(num_cells)
     λ_pipe[pipe_cells_inner] .= inner_pipe_thermal_conductivity
@@ -114,8 +114,9 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     # Augment supply well with closed loop specific data
     augment_closed_loop_domain_coaxial!(supply_well,
         radius_grout,
-        heat_capacity_grout,
-        density_grout
+        grouting_heat_capacity,
+        grouting_density,
+        section = section
     )
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_coaxial!(supply_well)
@@ -132,10 +133,11 @@ end
 
 function augment_closed_loop_domain_coaxial!(well::DataDomain,
     radius_grout,
-    heat_capacity_grout,
-    density_grout;
+    grouting_heat_capacity,
+    grouting_density;
     pipe_pipe_thermal_index = missing,
-    pipe_grout_thermal_index = missing
+    pipe_grout_thermal_index = missing,
+    section = missing
 )
 
     c = Cells()
@@ -143,8 +145,8 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
     f = Faces()
 
     well[:radius_grout, c] = radius_grout
-    well[:material_heat_capacity, c] = heat_capacity_grout
-    well[:material_density, c] = density_grout
+    well[:material_heat_capacity, c] = grouting_heat_capacity
+    well[:material_density, c] = grouting_density
 
     treat_defaulted(x) = x
     treat_defaulted(::Missing) = NaN
@@ -154,6 +156,10 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
     λpg = treat_defaulted(pipe_grout_thermal_index)
     well[:pipe_pipe_thermal_index, p] = λpp
     well[:pipe_grout_thermal_index, p] = λpg
+
+    if !ismissing(section)
+        well[:section, c] = section
+    end
 
 end
 

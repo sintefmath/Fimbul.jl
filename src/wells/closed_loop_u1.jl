@@ -11,7 +11,7 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     end_nodes = missing,
     radius_grout = 65e-3,
     radius_pipe = 15e-3,
-    wall_thickness = 3e-3,
+    wall_thickness_pipe = 3e-3,
     pipe_spacing = 60e-3,
     grouting_thermal_conductivity = 2.3,
     pipe_thermal_conductivity = 0.38,
@@ -29,14 +29,14 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
         nc_pipe = length(reservoir_cells)
         nc_grout = length(reservoir_cells)
         nc_mid = div(nc_pipe, 2)
-        down_ix = Int.(1:nc_mid)
-        up_ix = Int.(1:nc_mid) .+ nc_mid
+        left_ix = Int.(1:nc_mid)
+        right_ix = Int.(1:nc_mid) .+ nc_mid
         pipe_cells = collect(1:nc_pipe)
         grout_cells = collect(1:nc_grout) .+ nc_pipe
         # Set up connectivity
         pipe_to_pipe = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
         pipe_to_grout = vcat(pipe_cells', grout_cells')
-        grout_to_grout = vcat(grout_cells[down_ix]', reverse(grout_cells[up_ix]'))
+        grout_to_grout = vcat(grout_cells[left_ix]', reverse(grout_cells[right_ix]'))
         neighborship = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
         # Set up well cell centers and end nodes
         wc_supply = cell_centers[:, reservoir_cells[1:nc_mid]] .- [pipe_spacing/2, 0.0, 0.0]
@@ -49,10 +49,10 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
                 "Sections will be created automatically."])
         end
         section = Vector{Any}(undef, nc_pipe + nc_grout)
-        section[pipe_cells[down_ix]] .= [(1, :pipe_supply)]
-        section[pipe_cells[up_ix]] .= [(1, :pipe_return)]
-        section[grout_cells[down_ix]] .= [(1, :grout_supply)]
-        section[grout_cells[up_ix]] .= [(1, :grout_return)]
+        section[pipe_cells[left_ix]] .= [(1, :pipe_left)]
+        section[pipe_cells[right_ix]] .= [(1, :pipe_right)]
+        section[grout_cells[left_ix]] .= [(1, :grout_left)]
+        section[grout_cells[right_ix]] .= [(1, :grout_right)]
     else
         if ismissing(pipe_cells) || ismissing(grout_cells) || 
             ismissing(well_cell_centers) || ismissing(end_nodes) 
@@ -82,9 +82,9 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
         radius_pipe[grout_cells] .= 0.0
     end
     # Setup wall thickness
-    if wall_thickness isa Number
-        wall_thickness = fill(wall_thickness, nc)
-        wall_thickness[grout_cells] .= 0.0
+    if wall_thickness_pipe isa Number
+        wall_thickness_pipe = fill(wall_thickness_pipe, nc)
+        wall_thickness_pipe[grout_cells] .= 0.0
     end
     # Setup pipe wall thermal conductivities
     if pipe_thermal_conductivity isa Number
@@ -109,8 +109,8 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
         neighborship = neighborship,
         perforation_cells_well = grout_cells,
         well_cell_centers = well_cell_centers,
-        cell_radius = radius_pipe - wall_thickness,
-        casing_thickness = wall_thickness,
+        cell_radius = radius_pipe - wall_thickness_pipe,
+        casing_thickness = wall_thickness_pipe,
         casing_thermal_conductivity = pipe_thermal_conductivity,
         grouting_thermal_conductivity = grouting_thermal_conductivity,
         segment_models = segment_models,
