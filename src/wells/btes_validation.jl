@@ -1,27 +1,8 @@
 using Integrals
 
-function f_functions(Ai, ρ, Cp, u, R1Δ, R2Δ, R12Δ)
+function temperature_pipe(u, T_in, T_rock, ρ, Cp, A, L, R1Δ, R2Δ, R12Δ)
 
-    β1 = 1/(R1Δ*Ai*ρ*Cp*u)
-    β2 = 1/(R2Δ*Ai*ρ*Cp*u)
-    β12 = 1/(R12Δ*Ai*ρ*Cp*u)
-    β = (β2 - β1)/2
-    γ = sqrt((β1 + β2)^2/4 + β12*(β1 + β2))
-    δ = 1/γ*(β12 + (β1 + β2)/2)
-
-    expβz = z-> exp(β*z)
-    f1 = z -> expβz(z)*(cosh(γ*z) - δ*sinh(γ*z))
-    f2 = z -> expβz(z)*β12/γ*sinh(γ*z)
-    f3 = z -> expβz(z)*(cosh(γ*z) + δ*sinh(γ*z))
-    f4 = z -> expβz(z)*(β1*cosh(γ*z) - (δ*β1 + β2*β12/γ)*sinh(γ*z))
-    f5 = z -> expβz(z)*(β2*cosh(γ*z) + (δ*β2 + β1*β12/γ)*sinh(γ*z))
-
-    return (f1, f2, f3, f4, f5)
-end
-
-function temperature_pipe(T_in, T_rock, Ai, L, ρr, Cr, u, R1Δ, R2Δ, R12Δ)
-
-    f1, f2, f3, f4, f5 = f_functions(Ai, ρr, Cr, u, R1Δ, R2Δ, R12Δ)
+    f1, f2, f3, f4, f5 = f_functions(u, ρ, Cp, A, R1Δ, R2Δ, R12Δ)
 
     domain = z -> (0.0, z)
     
@@ -44,6 +25,38 @@ function temperature_pipe(T_in, T_rock, Ai, L, ρr, Cr, u, R1Δ, R2Δ, R12Δ)
 
 end
 
+function f_functions(u, ρ, Cp, A, R1Δ, R2Δ, R12Δ)
+
+    β1 = 1/(R1Δ*A*ρ*Cp*u)
+    β2 = 1/(R2Δ*A*ρ*Cp*u)
+    β12 = 1/(R12Δ*A*ρ*Cp*u)
+    β = (β2 - β1)/2
+    γ = sqrt((β1 + β2)^2/4 + β12*(β1 + β2))
+    δ = 1/γ*(β12 + (β1 + β2)/2)
+
+    f1 = z -> exp(β*z)*(cosh(γ*z) - δ*sinh(γ*z))
+    f2 = z -> exp(β*z)*β12/γ*sinh(γ*z)
+    f3 = z -> exp(β*z)*(cosh(γ*z) + δ*sinh(γ*z))
+    f4 = z -> exp(β*z)*(β1*cosh(γ*z) - (δ*β1 + β2*β12/γ)*sinh(γ*z))
+    f5 = z -> exp(β*z)*(β2*cosh(γ*z) + (δ*β2 + β1*β12/γ)*sinh(γ*z))
+    return (f1, f2, f3, f4, f5)
+end
+
+function temperature_u1()
+
+end
+
+function temperature_pipe_u1(u, T_in, T_rock, ρ, Cp, A, L, Rpg, Rgg, Rgr)
+
+    u1 = 1/Rpg + 1/Rgr + 1/Rgg
+    R1Δ = Rpg + Rgr
+    R2Δ = Rpg + Rgr
+    R12Δ = ((u1*Rpg*Rgg)^2 - Rpg^2)/Rgg
+
+    return temperature_pipe(u, T_in, T_rock, ρ, Cp, A, L, R1Δ, R2Δ, R12Δ)
+
+end
+
 function temperature_grout_u1(T_supply, T_return, T_rock, Rpg, Rgg, Rgr)
 
     u1 = 1/Rpg + 1/Rgr + 1/Rgg
@@ -60,11 +73,9 @@ function temperature_grout_u1(T_supply, T_return, T_rock, Rpg, Rgg, Rgr)
         T_rock/Rgr
         )*1/u1
 
-
     return T_grout_supply, T_grout_return
 
 end
-
 
 Rpg = 0.15577 # pipe to grout
 Rgg = 0.11516  # grout to grout (between pipes)
@@ -77,18 +88,25 @@ d = 32e-3
 Ai = π*(d/2 - 2.9e-3)^2           # internal area of one pipe [m²]
 ρf = 988.1
 Cf = 4.1312e6/ρf               # J m⁻3 K⁻1
+
+using Jutul
+meter, day = si_units(:meter, :day)
 u = 21.86*meter^3/day/(Ai)                 # m s⁻1
 
 # z = range(0, stop=100.0, length=10)
 # f = f_functions(Ai, ρf, Cf, u, R1Δ, R2Δ, R12Δ)
 # f_val = [fi.(z) for fi in f]
 
-T_supply, T_return = temperature_pipe(80.0, 10.0,
-    Ai, 100.0, ρf, Cf, u, R1Δ, R2Δ, R12Δ)
+# T_supply, T_return = temperature_pipe(u, 80.0, 10.0,
+#     ρf, Cf, Ai, 100.0, R1Δ, R2Δ, R12Δ)
+
+T_supply, T_return = temperature_pipe_u1(u, 80.0, 10.0,
+    ρf, Cf, Ai, 100.0, Rpg, Rgg, Rgr)
 
 T_supply_grout, T_return_grout = temperature_grout_u1(T_supply, T_return, 10.0, Rpg, Rgg, Rgr)
 
 ##
+using GLMakie
 fig = Figure(size = (800, 600))
 ax = Axis(fig[1, 1]; yreversed=true)
 z = collect(range(0, 100.0, step=0.1))
