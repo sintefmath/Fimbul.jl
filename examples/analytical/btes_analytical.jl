@@ -208,7 +208,7 @@ end;
 # ## Validate U1 configuration
 # We set up and simulate a BTES system with U1 closed-loop geometry, and
 # compare the numerical results against the analytical solution.
-case_u1, sim, cfg = setup_btes_single(:u1; nz=150)
+case_u1, sim, cfg = setup_btes_single(:u1; nz=125)
 res_u1 = simulate_reservoir(case_u1; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
@@ -230,7 +230,7 @@ fig
 # Next, we set up and simulate a BTES system with coaxial closed-loop geometry,
 # injecting fluid through the outer pipe, and compare the numerical results
 # against the analytical solution.
-case_coax_outer, sim, cfg = setup_btes_single(:coaxial; nz=100, inlet = :outer)
+case_coax_outer, sim, cfg = setup_btes_single(:coaxial; nz=125, inlet = :outer)
 res_coax_outer = simulate_reservoir(case_coax_outer; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
@@ -246,7 +246,7 @@ fig
 # Finally, we set up and simulate a BTES system with coaxial closed-loop
 # geometry, injecting fluid through the inner pipe, and compare the numerical
 # results.
-case_coax_inner, sim, cfg = setup_btes_single(:coaxial; nz=100, inlet = :inner)
+case_coax_inner, sim, cfg = setup_btes_single(:coaxial; nz=125, inlet = :inner)
 res_coax_inner = simulate_reservoir(case_coax_inner; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
