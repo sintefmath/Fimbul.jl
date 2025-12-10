@@ -181,7 +181,6 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
     pipe_cells_outer = Int.(1:nc) .+ nc
     grout_cells = Int.(1:nc) .+ 2*nc
     N = well.representation.neighborship
-    display(N)
     rep = physical_representation(well)
     for (pno, gc) in enumerate(rep.perforations.self)
 
