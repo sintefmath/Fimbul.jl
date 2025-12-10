@@ -191,7 +191,7 @@ function plot_closed_loop( # Utility function to plot closed-loop simulation res
     section_handles = []
     solution_handles = []
     section_names = String[]
-    solution_names = String[]
+    solution_names = ["Analytical", "Numerical"]
     ## Plot results for each well section
     sections = last.(well[:section]) |> unique |> collect
     colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4,3]]
@@ -212,7 +212,6 @@ function plot_closed_loop( # Utility function to plot closed-loop simulation res
         push!(section_names, name)
         if i == 1
            push!(solution_handles, la, ln)
-           push!(solution_names, "Analytical", "Numerical")
         end
         ## Compute maximum error in section
         Ta_n = convert_from_si.(analytical[section].(zn), :Celsius)
