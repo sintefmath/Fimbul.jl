@@ -1,7 +1,7 @@
-# # Analytical solutions for Borehole Thermal Energy Storage (BTES)
-# This example validates the numerical simulation of a BTES system against
-# analytical solutions for both U1 and coaxial closed-loop configurations
-# assuming fixed ground temperature.
+# # Analytical solutions for closed-loop geothermal wells
+# This example validates the numerical simulation of a closed-loop geothermal
+# well system against analytical solutions for both U1 and coaxial closed-loop
+# configurations assuming fixed ground temperature.
 
 # Add modules to namespace
 using Jutul, JutulDarcy, Fimbul
