@@ -60,11 +60,12 @@ function setup_vertical_btes_well(D::DataDomain, i, j;
 end
 
 function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
-    name = :BTES,
+    name = :CL,
     radius_pipe = 20e-3,
     wall_thickness = 2.5e-3,
     grouting_thickness = 50e-3,
-    thermal_conductivity_pipe = 0.35,
+    pipe_thermal_conductivity = 0.35,
+    grouting_thermal_conductivity = 2.3,
     kwarg...)
 
     # Common properties
@@ -73,7 +74,8 @@ function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
         radius = radius_pipe,
         casing_thickness = wall_thickness,
         grouting_thickness = grouting_thickness,
-        thermal_conductivity_casing = thermal_conductivity_pipe,
+        casing_thermal_conductivity = pipe_thermal_conductivity,
+        grouting_thermal_conductivity = grouting_thermal_conductivity,
         end_nodes = [length(reservoir_cells)],
         simple_well = false,
         type = :closed_loop
