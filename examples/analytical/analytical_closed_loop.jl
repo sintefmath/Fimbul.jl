@@ -239,7 +239,7 @@ res_u1 = simulate_reservoir(case_u1; simulator = sim, config = cfg)
 # solution for a vertical U-tube closed-loop system using the method of
 # [eskilson_1988](@cite) as described in [feflow_btes](@cite). The function can
 # be called with explicit parameters, but also has a convenience version that
-# extracts parameters directly from the BTES well model.
+# extracts parameters directly from the well model.
 analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
     ρf, Cpf, case_u1.model.models[:CL_supply].data_domain)
 
@@ -258,6 +258,12 @@ case_coax_outer, sim, cfg = setup_closed_loop_single(:coaxial; nz=125, inlet = :
 res_coax_outer = simulate_reservoir(case_coax_outer; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
+# Following [feflow_btes](@cite), we can also compute the analytical
+# steady-state solution for coaxial closed-loop systems. This is implemented in
+# `analytical_closed_loop_coaxial`. As or U-tube closed loops, this can be
+# called with all parameters, or extract parameters from the well model. The
+# function also accepts an `inlet` keyword argument to specify whether the
+# fluid is injected through the outer or inner pipe.
 analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
     ρf, Cpf, case_coax_outer.model.models[:CL_supply].data_domain; inlet = :outer)
 
@@ -272,13 +278,15 @@ fig
 # ## Validate coaxial configuration with inner pipe inlet
 # Finally, we validate the coaxial configuration with inner pipe inlet. This
 # configuration is often preferred when storing heat, as the hot fluid is not
-# exposed to the rock before it reaches the bottom of the well, ensuring better
-# a higher temperature difference along the entire wellbore, and consequently
-# more heat storage.
+# exposed to the rock before it reaches the bottom of the well, ensuring a
+# higher temperature difference along the entire wellbore, and consequently more
+# heat storage.
 case_coax_inner, sim, cfg = setup_closed_loop_single(:coaxial; nz=125, inlet = :inner)
 res_coax_inner = simulate_reservoir(case_coax_inner; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
+# We compute the analytical solution for the coaxial configuration with inner
+# pipe inlet.
 analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
     ρf, Cpf, case_coax_inner.model.models[:CL_supply].data_domain; inlet = :inner)
 
