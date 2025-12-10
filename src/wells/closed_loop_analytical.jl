@@ -150,20 +150,6 @@ function analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
     thermal_conductivity_inner_pipe = maximum(well[:casing_thermal_conductivity][is_inner_pipe_cell])
     thermal_conductivity_outer_pipe = maximum(well[:casing_thermal_conductivity][is_outer_pipe_cell])
 
-    println("""
-    radius_inner_pipe: $radius_inner_pipe
-    wall_thickness_inner_pipe: $wall_thickness_inner_pipe
-    radius_outer_pipe: $radius_outer_pipe
-    wall_thickness_outer_pipe: $wall_thickness_outer_pipe
-    radius_grout: $radius_grout
-    length: $length
-    thermal_conductivity_grout: $thermal_conductivity_grout
-    thermal_conductivity_inner_pipe: $thermal_conductivity_inner_pipe
-    thermal_conductivity_outer_pipe: $thermal_conductivity_outer_pipe
-    """)
-
-    # return nothing
-
     return analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
     density_fluid, heat_capacity_fluid,
     length, radius_grout,
