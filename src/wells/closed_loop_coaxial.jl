@@ -123,7 +123,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     set_default_closed_loop_thermal_indices_coaxial!(supply_well)
 
     # Setup return well
-    return_well = setup_well(D, reservoir_cells[1];
+    return_well = setup_well(D, return_reservoir_cell;
         name = Symbol(name, "_return"),
         WIth = 0.0,
         args...)
