@@ -233,17 +233,16 @@ color_stages!(ax_eta)
 fig_wells
 
 # The efficiency improves with each cycle as the thermal plume matures and
-# losses decrease. Notably, efficiency exceeds 100% after the second year
-# because the hot well produces at higher rates than the cold well injects due
-# to lower viscosity of heated water. This rate imbalance extracts more energy
-# than stored, causing progressive aquifer cooling as shown below. While
-# beneficial for energy recovery in the short term, this trend requires
-# monitoring for system sustainability.
+# losses decrease, starting at approximately 81% in the first year and reaching
+# around 89% by year five.
 
 # ### Aquifer temperature evolution
 # Examine the spatial and temporal temperature distribution in the aquifer to
-# understand thermal plume propagation. We analyze temperature profiles along
-# a horizontal transect between wells and track aquifer-wide temperature statistics.
+# understand thermal plume propagation. We analyze temperature profiles along a
+# horizontal transect between wells and track aquifer-wide temperature
+# statistics. Notice how the hot and cold plume interactions can be seen as
+# asymmetries in the temperature profiles around the cold well during charging
+# and hot well during discharging.
 
 # Extract temperature along a horizontal line in the aquifer layer
 # This transect passes through the center of the aquifer between the two wells
@@ -322,6 +321,7 @@ lines!(ax, times, T_mean, color = lcolor, linewidth = 3)
 fig
 
 # The proposed setup results in a maximum increase in the mean aquifer
-# temperature of approximately 1°C due to charging. However, the setup also
-# results in a higher rate during discharging compared to charging, leading to a
-# net cooling effect.
+# temperature of approximately 3.8°C due to charging. Due to a system efficiency
+# of less than 100%, we also see a net heating effect, but this will likely
+# stabilize over longer operational periods as thermal losses balance with
+# recovery.
