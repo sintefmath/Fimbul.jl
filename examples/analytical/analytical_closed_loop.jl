@@ -134,7 +134,7 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
         TotalRateTarget(Q), [1.0], 
         density=ρf, temperature=T_in)
     ctrl_prod = ProducerControl( # Production control with fixed BHP
-        BottomHolePressureTarget(5.0*atm))
+        BottomHolePressureTarget(1.0*atm))
     geo = tpfv_geometry(msh)
     bc_cells = geo.boundary_neighbors
     domain = reservoir_model(model).data_domain
@@ -191,7 +191,7 @@ function plot_closed_loop( # Utility function to plot closed-loop simulation res
     section_handles = []
     solution_handles = []
     section_names = String[]
-    solution_names = ["Analytical", "Numerical"]
+    solution_names = ["Analytical", "Fimbul"]
     ## Plot results for each well section
     sections = last.(well[:section]) |> unique |> collect
     colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4,3]]
