@@ -1,6 +1,6 @@
 function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     name = :CL,
-    return_reservoir_cell = reservoir_cells[1],
+    return_reservoir_cell = missing,
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells = missing,
@@ -59,6 +59,10 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
             error(["If neighborship is provided, pipe_cells, grout_cells, ",
                 "well_cell_centers, and end_nodes must also be provided."])
         end
+    end
+    # Set return reservoir cell if missing
+    if ismissing(return_reservoir_cell)
+        return_reservoir_cell = reservoir_cells[end]
     end
 
     # Set up segment flow models
