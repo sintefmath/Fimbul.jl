@@ -96,7 +96,7 @@ function ags(;
     rock_heat_capacity = process_prop(
         :rock_heat_capacity, rock_heat_capacity, layers)
 
-     domain = reservoir_domain(msh;
+    domain = reservoir_domain(msh;
         porosity = porosity,
         permeability = permeability,
         rock_thermal_conductivity = rock_thermal_conductivity,
@@ -217,7 +217,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
     for k = 1:length(well_coords)
         from = well_connectivity[k,1]
         if from != 0
-            ix = findfirst(rcells[k][1] .== rcells[from])
+            ix = findfirst(rcells[from] .== rcells[k][1])
             if isnothing(ix)
                 error("Could not find connection from well section $from to well $k")
             end
@@ -226,7 +226,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         end
         to = well_connectivity[k,2]
         if to != 0
-            ix = findfirst(rcells[k][end] .== rcells[to])
+            ix = findfirst(rcells[to] .== rcells[k][end])
             if isnothing(ix)
                 error("Could not find connection from well section $k to well $to")
             end
@@ -248,6 +248,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
     common_args = (
         simple_well = false,
         type = :closed_loop,
+        radius = 150e-3,
         WI = 0.0
     )
 
@@ -256,12 +257,14 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         perforation_cells_well = wcells,
         dir = directions,
         well_cell_centers = geo.cell_centroids[:, rcells],
+        end_nodes = [length(wcells)],
         name = :AGS_supply,
         common_args...
     )
 
     w_return = setup_well(domain, rcells[end];
         name = :AGS_return,
+        WIth = 0.0,
         common_args...
     )
 
