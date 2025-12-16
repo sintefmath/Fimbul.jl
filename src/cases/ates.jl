@@ -392,14 +392,12 @@ function make_ates_cart_mesh(well_distance, depths, aquifer_layer;
         xy_hot[1]-offset,          # Left boundary
         xy_hot[1]-nearwell_radius, # Left thermal boundary
         xy_hot[1]-hxy_min/2,       # Near hot well
-        xy_hot[1]+nearwell_radius, # Between wells
-        xy_cold[1]-nearwell_radius,# Between wells  
         xy_cold[1]-hxy_min/2,      # Near cold well
         xy_cold[1]+nearwell_radius,# Right thermal boundary
         xy_cold[1]+offset          # Right boundary
     ]
     # Grid spacing array: coarse-fine-fine-coarse-fine-fine-coarse
-    hx = [hxy_max, hxy_min, hxy_min, hxy_max, hxy_min, hxy_min, hxy_max];
+    hx = [hxy_max, hxy_min, hxy_min, hxy_min, hxy_max];
     dx = diff(x)
     hx[dx .< hxy_max] .= hxy_min
     nx = round.(dx./hx)
