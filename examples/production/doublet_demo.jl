@@ -89,15 +89,7 @@ fig
 # compute the change in reservoir states from the initial state and plot the
 # results interactively. The change in temperature is particularly interesting
 # as it shows the evolution of the cold front in the aquifer
-Δstates = []
-for state in results.states
-    Δstate = Dict{Symbol, Any}()
-    for (k, v) in state
-        v0 = case.state0[:Reservoir][k]
-        Δstate[k] = v .- v0
-    end
-    push!(Δstates, Δstate)
-end
+Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
 plot_reservoir(case.model, Δstates;
 colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
 
