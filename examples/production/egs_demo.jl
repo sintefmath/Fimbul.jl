@@ -137,17 +137,7 @@ plot_reservoir(case.model, results.states; plot_res_args...)
 # It is often more informative to visualize the deviation from the inital
 # conditions to highlight thermal depletion zones. We therefore compute the
 # change in reservoir variables to the initial state for all timesteps.
-Δstates = []
-for state in results.states
-    Δstate = Dict{Symbol, Any}()
-    for (k, v) in state
-        if haskey(case.state0[:Reservoir], k)
-            v0 = case.state0[:Reservoir][k]
-            Δstate[k] = v .- v0
-        end
-    end
-    push!(Δstates, Δstate)
-end
+Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
 plot_reservoir(case.model, Δstates; plot_res_args...)
 
 # ### Well Performance Analysis
