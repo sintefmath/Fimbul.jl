@@ -68,6 +68,11 @@ using Base64
                 # Store results globally (simple hack for single-user local app)
                 global current_results = results
                 global current_case = case
+                
+                # Calculate global min/max for plotting
+                T_all = reduce(vcat, [s[:Temperature] for s in results.states]) .- 273.15
+                global current_limits = (minimum(T_all), maximum(T_all))
+
                 max_step = length(results.states)
                 plot_step = 1
                 reservoir_img = generate_plot_image(plot_step)
@@ -88,9 +93,10 @@ end
 # Global storage for results
 current_results = nothing
 current_case = nothing
+current_limits = nothing
 
 function generate_plot_image(step_index)
-    global current_results, current_case
+    global current_results, current_case, current_limits
     if isnothing(current_results)
         return ""
     end
@@ -117,7 +123,7 @@ function generate_plot_image(step_index)
     # JutulDarcy exports plot_cell_data!
     
     # Let's try to use JutulDarcy.plot_cell_data!
-    JutulDarcy.plot_cell_data!(ax, msh, T, colormap = :seaborn_icefire_gradient)
+    JutulDarcy.plot_cell_data!(ax, msh, T, colormap = :seaborn_icefire_gradient, colorrange = current_limits)
     
     # Add wells
     # wells = get_model_wells(model)
