@@ -194,9 +194,9 @@ ui() = [
     h1("Fimbul ATES Simulator"),
     p("Simulate Aquifer Thermal Energy Storage (ATES) systems using Fimbul and JutulDarcy."),
     tabgroup(:selected_tab, class="bg-primary text-white shadow-2", [
-        tab(name="geology_wells", label="Geology and Wells"),
-        tab(name="controls", label="Controls"),
-        tab(name="results", label="Results")
+        tab(name="geology_wells", label="Geology and Wells", icon="volcano"),
+        tab(name="controls", label="Controls", icon="settings"),
+        tab(name="results", label="Results", icon="bar_chart")
     ]),
     tabpanels(:selected_tab, animated=true, [
             tabpanel(name="geology_wells", [
@@ -290,7 +290,7 @@ ui() = [
                     cell(textfield("", :rate_charge_l_s, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
                 ], class="items-center"),
 
-                btn("Run Simulation", @click("run_simulation = true"), loading=:run_simulation)
+                btn("Run Simulation", @click("run_simulation = true"), loading=:run_simulation, icon="rocket_launch")
             ]),
             tabpanel(name="results", [
                 h4("Status: {{simulation_status}}"),
