@@ -56,8 +56,11 @@ simulator, config = setup_reservoir_simulator(case;
     presolve_wells = true,
     tol_cnv = 1e-2,
     tol_mb = 1e-6,
+    tol_cnve_well = Inf,
+    inc_tol_dT = 1e-2,
     timesteps = :auto,
     initial_dt = 5.0,
+    target_its = 10,
     relaxation = true);
 
 # The transition from charging to discharging creates a thermal shock that is
@@ -75,7 +78,7 @@ config[:timestep_max_decrease] = 1e-6;
 # Note that this simulation can take a few minutes to run. Setting `info_level =
 # 0` will show a progress bar while the simulation runs.`
 results = simulate_reservoir(case;
-simulator=simulator, config=config, info_level=0);
+simulator=simulator, config=config, info_level=2);
 
 # ### Interactive visualization of results
 # We first plot the final temperature distribution in the reservoir and well
