@@ -31,7 +31,7 @@ using Base64
     
     @in thermal_gradient = 30.0
     @in temperature_surface = 10.0
-    @in selected_tab = "parameters"
+    @in selected_tab = "geology_wells"
 
     @in run_simulation = false
     
@@ -194,14 +194,17 @@ ui() = [
     h1("Fimbul ATES Simulator"),
     p("Simulate Aquifer Thermal Energy Storage (ATES) systems using Fimbul and JutulDarcy."),
     tabgroup(:selected_tab, class="bg-primary text-white shadow-2", [
-        tab(name="parameters", label="Parameters"),
+        tab(name="geology_wells", label="Geology and Wells"),
+        tab(name="controls", label="Controls"),
         tab(name="results", label="Results")
     ]),
     tabpanels(:selected_tab, animated=true, [
-            tabpanel(name="parameters", [
-                # h4("Parameters"),
-                
-                # h5("Geology"),
+            tabpanel(name="geology_wells", [
+                row([
+                    cell(p("Well Distance (m)"), size=3),
+                    cell(slider(100.0:50.0:2000.0, :well_distance; label=true), size=6),
+                    cell(textfield("", :well_distance, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                ], class="items-center"),
 
                 row([
                     cell(p("Aquifer Thickness (m)"), size=3),
@@ -265,12 +268,9 @@ ui() = [
                     cell(textfield("", :rock_heat_capacity_cap, type="number", inputclass="text-right"), size=2, class="q-pl-sm")
                 ], class="items-center"),
 
+            ]),
+            tabpanel(name="controls", [
                 h5("Operational Parameters"),
-                row([
-                    cell(p("Well Distance (m)"), size=3),
-                    cell(slider(100.0:50.0:2000.0, :well_distance; label=true), size=6),
-                    cell(textfield("", :well_distance, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
-                ], class="items-center"),
 
                 row([
                     cell(p("Charge Temp (°C)"), size=3),
