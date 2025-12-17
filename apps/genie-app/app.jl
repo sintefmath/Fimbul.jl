@@ -15,8 +15,23 @@ using Base64
     @in temperature_charge = 95.0
     @in temperature_discharge = 25.0
     @in rate_charge_l_s = 25.0
-    @in permeability_darcy = 1.0
+    @in permeability_md = 1000.0
     @in porosity = 0.35
+    @in well_distance = 500.0
+    @in aquifer_thickness = 100.0
+    @in depth = 1000.0
+    @in rock_thermal_conductivity = 2.0
+    @in rock_heat_capacity = 900.0
+    
+    # Cap rock / Basement properties
+    @in permeability_cap_md = 1.0
+    @in porosity_cap = 0.01
+    @in rock_thermal_conductivity_cap = 2.0
+    @in rock_heat_capacity_cap = 900.0
+    
+    @in thermal_gradient = 0.03
+    @in temperature_surface = 10.0
+
     @in run_simulation = false
     
     @out simulation_status = "Ready"
@@ -34,8 +49,19 @@ using Base64
                     temperature_charge, 
                     temperature_discharge, 
                     rate_charge_l_s, 
-                    permeability_darcy, 
-                    porosity
+                    permeability_md, 
+                    porosity,
+                    well_distance,
+                    aquifer_thickness,
+                    depth,
+                    rock_thermal_conductivity,
+                    rock_heat_capacity,
+                    permeability_cap_md,
+                    porosity_cap,
+                    rock_thermal_conductivity_cap,
+                    rock_heat_capacity_cap,
+                    thermal_gradient,
+                    temperature_surface
                 )
                 simulation_status = "Completed"
                 
@@ -111,27 +137,37 @@ function generate_plot_image(step_index)
     return "data:image/png;base64,$base64_img"
 end
 
-function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_d, phi)
-    darcy, litre, second = si_units(:darcy, :litre, :second)
+function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well_dist, aq_thick, d, rock_cond, rock_cp, perm_cap_md, phi_cap, rock_cond_cap, rock_cp_cap, grad, t_surf)
+    darcy, litre, second, watt, meter, Kelvin, joule, kilogram = si_units(:darcy, :litre, :second, :watt, :meter, :Kelvin, :joule, :kilogram)
     
-    # Default properties
-    perms = [1.0, 5.0, 1000.0, 5.0, 1.0] .* 1e-3 .* darcy
-    # Update aquifer layer (index 3)
-    perms[3] = perm_d * darcy
+    # Simple properties: [aquifer, cap/basement]
+    # Cap rock permeability
+    perms = [perm_md * 1e-3 * darcy, perm_cap_md * 1e-3 * darcy]
     
-    porosities = [0.01, 0.05, 0.35, 0.05, 0.01]
-    porosities[3] = phi
+    # Cap rock porosity
+    porosities = [phi, phi_cap]
+
+    # Thermal properties
+    rock_conds = [rock_cond, rock_cond_cap] .* watt / (meter * Kelvin)
+    rock_cps = [rock_cp, rock_cp_cap] .* joule / (kilogram * Kelvin)
     
     # Coarser mesh for speed
     # hxy_min default is nearwell_radius/6. nearwell_radius ~ 125m/2 = 62.5m. hxy_min ~ 10m.
     # Let's set hxy_min to 20m.
     
-    case = ates(
+    case = Fimbul.ates_simple(
         temperature_charge = convert_to_si(t_charge, :Celsius),
         temperature_discharge = convert_to_si(t_discharge, :Celsius),
         rate_charge = rate_l_s * litre / second,
         permeability = perms,
         porosity = porosities,
+        well_distance = well_dist,
+        aquifer_thickness = aq_thick,
+        depth = d,
+        rock_thermal_conductivity = rock_conds,
+        rock_heat_capacity = rock_cps,
+        thermal_gradient = grad * Kelvin / meter,
+        temperature_surface = convert_to_si(t_surf, :Celsius),
         use_2d = true,
         mesh_args = (hxy_min = 20.0, hxy_max = 100.0, hz_min = 10.0, hz_max = 50.0),
         utes_schedule_args = (num_years = 1,)
@@ -152,11 +188,96 @@ ui() = [
     row([
         cell([
             h4("Parameters"),
-            textfield("Charge Temp (°C)", :temperature_charge),
-            textfield("Discharge Temp (°C)", :temperature_discharge),
-            textfield("Charge Rate (L/s)", :rate_charge_l_s),
-            textfield("Permeability (Darcy)", :permeability_darcy),
-            textfield("Porosity", :porosity),
+            
+            h5("Geology"),
+
+            row([
+                cell(p("Aquifer Thickness (m)"), size=3),
+                cell(slider(1.0:1.0:500.0, :aquifer_thickness; label=true), size=6),
+                cell(textfield("", :aquifer_thickness, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Aquifer Depth (m)"), size=3),
+                cell(slider(10.0:1.0:3000.0, :depth; label=true), size=6),
+                cell(textfield("", :depth, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Thermal Gradient (K/m)"), size=3),
+                cell(slider(0.0:0.001:0.1, :thermal_gradient; label=true), size=6),
+                cell(textfield("", :thermal_gradient, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Surface Temperature (°C)"), size=3),
+                cell(slider(1.0:1.0:30.0, :temperature_surface; label=true), size=6),
+                cell(textfield("", :temperature_surface, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(size=2),
+                cell(h6("Aquifer"), size=5),
+                cell(h6("Cap/Basement"), size=5)
+            ]),
+
+            row([
+                cell(p("Permeability (mD)"), size=2),
+                cell(slider(1.0:1.0:10000.0, :permeability_md; label=true), size=3),
+                cell(textfield("", :permeability_md, type="number"), size=2, class="q-pl-sm"),
+                cell(slider(0.001:0.001:100.0, :permeability_cap_md; label=true), size=3, class="q-pl-md"),
+                cell(textfield("", :permeability_cap_md, type="number"), size=2, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Porosity"), size=2),
+                cell(slider(0.01:0.01:1.0, :porosity; label=true), size=3),
+                cell(textfield("", :porosity, type="number"), size=2, class="q-pl-sm"),
+                cell(slider(0.001:0.001:1.0, :porosity_cap; label=true), size=3, class="q-pl-md"),
+                cell(textfield("", :porosity_cap, type="number"), size=2, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Rock Thermal Conductivity (W/m/K)"), size=2),
+                cell(slider(0.5:0.1:5.0, :rock_thermal_conductivity; label=true), size=3),
+                cell(textfield("", :rock_thermal_conductivity, type="number"), size=2, class="q-pl-sm"),
+                cell(slider(0.5:0.1:5.0, :rock_thermal_conductivity_cap; label=true), size=3, class="q-pl-md"),
+                cell(textfield("", :rock_thermal_conductivity_cap, type="number"), size=2, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Rock Heat Capacity (J/kg/K)"), size=2),
+                cell(slider(500.0:50.0:2000.0, :rock_heat_capacity; label=true), size=3),
+                cell(textfield("", :rock_heat_capacity, type="number"), size=2, class="q-pl-sm"),
+                cell(slider(500.0:50.0:2000.0, :rock_heat_capacity_cap; label=true), size=3, class="q-pl-md"),
+                cell(textfield("", :rock_heat_capacity_cap, type="number"), size=2, class="q-pl-sm")
+            ], class="items-center"),
+
+            h5("Operational Parameters"),
+            row([
+                cell(p("Well Distance (m)"), size=3),
+                cell(slider(100.0:50.0:2000.0, :well_distance; label=true), size=6),
+                cell(textfield("", :well_distance, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Charge Temp (°C)"), size=3),
+                cell(slider(1:1:150, :temperature_charge; label=true), size=6),
+                cell(textfield("", :temperature_charge, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Discharge Temp (°C)"), size=3),
+                cell(slider(1:1:150, :temperature_discharge; label=true), size=6),
+                cell(textfield("", :temperature_discharge, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
+            row([
+                cell(p("Charge Rate (L/s)"), size=3),
+                cell(slider(0.1:0.1:100, :rate_charge_l_s; label=true), size=6),
+                cell(textfield("", :rate_charge_l_s, type="number"), size=3, class="q-pl-sm")
+            ], class="items-center"),
+
             btn("Run Simulation", @click("run_simulation = true"), loading=:run_simulation)
         ]),
         cell([
