@@ -4,12 +4,15 @@ function extruded_mesh(cell_constraints, depths;
     interpolation = :default,
     dist_min_factor = 1.1, dist_max_factor = 0.75,
     recombine_to_quads = true,
+    info_level = -1
     )
 
     @assert depths[1] == 0.0
 
     # Initialize Gmsh
     gmsh.initialize()
+    gmsh.option.setNumber("General.Terminal", info_level < 0 ? 0 : 1)
+    gmsh.option.setNumber("General.Verbosity", max(info_level, 0))
     gmsh.clear()
     gmsh.model.add("extruded_mesh")
 
