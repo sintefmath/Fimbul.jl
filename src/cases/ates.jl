@@ -42,7 +42,7 @@ A `JutulCase` for ATES
 """
 function ates(;
     well_distance = missing,
-    depths = [0.0, 850.0, 900.0, 1000.0, 1050.0, 1300.0],
+    depths = [0.0, 950.0, 1000.0, 1050.0, 1150.0, 1300.0],
     porosity = [0.01, 0.05, 0.35, 0.05, 0.01],
     permeability = [1.0, 5.0, 1000.0, 5.0, 1.0].*1e-3.*si_unit(:darcy),
     rock_thermal_conductivity = [2.5, 2.0, 1.5, 2.0, 2.5].*watt/(meter*Kelvin),
@@ -56,9 +56,9 @@ function ates(;
     balanced_injection = true,
     temperature_surface = convert_to_si(10.0, :Celsius),
     thermal_gradient = 0.03Kelvin/meter,
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"],
-    utes_schedule_args = NamedTuple(),
+    periods = ["June", "October", "December", "April", "June"],
+    num_cycles = 5,
+    schedule_args = NamedTuple(),
     use_2d = false,
     mesh_args = NamedTuple(),
 )
@@ -79,14 +79,20 @@ function ates(;
     Caq = Cf*ϕ + Cr*(1 - ϕ)
     Haq = layer_thickness[aquifer_layer]
     # Default charging duration (6 months)
-    ch_start = Fimbul.process_time(2025, charge_period[1])
-    ch_end = Fimbul.process_time(2025, charge_period[2], true)
-    charge_duration = (ch_end - ch_start).value*1e-3
+    if periods isa Vector{String}
+        ch_start = Fimbul.process_time(2025, periods[1])
+        ch_end = Fimbul.process_time(2025, periods[2], true)
+        charge_duration = (ch_end - ch_start).value*1e-3
+    else
+        charge_duration = periods[1]
+    end
     thermal_radius = missing
     # Calculate rate based on a target 250 m thermal radius if not provided
     if ismissing(rate_charge)
-        thermal_radius = ismissing(well_distance) ? 125 : well_distance/4
-        rate_charge = (thermal_radius^2*Caq*π*Haq/Cf)/charge_duration
+        thermal_radius = ismissing(well_distance) ? 125 : well_distance/3
+        # TODO: Something off about thermal radius calculations, multiply by 0.25 for now
+        rate_charge = Fimbul.injection_rate_from_thermal_radius(
+            thermal_radius, charge_duration, Haq, ϕ, Cf, Cr)*0.25
         # Adjust for 2D simulation (per unit width)
         if use_2d
             rate_charge *= 2/(π*thermal_radius)
@@ -103,7 +109,7 @@ function ates(;
     end
     # Set well distance based on thermal radius if not specified
     if ismissing(well_distance)
-        well_distance = 4*thermal_radius
+        well_distance = 3*thermal_radius
     end
 
     # ## Create reservoir domain
@@ -235,11 +241,11 @@ function ates(;
     # Set up forces for rest periods (no active wells)
     forces_rest = setup_reservoir_forces(model; bc = bc)
     # Create UTES operational schedule
-    dt, forces, timestamps = make_utes_schedule(
-        forces_charge, forces_discharge, forces_rest,
-        charge_period = charge_period,
-        discharge_period = discharge_period;
-        utes_schedule_args...
+    dt, forces, timestamps = make_schedule(
+        [forces_charge, forces_rest, forces_discharge, forces_rest],
+        periods;
+        num_cycles = num_cycles,
+        schedule_args...
     )
 
     # ## Additional info
