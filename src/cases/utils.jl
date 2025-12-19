@@ -119,22 +119,22 @@ period.
 
 # Example
 ```julia
-# Define seasonal operations: charge in summer, rest in winter
-forces = [charge_controls, rest_controls]
-periods = ["June", "September", "December"]  # June-Sep charge, Sep-Dec rest
+# Define seasonal operations:
+#   ** charge (April-August), rest (September-October), discharge (November-March)
+periods = ["April", "September", "November", "April"]
 dt, forces, times = make_schedule(forces, periods;
     num_years=3, report_interval=7si_unit(:day))
 ```
 """
 function make_schedule(forces, periods;
     start_year = missing,
-    num_years = 1,
+    num_cycles = 1,
     report_interval = missing,
     num_reports = missing
     )
 
     start_year = ismissing(start_year) ? Dates.year(now()) : start_year
-    years = (0:num_years-1) .+ start_year
+    years = (0:num_cycles-1) .+ start_year
 
     num_periods = length(periods)-1
     @assert num_periods > 0 "At least one period is required"
@@ -174,101 +174,101 @@ function make_schedule(forces, periods;
 
 end
 
-"""
-    make_utes_schedule(forces_charge, forces_discharge, forces_rest; kwargs...)
+# """
+#     make_utes_schedule(forces_charge, forces_discharge, forces_rest; kwargs...)
 
-Create a specialized schedule for Underground Thermal Energy Storage (UTES)
+# Create a specialized schedule for Underground Thermal Energy Storage (UTES)
 
-This function generates a three-phase operational schedule typical for thermal energy storage:
-1. **Charging phase**: Inject hot water to store thermal energy
-2. **Rest phase**: No well activity 
-3. **Discharging phase**: Extract stored thermal energy for heating applications
+# This function generates a three-phase operational schedule typical for thermal energy storage:
+# 1. **Charging phase**: Inject hot water to store thermal energy
+# 2. **Rest phase**: No well activity 
+# 3. **Discharging phase**: Extract stored thermal energy for heating applications
 
-The schedule automatically handles seasonal operations with user-defined charge
-and discharge periods, typically aligned with energy availability (summer
-charging) and demand (winter discharging).
+# The schedule automatically handles seasonal operations with user-defined charge
+# and discharge periods, typically aligned with energy availability (summer
+# charging) and demand (winter discharging).
 
-NOTE: The function does not validate that the provided forcing conditions are
-appropriate for UTES operations. It is up to the user to ensure that the
-`forces_charge`, `forces_discharge`, and `forces_rest` inputs contain suitable
-well controls.
+# NOTE: The function does not validate that the provided forcing conditions are
+# appropriate for UTES operations. It is up to the user to ensure that the
+# `forces_charge`, `forces_discharge`, and `forces_rest` inputs contain suitable
+# well controls.
 
-# Arguments
-- `forces_charge`: Forcing conditions during charging phase (hot water injection)
-- `forces_discharge`: Forcing conditions during discharging phase (thermal energy extraction)  
-- `forces_rest`: Forcing conditions during rest periods (no well activity)
+# # Arguments
+# - `forces_charge`: Forcing conditions during charging phase (hot water injection)
+# - `forces_discharge`: Forcing conditions during discharging phase (thermal energy extraction)  
+# - `forces_rest`: Forcing conditions during rest periods (no well activity)
 
-# Keyword Arguments
-- `charge_period=["June", "September"]`: Start and end of charging phase (see
-  `make_schedule` for valid formats)
-- `discharge_period=["December", "March"]`: Start and end of discharging phase (see
-  `make_schedule` for valid formats)
-- `start_year::Union{Int,Missing}=missing`: Starting year for simulation.
-  Defaults to current year.
-- `num_years::Int=5`: Number of operational years to simulate.
-- `kwargs...`: Additional arguments passed to `make_schedule()` (e.g.,
-  `report_interval`).
+# # Keyword Arguments
+# - `charge_period=["June", "September"]`: Start and end of charging phase (see
+#   `make_schedule` for valid formats)
+# - `discharge_period=["December", "March"]`: Start and end of discharging phase (see
+#   `make_schedule` for valid formats)
+# - `start_year::Union{Int,Missing}=missing`: Starting year for simulation.
+#   Defaults to current year.
+# - `num_years::Int=5`: Number of operational years to simulate.
+# - `kwargs...`: Additional arguments passed to `make_schedule()` (e.g.,
+#   `report_interval`).
 
-# Returns
-- `dt`: Vector of time step sizes in seconds
-- `forces`: Vector of forcing conditions for each time step
-- `timestamps`: Vector of DateTime objects for temporal tracking
+# # Returns
+# - `dt`: Vector of time step sizes in seconds
+# - `forces`: Vector of forcing conditions for each time step
+# - `timestamps`: Vector of DateTime objects for temporal tracking
 
-# Example
-```julia
-# Standard ATES schedule: charge Jun-Sep, discharge Dec-Mar
-dt, forces, times = make_utes_schedule(
-    charge_forces, discharge_forces, rest_forces;
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"], 
-    num_years = 5,
-    report_interval = 7si_unit(:day)
-)
-```
+# # Example
+# ```julia
+# # Standard ATES schedule: charge Jun-Sep, discharge Dec-Mar
+# dt, forces, times = make_utes_schedule(
+#     charge_forces, discharge_forces, rest_forces;
+#     charge_period = ["June", "September"],
+#     discharge_period = ["December", "March"], 
+#     num_years = 5,
+#     report_interval = 7si_unit(:day)
+# )
+# ```
 
-# Notes
-- Rest periods are automatically inserted between charge and discharge phases
-- The function handles year transitions and ensures chronological ordering
-- Periods with zero duration are automatically filtered out
-"""
-function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"],
-    start_year = missing,
-    num_years = 5,
-    kwargs...
-    )
+# # Notes
+# - Rest periods are automatically inserted between charge and discharge phases
+# - The function handles year transitions and ensures chronological ordering
+# - Periods with zero duration are automatically filtered out
+# """
+# function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
+#     charge_period = ["June", "September"],
+#     discharge_period = ["December", "March"],
+#     start_year = missing,
+#     num_years = 5,
+#     kwargs...
+#     )
 
-    start_year = ismissing(start_year) ? Dates.year(now()) : start_year
+#     start_year = ismissing(start_year) ? Dates.year(now()) : start_year
     
-    ch_start = process_time(start_year, charge_period[1])
-    ch_end = process_time(start_year, charge_period[2], true)
-    ch_end < ch_start ? ch_end += Dates.Year(1) : nothing
-    dch_start = process_time(start_year, discharge_period[1])
-    dch_end = process_time(start_year, discharge_period[2], true)
-    dch_end < dch_start ? dch_end += Dates.Year(1) : nothing
+#     ch_start = process_time(start_year, charge_period[1])
+#     ch_end = process_time(start_year, charge_period[2], true)
+#     ch_end < ch_start ? ch_end += Dates.Year(1) : nothing
+#     dch_start = process_time(start_year, discharge_period[1])
+#     dch_end = process_time(start_year, discharge_period[2], true)
+#     dch_end < dch_start ? dch_end += Dates.Year(1) : nothing
 
-    periods = [ch_start, ch_end, dch_start, dch_end, ch_start + Dates.Year(1)]
-    forces = [forces_charge; forces_rest; forces_discharge; forces_rest]
-    remove, p0 = [], nothing
-    for (pno, p) in enumerate(periods)
-        if 1 < pno && p - p0 <= Dates.Second(0)
-            push!(remove, pno)
-        end
-        p0 = p
-    end
-    deleteat!(periods, remove)
-    deleteat!(forces, remove.-1)
-    periods = process_periods(start_year, periods)
+#     periods = [ch_start, ch_end, dch_start, dch_end, ch_start + Dates.Year(1)]
+#     forces = [forces_charge; forces_rest; forces_discharge; forces_rest]
+#     remove, p0 = [], nothing
+#     for (pno, p) in enumerate(periods)
+#         if 1 < pno && p - p0 <= Dates.Second(0)
+#             push!(remove, pno)
+#         end
+#         p0 = p
+#     end
+#     deleteat!(periods, remove)
+#     deleteat!(forces, remove.-1)
+#     periods = process_periods(start_year, periods)
 
-    periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
+#     periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
 
-    dt, forces, timestamps = make_schedule(forces, periods;
-        start_year = start_year, num_years = num_years, kwargs...)
+#     dt, forces, timestamps = make_schedule(forces, periods;
+#         start_year = start_year, num_years = num_years, kwargs...)
 
-    return dt, forces, timestamps
+#     return dt, forces, timestamps
 
-end
+# end
 
 function process_periods(year, periods)
 
