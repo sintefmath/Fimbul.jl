@@ -78,7 +78,7 @@ config[:timestep_max_decrease] = 1e-6;
 # Note that this simulation can take a few minutes to run. Setting `info_level =
 # 0` will show a progress bar while the simulation runs.`
 results = simulate_reservoir(case;
-simulator=simulator, config=config, info_level=2);
+simulator=simulator, config=config, info_level=0);
 
 # ### Interactive visualization of results
 # We first plot the final temperature distribution in the reservoir and well
