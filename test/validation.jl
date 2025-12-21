@@ -31,6 +31,11 @@ end
 
 @testset "Validation closed-loop" begin
 
+    meter = si_unit(:meter)
+    atm = si_unit(:atm)
+    kilogram = si_unit(:kilogram)
+    Kelvin, Joule = si_units(:Kelvin, :joule)
+    darcy = si_unit(:darcy)
     # Operational conditions
     T_in = convert_to_si(80.0, :Celsius) # Inlet temperature
     T_rock = convert_to_si(10.0, :Celsius) # Ground temperature (assumed constant)
