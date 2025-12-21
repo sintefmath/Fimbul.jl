@@ -1,4 +1,4 @@
-using Jutul, JutulDarcy, Fimbul, Test, LinearAlgebra, HYPRE
+using Jutul, JutulDarcy, Fimbul, Test, LinearAlgebra
 
 @testset "Validation 1D" begin
 
