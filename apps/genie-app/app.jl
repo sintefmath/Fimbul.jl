@@ -33,10 +33,8 @@ using Base64
     @in temperature_surface = 10.0
     
     @in num_cycles = 10
-    @in charge_month = 6
-    @in charge_duration = 4
-    @in discharge_month = 12
-    @in discharge_duration = 4
+    @in charge_duration = RangeData(5:8)
+    @in discharge_duration = RangeData(7:10)
 
     @in selected_tab = "geology_wells"
 
@@ -71,10 +69,8 @@ using Base64
                     thermal_gradient,
                     temperature_surface,
                     num_cycles,
-                    charge_month,
                     charge_duration,
-                    discharge_month,
-                    discharge_duration
+                    discharge_duration,
                 )
                 simulation_status = "Completed"
                 
@@ -156,7 +152,7 @@ function generate_plot_image(step_index)
     return "data:image/png;base64,$base64_img"
 end
 
-function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well_dist, aq_thick, d, rock_cond, rock_cp, perm_cap_md, phi_cap, rock_cond_cap, rock_cp_cap, grad, t_surf, n_cycles, ch_month, ch_dur, dch_month, dch_dur)
+function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well_dist, aq_thick, d, rock_cond, rock_cp, perm_cap_md, phi_cap, rock_cond_cap, rock_cp_cap, grad, t_surf, n_cycles, charge_duration, discharge_duration)
     darcy, litre, second, watt, meter, Kelvin, joule, kilogram = si_units(:darcy, :litre, :second, :watt, :meter, :Kelvin, :joule, :kilogram)
     
     # Simple properties: [aquifer, cap/basement]
@@ -175,9 +171,12 @@ function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well
     # Let's set hxy_min to 20m.
     
     # Calculate end months
-    ch_end = (ch_month + ch_dur - 1 - 1) % 12 + 1
-    dch_end = (dch_month + dch_dur - 1 - 1) % 12 + 1
-
+    ch = charge_duration
+    dch = discharge_duration.range[end] - discharge_duration.range[1]
+    rest_period_1 = discharge_duration.range[1] - ch 
+    rest_period_2 = 12.0 - discharge_duration.range[end]
+    month = si_unit(:year)/12.0
+    periods = [ch, rest_period_1, dch, rest_period_2].* month
     case = Fimbul.ates_simple(
         temperature_charge = convert_to_si(t_charge, :Celsius),
         temperature_discharge = convert_to_si(t_discharge, :Celsius),
@@ -193,9 +192,8 @@ function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well
         temperature_surface = convert_to_si(t_surf, :Celsius),
         use_2d = true,
         mesh_args = (hxy_min = 20.0, hxy_max = 100.0, hz_min = 10.0, hz_max = 50.0),
-        utes_schedule_args = (num_years = n_cycles,),
-        charge_period = [ch_month, ch_end],
-        discharge_period = [dch_month, dch_end]
+        num_cycles = n_cycles,
+        periods = periods
     )
     
     sim, cfg = setup_reservoir_simulator(case; info_level = 0)
@@ -296,28 +294,28 @@ ui() = [
                 ], class="items-center"),
                 
                 row([
-                    cell(p("Charge Start Month"), size=3),
-                    cell(slider(1:1:12, :charge_month; label=true), size=6),
-                    cell(textfield("", :charge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                    cell(p("Charge duration (months)"), size=3),
+                    cell(slider(0.0:0.25:12.0, :charge_duration; label=true, dragrange=true), size=9),
+                    #cell(textfield("", :charge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
                 ], class="items-center"),
 
-                row([
-                    cell(p("Charge Duration (months)"), size=3),
-                    cell(slider(1:1:12, :charge_duration; label=true), size=6),
-                    cell(textfield("", :charge_duration, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
-                ], class="items-center"),
+                # row([
+                #     cell(p("Charge Duration (months)"), size=3),
+                #     cell(slider(1:1:12, :charge_duration; label=true), size=6),
+                #     cell(textfield("", :charge_duration, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                # ], class="items-center"),
 
                 row([
-                    cell(p("Discharge Start Month"), size=3),
-                    cell(slider(1:1:12, :discharge_month; label=true), size=6),
-                    cell(textfield("", :discharge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                    cell(p("Discharge duration (months)"), size=3),
+                    cell(slider(0.0:0.25:12.0, :discharge_duration; label=true), size=9),
+                    #cell(textfield("", :discharge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
                 ], class="items-center"),
 
-                row([
-                    cell(p("Discharge Duration (months)"), size=3),
-                    cell(slider(1:1:12, :discharge_duration; label=true), size=6),
-                    cell(textfield("", :discharge_duration, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
-                ], class="items-center"),
+                # row([
+                #     cell(p("Discharge Duration (months)"), size=3),
+                #     cell(slider(1:1:12, :discharge_duration; label=true), size=6),
+                #     cell(textfield("", :discharge_duration, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                # ], class="items-center"),
 
                 h5("Operational Parameters"),
 
