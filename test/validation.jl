@@ -36,6 +36,7 @@ end
     kilogram = si_unit(:kilogram)
     Kelvin, Joule = si_units(:Kelvin, :joule)
     darcy = si_unit(:darcy)
+    day = si_unit(:day)
     # Operational conditions
     T_in = convert_to_si(80.0, :Celsius) # Inlet temperature
     T_rock = convert_to_si(10.0, :Celsius) # Ground temperature (assumed constant)
