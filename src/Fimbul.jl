@@ -35,7 +35,10 @@ module Fimbul
     include("meshing/fractured.jl")
     include("meshing/utils.jl")
     # Wells
-    include("wells/btes.jl")
+    include("wells/closed_loop.jl")
+    include("wells/closed_loop_u1.jl")
+    include("wells/closed_loop_coaxial.jl")
+    include("wells/closed_loop_analytical.jl")
     # Cases
     include("cases/cases.jl")
     # Optimization

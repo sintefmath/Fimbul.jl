@@ -47,6 +47,7 @@ function ates(;
     permeability = [1.0, 5.0, 1000.0, 5.0, 1.0].*1e-3.*si_unit(:darcy),
     rock_thermal_conductivity = [2.5, 2.0, 1.5, 2.0, 2.5].*watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
+    rock_density = fill(2600.0*kilogram/meter^3, length(depths)-1),
     aquifer_layer = 3,
     temperature_charge = convert_to_si(95, :Celsius),
     temperature_discharge = convert_to_si(25, :Celsius),
@@ -71,20 +72,20 @@ function ates(;
     rock_thermal_conductivity = process_value(rock_thermal_conductivity)
     rock_heat_capacity = process_value(rock_heat_capacity)
     # Calculate thermal properties for the aquifer layer
-    Cf, Cr = 4184.0, rock_heat_capacity[aquifer_layer]
+
+    Cf = 4184.0*joule/(kilogram*Kelvin)*1000.0*kilogram/meter^3  # Fluid heat capacity
+    Cr = rock_heat_capacity[aquifer_layer]*rock_density[aquifer_layer]
     ϕ = porosity[aquifer_layer]
     Caq = Cf*ϕ + Cr*(1 - ϕ)
     Haq = layer_thickness[aquifer_layer]
     # Default charging duration (6 months)
-    # TODO: Use charge duration from input
-    charge_duration = 0.5si_unit(:year)
     ch_start = Fimbul.process_time(2025, charge_period[1])
     ch_end = Fimbul.process_time(2025, charge_period[2], true)
     charge_duration = (ch_end - ch_start).value*1e-3
     thermal_radius = missing
     # Calculate rate based on a target 250 m thermal radius if not provided
     if ismissing(rate_charge)
-        thermal_radius = ismissing(well_distance) ? 250.0 : well_distance/2
+        thermal_radius = ismissing(well_distance) ? 125 : well_distance/4
         rate_charge = (thermal_radius^2*Caq*π*Haq/Cf)/charge_duration
         # Adjust for 2D simulation (per unit width)
         if use_2d
@@ -102,12 +103,12 @@ function ates(;
     end
     # Set well distance based on thermal radius if not specified
     if ismissing(well_distance)
-        well_distance = 2*thermal_radius
+        well_distance = 4*thermal_radius
     end
 
     # ## Create reservoir domain
     # Create mesh
-    nearwell_radius = 0.5*min(thermal_radius, well_distance/2)
+    nearwell_radius = min(thermal_radius, well_distance/2)
     msh, layers = make_ates_cart_mesh(well_distance, depths, aquifer_layer;
         nearwell_radius = nearwell_radius,
         use_2d = use_2d,
@@ -209,7 +210,7 @@ function ates(;
     end
     # Hot well: inject hot water
     ctrl_hot = InjectorControl(
-        rate_target, [1.0], density = rho, temperature = temperature_charge)
+        rate_target, [1.0], density = rho, temperature = temperature_charge; check = false)
     # Cold well: produce water
     rate_target = TotalRateTarget(-rate_charge)
     ctrl_cold = ProducerControl(rate_target)
@@ -227,7 +228,7 @@ function ates(;
         rate_target = TotalRateTarget(rate_discharge)
     end
     ctrl_cold = InjectorControl(
-        rate_target, [1.0], density = rho, temperature = temperature_discharge)
+        rate_target, [1.0], density = rho, temperature = temperature_discharge; check = false)
     # Set up forces
     control = Dict(:Hot => ctrl_hot, :Cold => ctrl_cold)
     forces_discharge = setup_reservoir_forces(model; bc = bc, control = control)
@@ -363,7 +364,7 @@ function make_ates_cart_mesh(well_distance, depths, aquifer_layer;
     hz_min = missing,
     hz_max = missing,
     nearwell_radius = missing,
-    offset_rel = 1.0,
+    offset_rel = 3.0,
     use_2d = false,
 )
 
@@ -391,14 +392,12 @@ function make_ates_cart_mesh(well_distance, depths, aquifer_layer;
         xy_hot[1]-offset,          # Left boundary
         xy_hot[1]-nearwell_radius, # Left thermal boundary
         xy_hot[1]-hxy_min/2,       # Near hot well
-        xy_hot[1]+nearwell_radius, # Between wells
-        xy_cold[1]-nearwell_radius,# Between wells  
         xy_cold[1]-hxy_min/2,      # Near cold well
         xy_cold[1]+nearwell_radius,# Right thermal boundary
         xy_cold[1]+offset          # Right boundary
     ]
     # Grid spacing array: coarse-fine-fine-coarse-fine-fine-coarse
-    hx = [hxy_max, hxy_min, hxy_min, hxy_max, hxy_min, hxy_min, hxy_max];
+    hx = [hxy_max, hxy_min, hxy_min, hxy_min, hxy_max];
     dx = diff(x)
     hx[dx .< hxy_max] .= hxy_min
     nx = round.(dx./hx)

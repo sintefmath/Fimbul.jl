@@ -182,7 +182,7 @@ hidexdecorations!(ax_tmp, grid = false)
 
 ax_pwr = Axis( # Panel 2: Lateral power
     fig[2, 1:3]; title = "Lateral Power", 
-    ylabel = "Power (W)", xlabel = "Time (years)",
+    ylabel = "Power (MW)", xlabel = "Time (years)",
 limits = (nothing, (-0.05, 0.5)))
 MW = si_unit(:mega)*si_unit(:watt)
 plot_lateral_data!(ax_pwr, time, section_data[:Power]./MW, stacked = true)

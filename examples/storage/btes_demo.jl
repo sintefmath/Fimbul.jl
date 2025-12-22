@@ -56,8 +56,11 @@ simulator, config = setup_reservoir_simulator(case;
     presolve_wells = true,
     tol_cnv = 1e-2,
     tol_mb = 1e-6,
+    tol_cnve_well = Inf,
+    inc_tol_dT = 1e-2,
     timesteps = :auto,
     initial_dt = 5.0,
+    target_its = 10,
     relaxation = true);
 
 # The transition from charging to discharging creates a thermal shock that is

@@ -141,7 +141,7 @@ function egs(well_coords, fracture_radius, fracture_spacing;
         rate_target = TotalRateTarget(rate)
     end
     ctrl_inj = InjectorControl(
-        rate_target, [1.0], density = rho, temperature = temperature_inj)
+        rate_target, [1.0], density = rho, temperature = temperature_inj, check = false)
     # Producer
     # TODO: support multiple periods with different rates
     rate_target = TotalRateTarget(-rate)

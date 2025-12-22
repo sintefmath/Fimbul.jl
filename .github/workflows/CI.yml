@@ -5,7 +5,6 @@ on:
       - main
     tags: ['*']
   pull_request:
-  workflow_dispatch:
 concurrency:
   # Skip intermediate builds: always.
   # Cancel intermediate builds: only if it is a pull request build.
@@ -47,14 +46,6 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Increase swapfile
-        run: |
-          sudo swapoff -a
-          sudo fallocate -l 15G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          sudo swapon --show
       - name: Add GLMakie/XFVB dependencies
         run: sudo apt-get update && sudo apt-get install -y xorg-dev mesa-utils xvfb libgl1 freeglut3-dev libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxext-dev libcairo2-dev libfreetype6-dev libffi-dev libjpeg-dev libpng-dev libz-dev
       - name: Checkout
@@ -81,3 +72,4 @@ jobs:
             using Fimbul
             DocMeta.setdocmeta!(Fimbul, :DocTestSetup, :(using Fimbul); recursive=true)
             doctest(Fimbul)'
+            

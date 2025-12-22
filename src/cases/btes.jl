@@ -88,10 +88,10 @@ function btes(;
         v = (d > 0) ? xw./d : (1.0, 0.0)
         # Shift coordiates a bit to avoid being exactly on the node
         xw = xw .+ (hxy_min/2) .* v
-        trajectory = [xw[1] xw[2] 0.0; xw[1] xw[2] depths[end]]
+        trajectory = [xw[1] xw[2] 0.0 + 1e-3; xw[1] xw[2] depths[end] - 1e-3]
         cells = Jutul.find_enclosing_cells(mesh, trajectory, n = 100)
         filter!(c -> layers[c] ∈ well_layers, cells)
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, btes_type=:simple)
+        w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
         push!(well_models, w_sup, w_ret)
     end
     # Make the model
