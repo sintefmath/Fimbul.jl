@@ -45,7 +45,15 @@ end
     ρf = 988.1*kilogram/meter^3 # Fluid density
     Cpf = 4184.0*Joule/(kilogram*Kelvin) # Fluid heat capacity
     λf = 0.6405*Watt/(meter*Kelvin) # Fluid thermal conductivity
-    
+    # Pipe properties 
+    λp = 0.38*Watt/(meter*Kelvin) # Pipe thermal conductivity
+    # Rock properties
+    ρr = 2650.0*kilogram/meter^3 # Rock
+    Cpr = 900.0*Joule/(kilogram*Kelvin) # Rock heat capacity
+    λr = 2.5*Watt/(meter*Kelvin) # Rock
+    ϕ = 0.01 # Porosity
+    K = 1e-3*darcy # Permeability
+    # BTES geometry
     L = 100.0*meter # BTES length
     geo_u1 = ( # U1 geometry
         closed_loop_type = :u1,
@@ -86,13 +94,13 @@ end
         Δ = (100000.0*dims[3]/L, 100000.0*dims[3]/L, L)
         msh = CartesianMesh(dims, Δ)
         reservoir = reservoir_domain(msh;
-            rock_density = 2650.0,
-            rock_heat_capacity = 900.0,
-            rock_thermal_conductivity = 2.5,
+            rock_density = ρr,
+            rock_heat_capacity = Cpr,
+            rock_thermal_conductivity = λr,
             fluid_thermal_conductivity = λf,
             component_heat_capacity = Cpf,
-            porosity = 0.01,
-            permeability = 1e-3*darcy
+            porosity = ϕ,
+            permeability = K
         )
         ## Set up BTES well
         wells = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
