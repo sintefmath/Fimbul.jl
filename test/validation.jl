@@ -34,7 +34,7 @@ end
     meter = si_unit(:meter)
     atm = si_unit(:atm)
     kilogram = si_unit(:kilogram)
-    Kelvin, Joule = si_units(:Kelvin, :joule)
+    Kelvin, Joule, Watt = si_units(:Kelvin, :joule, :watt)
     darcy = si_unit(:darcy)
     day = si_unit(:day)
     # Operational conditions
