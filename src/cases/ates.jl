@@ -42,7 +42,7 @@ A `JutulCase` for ATES
 """
 function ates(;
     well_distance = missing,
-    depths = [0.0, 850.0, 900.0, 1000.0, 1050.0, 1300.0],
+    depths = [0.0, 950.0, 1000.0, 1050.0, 1150.0, 1300.0],
     porosity = [0.01, 0.05, 0.35, 0.05, 0.01],
     permeability = [1.0, 5.0, 1000.0, 5.0, 1.0].*1e-3.*si_unit(:darcy),
     rock_thermal_conductivity = [2.5, 2.0, 1.5, 2.0, 2.5].*watt/(meter*Kelvin),
@@ -58,7 +58,9 @@ function ates(;
     thermal_gradient = 0.03Kelvin/meter,
     charge_period = ["June", "September"],
     discharge_period = ["December", "March"],
-    utes_schedule_args = NamedTuple(),
+    rest_periods = missing,
+    num_cycles = 5,
+    schedule_args = NamedTuple(),
     use_2d = false,
     mesh_args = NamedTuple(),
 )
@@ -76,21 +78,28 @@ function ates(;
     Cf = 4184.0*joule/(kilogram*Kelvin)*1000.0*kilogram/meter^3  # Fluid heat capacity
     Cr = rock_heat_capacity[aquifer_layer]*rock_density[aquifer_layer]
     ϕ = porosity[aquifer_layer]
-    Caq = Cf*ϕ + Cr*(1 - ϕ)
     Haq = layer_thickness[aquifer_layer]
     # Default charging duration (6 months)
-    ch_start = Fimbul.process_time(2025, charge_period[1])
-    ch_end = Fimbul.process_time(2025, charge_period[2], true)
-    charge_duration = (ch_end - ch_start).value*1e-3
+    if periods isa Vector{String}
+        ch_start = Fimbul.process_time(2025, charge_period[1])
+        ch_end = Fimbul.process_time(2025, charge_period[2], true)
+        charge_duration = (ch_end - ch_start).value*1e-3
+    else
+        charge_duration = charge_period
+    end
     thermal_radius = missing
     # Calculate rate based on a target 250 m thermal radius if not provided
     if ismissing(rate_charge)
-        thermal_radius = ismissing(well_distance) ? 125 : well_distance/4
-        rate_charge = (thermal_radius^2*Caq*π*Haq/Cf)/charge_duration
-        # Adjust for 2D simulation (per unit width)
-        if use_2d
-            rate_charge *= 2/(π*thermal_radius)
+        thermal_radius = ismissing(well_distance) ? 125 : well_distance/3
+        if !use_2d
+            rate_charge = Fimbul.injection_rate_from_thermal_radius(
+                thermal_radius, charge_duration, Haq, ϕ, Cf, Cr)
+        else
+            Ca = Fimbul.aquifer_heat_capacity(ϕ, Cf, Cr)
+            rate_charge = 2*thermal_radius*Haq*Ca/(Cf*charge_duration)
         end
+        # TODO: Something off about thermal radius calculations, multiply by 0.25 for now
+        rate_charge *= 0.25
     end
     # Set discharge rate equal to charge rate if not specified
     if ismissing(rate_discharge)
@@ -99,11 +108,11 @@ function ates(;
     Vin = rate_charge*charge_duration
     # Calculate thermal radius from injected volume if not already set above
     if ismissing(thermal_radius)
-        thermal_radius = thermal_radius_aquifer(Vin, Haq, ϕ, Cf, Cr)
+        thermal_radius = thermal_radius_aquifer(rate_charge, charge_duration, Haq, ϕ, Cf, Cr)
     end
     # Set well distance based on thermal radius if not specified
     if ismissing(well_distance)
-        well_distance = 4*thermal_radius
+        well_distance = 3*thermal_radius
     end
 
     # ## Create reservoir domain
@@ -135,19 +144,27 @@ function ates(;
     hot_well = setup_vertical_well(domain, ij[1], ij[2]; toe=k, simple_well=false, name = :Hot)
     # Only perforate in the aquifer layer
     hot_rcells = hot_well.representation.perforations.reservoir
+    is_aq = layers[hot_rcells] .== aquifer_layer
     WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in hot_rcells]
-    WI[layers[hot_rcells] .!== aquifer_layer] .= 0.0
-    hot_well[:well_indices] = WI
+    WI[.!is_aq] .= 0.0
+    hot_well[:well_index, Perforations()] = WI
+    casing_thickness = fill(0.0, length(hot_rcells))
+    casing_thickness[.!is_aq] .= 0.02meter
+    hot_well[:casing_thickness, Cells()] = casing_thickness
     # Setup cold well
-    xw_cold  = [well_distance/2 0.0 0.0; well_distance/2 0.0 depths[end]]
+    xw_cold = [well_distance/2 0.0 0.0; well_distance/2 0.0 depths[end]]
     cell = Jutul.find_enclosing_cells(msh, xw_cold)[1]
     ij = cell_ijk(msh, cell)[1:2]
     cold_well = setup_vertical_well(domain, ij[1], ij[2]; toe=k, simple_well=false, name = :Cold)
     # Only perforate in the aquifer layer
     cold_rcells = cold_well.representation.perforations.reservoir
+    is_aq = layers[cold_rcells] .== aquifer_layer
     WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in cold_rcells]
-    WI[layers[cold_rcells] .!== aquifer_layer] .= 0.0
-    cold_well[:well_indices] = WI
+    WI[.!is_aq] .= 0.0
+    cold_well[:well_index, Perforations()] = WI
+    casing_thickness = fill(0.0, length(cold_rcells))
+    casing_thickness[.!is_aq] .= 0.02meter
+    cold_well[:casing_thickness, Cells()] = casing_thickness
 
     # ## Setup reservoir model
     model = setup_reservoir_model(
@@ -235,12 +252,32 @@ function ates(;
     # Set up forces for rest periods (no active wells)
     forces_rest = setup_reservoir_forces(model; bc = bc)
     # Create UTES operational schedule
-    dt, forces, timestamps = make_utes_schedule(
-        forces_charge, forces_discharge, forces_rest,
-        charge_period = charge_period,
-        discharge_period = discharge_period;
-        utes_schedule_args...
-    )
+    if charge_period isa Vector{String} && discharge_period isa Vector{String}
+        dt, forces, timestamps = make_schedule(
+            forces,
+            charge_period, discharge_period;
+            num_cycles = num_cycles,
+            schedule_args...
+        )
+    elseif charge_period isa Number && discharge_period isa Number
+        if ismissing(rest_periods)
+            rest_periods = [0.0, 0.0]
+        end
+        if !(rest_periods isa Vector{Number} && length(rest_periods) == 2)
+            error("rest_periods must be a vector of two numbers when using numeric periods.")
+        end
+        durations = [charge_period, rest_periods[1], discharge_period, rest_periods[2]]
+        dt, forces, timestamps = make_utes_schedule(
+            forces_charge,
+            forces_discharge,
+            forces_rest,
+            durations;
+            num_cycles = num_cycles,
+            schedule_args...
+        )
+    else
+        error("Invalid period specifications for ATES schedule.")
+    end
 
     # ## Additional info
     info = Dict()

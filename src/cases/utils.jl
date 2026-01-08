@@ -119,22 +119,22 @@ period.
 
 # Example
 ```julia
-# Define seasonal operations: charge in summer, rest in winter
-forces = [charge_controls, rest_controls]
-periods = ["June", "September", "December"]  # June-Sep charge, Sep-Dec rest
+# Define seasonal operations:
+#   ** charge (April-August), rest (September-October), discharge (November-March)
+periods = ["April", "September", "November", "April"]
 dt, forces, times = make_schedule(forces, periods;
     num_years=3, report_interval=7si_unit(:day))
 ```
 """
 function make_schedule(forces, periods;
     start_year = missing,
-    num_years = 1,
+    num_cycles = 1,
     report_interval = missing,
     num_reports = missing
     )
 
     start_year = ismissing(start_year) ? Dates.year(now()) : start_year
-    years = (0:num_years-1) .+ start_year
+    years = (0:num_cycles-1) .+ start_year
 
     num_periods = length(periods)-1
     @assert num_periods > 0 "At least one period is required"
@@ -231,11 +231,11 @@ dt, forces, times = make_utes_schedule(
 - The function handles year transitions and ensures chronological ordering
 - Periods with zero duration are automatically filtered out
 """
-function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"],
-    start_year = missing,
-    num_years = 5,
+function make_utes_schedule(forces_charge, forces_discharge, forces_rest,
+    charge_period::Vector{String} = ["June", "September"],
+    discharge_period::Vector{String} = ["December", "March"];
+    start_year::Union{Int,Missing} = missing,
+    num_years::Int = 5,
     kwargs...
     )
 
@@ -268,6 +268,19 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
 
     return dt, forces, timestamps
 
+end
+
+function make_utes_schedule(forces_charge, forces_discharge, forces_rest,
+    durations::Vector{Float64} = [90day, 90day, 90day, 90day];
+    kwargs...)
+
+    @assert length(durations) == 4 "Four durations required: charge, rest 1, discharge, rest 2"
+    forces = [forces_charge; forces_rest; forces_discharge; forces_rest]
+    keep = findall(durations .> 0.0)
+    durations = durations[keep]
+    forces = forces[keep]
+
+    return make_schedule(forces, durations; kwargs...)
 end
 
 function process_periods(year, periods)
