@@ -56,7 +56,9 @@ function ates(;
     balanced_injection = true,
     temperature_surface = convert_to_si(10.0, :Celsius),
     thermal_gradient = 0.03Kelvin/meter,
-    periods = ["June", "October", "December", "April", "June"],
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"],
+    rest_periods = missing,
     num_cycles = 5,
     schedule_args = NamedTuple(),
     use_2d = false,
@@ -79,11 +81,11 @@ function ates(;
     Haq = layer_thickness[aquifer_layer]
     # Default charging duration (6 months)
     if periods isa Vector{String}
-        ch_start = Fimbul.process_time(2025, periods[1])
-        ch_end = Fimbul.process_time(2025, periods[2], true)
+        ch_start = Fimbul.process_time(2025, charge_period[1])
+        ch_end = Fimbul.process_time(2025, charge_period[2], true)
         charge_duration = (ch_end - ch_start).value*1e-3
     else
-        charge_duration = periods[1]
+        charge_duration = charge_period
     end
     thermal_radius = missing
     # Calculate rate based on a target 250 m thermal radius if not provided
@@ -250,18 +252,32 @@ function ates(;
     # Set up forces for rest periods (no active wells)
     forces_rest = setup_reservoir_forces(model; bc = bc)
     # Create UTES operational schedule
-    forces = [forces_charge, forces_rest, forces_discharge, forces_rest]
-    if periods isa Vector{Float64}
-        keep = periods .> 0
-        forces = forces[keep]
-        periods = periods[keep]
+    if charge_period isa Vector{String} && discharge_period isa Vector{String}
+        dt, forces, timestamps = make_schedule(
+            forces,
+            charge_period, discharge_period;
+            num_cycles = num_cycles,
+            schedule_args...
+        )
+    elseif charge_period isa Number && discharge_period isa Number
+        if ismissing(rest_periods)
+            rest_periods = [0.0, 0.0]
+        end
+        if !(rest_periods isa Vector{Number} && length(rest_periods) == 2)
+            error("rest_periods must be a vector of two numbers when using numeric periods.")
+        end
+        durations = [charge_period, rest_periods[1], discharge_period, rest_periods[2]]
+        dt, forces, timestamps = make_utes_schedule(
+            forces_charge,
+            forces_discharge,
+            forces_rest,
+            durations;
+            num_cycles = num_cycles,
+            schedule_args...
+        )
+    else
+        error("Invalid period specifications for ATES schedule.")
     end
-    dt, forces, timestamps = make_schedule(
-        forces,
-        periods;
-        num_cycles = num_cycles,
-        schedule_args...
-    )
 
     # ## Additional info
     info = Dict()
