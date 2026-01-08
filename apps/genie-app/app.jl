@@ -33,8 +33,10 @@ using Base64
     @in temperature_surface = 10.0
     
     @in num_cycles = 10
-    @in charge_duration = RangeData(5:8)
-    @in discharge_duration = RangeData(7:10)
+    @in charge_duration = 3
+    @in rest1_duration = 3
+    @in discharge_duration = 3
+    @in rest2_duration = 3
 
     @in selected_tab = "geology_wells"
 
@@ -181,6 +183,9 @@ function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well
         temperature_charge = convert_to_si(t_charge, :Celsius),
         temperature_discharge = convert_to_si(t_discharge, :Celsius),
         rate_charge = rate_l_s * litre / second,
+        charge_period = charge_duration,
+        discharge_period = discharge_duration,
+        rest_periods = [rest1_duration, rest2_duration],
         permeability = perms,
         porosity = porosities,
         well_distance = well_dist,
@@ -193,7 +198,6 @@ function run_ates_simulation(t_charge, t_discharge, rate_l_s, perm_md, phi, well
         use_2d = true,
         mesh_args = (hxy_min = 20.0, hxy_max = 100.0, hz_min = 10.0, hz_max = 50.0),
         num_cycles = n_cycles,
-        periods = periods
     )
     
     sim, cfg = setup_reservoir_simulator(case; info_level = 0)
@@ -299,6 +303,12 @@ ui() = [
                     #cell(textfield("", :charge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
                 ], class="items-center"),
 
+                row([
+                    cell(p("Rest 1 duration (months)"), size=3),
+                    cell(slider(0.0:0.25:12.0, :rest1_duration; label=true, dragrange=true), size=9),
+                    #cell(textfield("", :charge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                ], class="items-center"),
+
                 # row([
                 #     cell(p("Charge Duration (months)"), size=3),
                 #     cell(slider(1:1:12, :charge_duration; label=true), size=6),
@@ -309,6 +319,12 @@ ui() = [
                     cell(p("Discharge duration (months)"), size=3),
                     cell(slider(0.0:0.25:12.0, :discharge_duration; label=true), size=9),
                     #cell(textfield("", :discharge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
+                ], class="items-center"),
+
+                row([
+                    cell(p("Rest 2 duration (months)"), size=3),
+                    cell(slider(0.0:0.25:12.0, :rest2_duration; label=true), size=9),
+                    #cell(textfield("", :charge_month, type="number", inputclass="text-right"), size=3, class="q-pl-sm")
                 ], class="items-center"),
 
                 # row([
