@@ -6,7 +6,8 @@ Kelvin, joule, watt, = si_units(:Kelvin, :joule, :watt)
 darcy = si_unit(:darcy)
 
 # Include utilities and setup functions
-include("utils.jl")
+include("utils/utils.jl")
+include("utils/layered_domain.jl")
 include("analytical.jl")
 include("doublet.jl")
 include("egs.jl")
