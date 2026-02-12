@@ -49,7 +49,7 @@ end
 using Dates
 @testset "Schedule from time periods" begin
 
-    start_year = 2025
+    start_year = Dates.year(now())
     forces = [:a, :b, :c]
     function do_test(periods, dt, f, ts, num_years)
         @test length(f) == length(dt)
@@ -74,16 +74,15 @@ using Dates
             [(3,1), (5,1), (10,1), (3,1)],
             [(3,1,12), (5,1,12), (10,1,12), (3,1,12)]
         )
-
             for num_reports in (missing, 2, [2, 4, 6])
                 dt, f, ts = make_schedule(forces, periods;
-                num_reports = num_reports, num_years = num_years)
+                num_reports = num_reports, num_years = num_years, start_year)
                 do_test(periods, dt, f, ts, num_years)
             end
 
             for report_interval in (7si_unit(:day), [3, 7, 14].*si_unit(:day))
                 dt, f, ts = make_schedule(forces, periods;
-                report_interval = report_interval, num_years = num_years)
+                report_interval = report_interval, num_years = num_years, start_year = start_year)
                 do_test(periods, dt, f, ts, num_years)
             end
         end
