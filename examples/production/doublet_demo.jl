@@ -64,7 +64,7 @@ geo = tpfv_geometry(msh)
 
 fig = Figure(size = (1200, 800))
 ax = Axis(fig[1, 1], xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true)
-colors = cgrad(:seaborn_icefire_gradient, length(states), categorical = true)
+colors = cgrad(:seaborn_icefire_gradient, length(states), categorical = true);
 # Plot temperature profiles for all timesteps with transparency
 for (n, state) in enumerate(states)
     T = convert_from_si.(state[:Producer][:Temperature], :Celsius)
@@ -102,7 +102,7 @@ T_min = minimum(Δstates[end][:Temperature])
 T_max = maximum(Δstates[1][:Temperature])
 cells = geo.cell_centroids[1, :] .> -1000.0/2
 cells = cells .&& geo.cell_centroids[2, :] .> 50.0
-cells = cells .|| geo.cell_centroids[3, :] .> 2475.0
+cells = cells .|| geo.cell_centroids[3, :] .> 2475.0;
 # Create subplots for each highlighted timestep
 fig = Figure(size = (800, 800))
 for (i, n) in enumerate(timesteps)

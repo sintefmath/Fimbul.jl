@@ -63,24 +63,24 @@ function geothermal_doublet(;
     # Create the mesh
     thickness = diff(depths)
     nz = [4,10,20,4]
-    mesh, layers, metrics = extruded_mesh(xw, depths;
-    hxy_min = 100/3, hxy_max = 750, hz = thickness./nz, dist_min_factor = 3.0, offset_rel = 2.5)
-
-    permeability = permeability[layers]
-    # permeability = repeat(permeability', 3, 1)
-    # permeability[3,:] .*= 0.25 # Reduce vertical permeability
-    porosity = porosity[layers]
-    density = density[layers]
-    thermal_conductivity = thermal_conductivity[layers]
-    heat_capacity = heat_capacity[layers]
-    domain = reservoir_domain(mesh,
-        permeability = permeability,
-        porosity = porosity,
-        rock_density = density,
-        rock_heat_capacity = heat_capacity,
-        rock_thermal_conductivity = thermal_conductivity,
+    domain, layers, metrics = layered_reservoir_domain(xw, depths;
+        mesh_args = (
+            hxy_min = 100/3, 
+            hxy_max = 750, 
+            hz = thickness./nz, 
+            dist_min_factor = 3.0, 
+            offset_rel = 2.5
+        ),
+        layer_properties = (
+            permeability = permeability,
+            porosity = porosity,
+            rock_density = density,
+            rock_thermal_conductivity = thermal_conductivity,
+            rock_heat_capacity = heat_capacity
+        ),
         component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
     )
+    mesh = physical_representation(domain)
 
     num_layers = Int64.(number_of_cells(mesh)/metrics.nc_2d)
     mesh_layer = repeat(1:num_layers, metrics.nc_2d)
@@ -89,19 +89,17 @@ function geothermal_doublet(;
     cells_inj = Jutul.find_enclosing_cells(mesh, trajectory_inj, n = 1000)
     ix = unique(i -> mesh_layer[cells_inj[i]], eachindex(cells_inj))
     cells_inj = cells_inj[ix]
-    WI = [compute_peaceman_index(mesh, permeability[c], 0.1, c) for c in cells_inj]
-    WI[layers[cells_inj] .!== 3] .= 0.0
     well_inj = setup_well(domain, cells_inj; 
-        name = :Injector, WI = WI, simple_well = false)
+        name = :Injector, simple_well = false)
+    well_inj[:well_index, Perforations()][layers[cells_inj] .!== 3] .= 0.0
 
     trajectory_prod[:,2] .+= 0.5*metrics.hxy_min
     cells_prod = Jutul.find_enclosing_cells(mesh, trajectory_prod, n = 1000)
     ix = unique(i -> mesh_layer[cells_prod[i]], eachindex(cells_prod))
     cells_prod = cells_prod[ix]
-    WI = [compute_peaceman_index(mesh, permeability[c], 0.1, c) for c in cells_prod]
-    WI[layers[cells_prod] .!== 3] .= 0.0
     well_prod = setup_well(domain, cells_prod;
-        name = :Producer, WI = WI, simple_well = false)
+        name = :Producer, simple_well = false)
+    well_prod[:well_index, Perforations()][layers[cells_prod] .!== 3] .= 0.0
 
     model = setup_reservoir_model(
         domain, :geothermal,

@@ -58,23 +58,22 @@ function btes(;
     well_coordinates = map(x -> [x], x)
     hz = diff(depths)./n_z
     hxy = well_spacing/n_xy
-    mesh, layers, metrics = extruded_mesh(well_coordinates, depths;
-        hxy_min = hxy, hz = hz, mesh_args...)
 
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite,
     # with a styrofoam layer on top
-    density = density[layers]
-    thermal_conductivity = thermal_conductivity[layers]
-    heat_capacity = heat_capacity[layers]
-    domain = reservoir_domain(mesh,
+    domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths;
+        mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
+        layer_properties = (
+            rock_density = density,
+            rock_thermal_conductivity = thermal_conductivity,
+            rock_heat_capacity = heat_capacity
+        ),
         permeability = 1e-6darcy,
         porosity = 0.01,
-        rock_density = density,
-        rock_heat_capacity = heat_capacity,
-        rock_thermal_conductivity = thermal_conductivity,
         component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
     )
+    mesh = physical_representation(domain)
     # Set up BTES wells
     hxy_min = metrics.hxy_min
     well_models = []
