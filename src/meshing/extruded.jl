@@ -7,7 +7,8 @@ function extruded_mesh(cell_constraints, depths;
     info_level = -1
     )
 
-    @assert depths[1] == 0.0
+    depths[1] == 0.0 || error("First depth must be 0.0")
+    issorted(depths) || error("Depths must be sorted in ascending order")
 
     # Initialize Gmsh
     gmsh.initialize()
@@ -51,8 +52,19 @@ function extruded_mesh(cell_constraints, depths;
 
     @assert 0.0 < hxy_min <= hxy_max < perimeter/4 "Please ensure that "*
         "0 < hxy_min = $hxy_min < hxy_max = $hxy_max < perimeter/4 = $(perimeter/4)"
-    hz = ismissing(hz) ? depth/50 : hz
-        
+
+    layer_thicknesss = diff(depths)
+    num_layers = length(layer_thicknesss)
+    if ismissing(hz)
+        hz = layer_thicknesss./2.0
+    elseif length(hz) == 1
+        hz = fill(hz[1], num_layers)
+    end
+    length(hz) == num_layers || error("Length of hz ($(length(hz))) must match number of layers ($num_layers)")
+    for (i, ht) in enumerate(hz)
+        ht <= layer_thicknesss[i] || error("hz[$i] = $ht exceeds layer thickness $(layer_thicknesss[i])")
+    end
+    
     # ## Create 2D mesh
     # Make 2d domain
     tag2d_brd, tag1d_brd, tag0d_bdr = add_geometry_2d(xb_outer, hxy_max)

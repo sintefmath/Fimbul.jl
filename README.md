@@ -50,7 +50,6 @@ The current main work describing `Fimbul.jl` is [*Fimbul.jl – Fast, Flexible, 
   publisher = {European Association of Geoscientists & Engineers},
   author = {Klemetsdal,  Ø. and Andersen,  O. and Møyner,  O.},
   year = {2025},
-  pages = {1–5}
 }<>
 ```
 

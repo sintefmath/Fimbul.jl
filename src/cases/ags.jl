@@ -75,32 +75,24 @@ function ags(;
         ok = n .>= 5
         hz[.!ok] = dz[.!ok]./5
     end
-    msh, layers = ags_gmsh(well_coords, depths;
-        hz = hz, hxy_min = hxy_min, hxy_max = hxy_max, mesh_args...)
+    
+    constraints = get_ags_constraints(well_coords; hxy_min = hxy_min)
 
-    # ## Set up reservoir domain
-    num_layers = length(depths)-1
-    function process_prop(prop, v, layers)
-        if v isa Real
-            v = fill(v, num_layers)
-        end
-        if length(v) != num_layers
-            error("Property vector $prop length does not match number of layers ($num_layers)")
-        end
-        return v[layers]
-    end
-    porosity = process_prop(:porosity, porosity, layers)
-    permeability = process_prop(:permeability, permeability, layers)
-    rock_thermal_conductivity = process_prop(
-        :rock_thermal_conductivity, rock_thermal_conductivity, layers)
-    rock_heat_capacity = process_prop(
-        :rock_heat_capacity, rock_heat_capacity, layers)
-
-    domain = reservoir_domain(msh;
-        porosity = porosity,
-        permeability = permeability,
-        rock_thermal_conductivity = rock_thermal_conductivity,
-        rock_heat_capacity = rock_heat_capacity
+    domain, layers, metrics = layered_reservoir_domain(constraints, depths;
+        mesh_args = (;
+            hz = hz, 
+            hxy_min = hxy_min, 
+            hxy_max = hxy_max, 
+            offset_rel = 1.0, 
+            dist_min_factor = 50.0, 
+            mesh_args...
+        ),
+        layer_properties = (
+            porosity = porosity,
+            permeability = permeability,
+            rock_thermal_conductivity = rock_thermal_conductivity,
+            rock_heat_capacity = rock_heat_capacity
+        )
     )
 
     # ## Set up model
@@ -147,7 +139,7 @@ function ags(;
 
 end
 
-function ags_gmsh(well_coords, depths; hxy_min, mesh_args...)
+function get_ags_constraints(well_coords; hxy_min)
 
     Δ = hxy_min/2
     well_coords_2x = []
@@ -170,16 +162,7 @@ function ags_gmsh(well_coords, depths; hxy_min, mesh_args...)
         push!(cell_constraints, xw)
     end
 
-    msh, layers = Fimbul.extruded_mesh(
-        cell_constraints,
-        depths;
-        offset_rel = 1.0,
-        dist_min_factor = 50.0,
-        hxy_min = hxy_min,
-        mesh_args...
-    );
-
-    return msh, layers
+    return cell_constraints
 
 end
 

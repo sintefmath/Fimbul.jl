@@ -124,7 +124,7 @@ for (k, v) in opt_config
             :FluidVolume, :BulkVolume
             ]
             vi[:active] = k == :Reservoir
-            vi[:rel_min] = 1e-3
+            vi[:rel_min] = 1e-2
             vi[:rel_max] = 1e2
         elseif ki in [ # Rock density and heat capacity
             :RockDensity, :RockHeatCapacity
@@ -137,7 +137,7 @@ for (k, v) in opt_config
             :RockThermalConductivities, :FluidThermalConductivities
             ]
             vi[:active] = k == :Reservoir
-            vi[:rel_min] = 1e-4
+            vi[:rel_min] = 1e-3
             vi[:rel_max] = 1e3
         elseif ki in [ # Well properties
             :WellIndices, :WellIndicesThermal

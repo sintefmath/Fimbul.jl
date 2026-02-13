@@ -1,0 +1,8 @@
+@inproceedings{Klemetsdal2025,
+  title = {Fimbul.jl – Fast,  Flexible,  Robust,  and Differentiable Geothermal Energy Simulation in Julia},
+  DOI = {10.3997/2214-4609.202521164},
+  booktitle = {Sixth EAGE Global Energy Transition Conference &amp; Exhibition (GET 2025)},
+  publisher = {European Association of Geoscientists & Engineers},
+  author = {Klemetsdal,  Ø. and Andersen,  O. and Møyner,  O.},
+  year = {2025},
+}
