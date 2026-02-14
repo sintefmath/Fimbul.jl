@@ -56,9 +56,9 @@ function geothermal_doublet(;
 
     well_coords = [trajectory_inj, trajectory_prod]
 
-    xw_inj = [Tuple(x) for x in eachrow(unique(trajectory_inj[:, 1:2], dims=1))]
-    xw_prod = [Tuple(x) for x in eachrow(unique(trajectory_prod[:, 1:2], dims=1))]
-    xw = vcat([xw_inj], [xw_prod])
+    xw_inj = unique(trajectory_inj[:, 1:2], dims=1)'  # Convert to 2×N matrix
+    xw_prod = unique(trajectory_prod[:, 1:2], dims=1)'  # Convert to 2×N matrix 
+    xw = [xw_inj, xw_prod]
 
     # Create the mesh
     thickness = diff(depths)
