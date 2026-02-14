@@ -5,22 +5,22 @@ function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
     φ = (1 + sqrt(5))/2 # ≈ golden ratio
     Δθ = 2*π/φ^2
     
-    # Generate points as matrix
-    points = Matrix{Float64}(undef, N, 2)
+    # Generate points as matrix (2×N)
+    points = Matrix{Float64}(undef, 2, N)
     
     for n = 1:N
         r_n = sqrt(n/N)
         θ_n = n * Δθ
-        points[n, 1] = r_n * cos(θ_n)
-        points[n, 2] = r_n * sin(θ_n)
+        points[1, n] = r_n * cos(θ_n)
+        points[2, n] = r_n * sin(θ_n)
     end
     
     # Set radius from spacing if not provided
     if !ismissing(spacing)
         @assert ismissing(radius) "Please provide either radius or spacing"
         # Calculate spacing between first two points
-        p1 = points[1, :]
-        p2 = points[2, :]
+        p1 = points[:, 1]
+        p2 = points[:, 2]
         current_spacing = norm(p1 - p2)
         radius = 1.3513 * spacing / current_spacing
     elseif !ismissing(radius)
@@ -37,17 +37,17 @@ end
 
 function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
     # Ensure there are at least 3 points
-    @assert size(points, 1) >= 3 "At least 3 points are required to compute a convex hull."
+    @assert size(points, 2) >= 3 "At least 3 points are required to compute a convex hull."
 
     # Helper function to compute the cross product of vectors (p1 -> p2) and (p1 -> p3)
     function cross_product(p1, p2, p3)
         (p2[1] - p1[1]) * (p3[2] - p1[2]) - (p2[2] - p1[2]) * (p3[1] - p1[1])
     end
 
-    n_points = size(points, 1)
+    n_points = size(points, 2)
     
     # Start with the leftmost point
-    start = argmin(points[:, 1])  # Index of the leftmost point
+    start = argmin(points[1, :])  # Index of the leftmost point
     current = start
 
     hull_indices = Int[]
@@ -57,7 +57,7 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
         next_point = mod1(current + 1, n_points)  # Next candidate point
 
         for i in 1:n_points
-            if cross_product(points[current, :], points[next_point, :], points[i, :]) < 0
+            if cross_product(points[:, current], points[:, next_point], points[:, i]) < 0
                 next_point = i  # Update the next point if it is more counterclockwise
             end
         end
@@ -69,7 +69,7 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
     end
     
     # Extract hull points as matrix
-    hull_points = points[hull_indices, :]
+    hull_points = points[:, hull_indices]
 
     hull_simplified, _ = ramer_douglas_peucker(hull_points; tolerance = tol)
 
@@ -122,7 +122,7 @@ function ramer_douglas_peucker(points::AbstractMatrix, tolerance::Float64)
     Simplify a curve using the Ramer-Douglas-Peucker algorithm.
     
     Parameters:
-    - points: Matrix (Nx2 or Nx3) representing 2D (x,y) or 3D (x,y,z) points
+    - points: Matrix (2×N or 3×N) representing 2D (x,y) or 3D (x,y,z) points
     - tolerance: Maximum allowed deviation from original curve
     
     Returns:
@@ -130,7 +130,7 @@ function ramer_douglas_peucker(points::AbstractMatrix, tolerance::Float64)
     - indices: Vector of indices into original points array
     """
     
-    n_points, n_dims = size(points)
+    n_dims, n_points = size(points)
     
     # Need at least 2 points
     if n_points <= 2
@@ -143,11 +143,11 @@ function ramer_douglas_peucker(points::AbstractMatrix, tolerance::Float64)
         max_dist = 0.0
         max_idx = 0
         
-        start_point = points[start_idx, :]
-        end_point = points[end_idx, :]
+        start_point = points[:, start_idx]
+        end_point = points[:, end_idx]
         
         for i in (start_idx + 1):(end_idx - 1)
-            point = points[i, :]
+            point = points[:, i]
             
             # Calculate distance based on dimensionality
             if n_dims == 2
@@ -180,7 +180,7 @@ function ramer_douglas_peucker(points::AbstractMatrix, tolerance::Float64)
     indices = rdp_recursive(1, n_points)
     
     # Extract simplified points
-    simplified_points = points[indices, :]
+    simplified_points = points[:, indices]
     
     return simplified_points, indices
 end
@@ -203,24 +203,24 @@ function offset_boundary(x::AbstractMatrix, offset; h = missing, n = 6)
 
     function sample_circle(x0::AbstractVector, r)
         θ = LinRange(0, 2π, n+1)
-        # Create matrix for circle points
-        circle_points = Matrix{Float64}(undef, n, 2)
+        # Create matrix for circle points (2×n)
+        circle_points = Matrix{Float64}(undef, 2, n)
         for i = 1:n
-            circle_points[i, 1] = x0[1] + r * cos(θ[i])
-            circle_points[i, 2] = x0[2] + r * sin(θ[i])
+            circle_points[1, i] = x0[1] + r * cos(θ[i])
+            circle_points[2, i] = x0[2] + r * sin(θ[i])
         end
         return circle_points
     end
 
     # Generate all circle points
-    n_points = size(x, 1)
+    n_points = size(x, 2)
     total_circle_points = n * n_points
-    xb = Matrix{Float64}(undef, total_circle_points, 2)
+    xb = Matrix{Float64}(undef, 2, total_circle_points)
     
     idx = 1
     for i = 1:n_points
-        circle = sample_circle(x[i, :], offset)
-        xb[idx:idx+n-1, :] = circle
+        circle = sample_circle(x[:, i], offset)
+        xb[:, idx:idx+n-1] = circle
         idx += n
     end
 
@@ -231,22 +231,22 @@ function offset_boundary(x::AbstractMatrix, offset; h = missing, n = 6)
 end
 
 function curve_measure(x::AbstractMatrix)
-    n_points = size(x, 1)
+    n_points = size(x, 2)
     total_length = 0.0
     for i = 1:n_points-1
-        total_length += norm(x[i+1, :] - x[i, :])
+        total_length += norm(x[:, i+1] - x[:, i])
     end
     return total_length
 end
 
 function min_max_distance(x::AbstractMatrix)
-    n_points = size(x, 1)
+    n_points = size(x, 2)
     d_min, d_max = Inf, -Inf
     
     for i in 1:n_points
         for j in 1:n_points
             i == j && continue
-            d_ij = norm(x[i, :] - x[j, :])
+            d_ij = norm(x[:, i] - x[:, j])
             d_min = min(d_min, d_ij)
             d_max = max(d_max, d_ij)
         end
@@ -267,19 +267,19 @@ Determines whether a point is inside a polygon.
 
 # Arguments
 - `point::AbstractVector`: A point (x, y) to check.
-- `polygon::AbstractMatrix`: Matrix (Nx2) representing the vertices of the polygon.
+- `polygon::AbstractMatrix`: Matrix (2×N) representing the vertices of the polygon.
 
 # Returns
 - `Bool`: `true` if the point is inside the polygon.
 """
 function point_in_polygon(point::AbstractVector, polygon::AbstractMatrix)
     x, y = point[1], point[2]
-    n = size(polygon, 1)
+    n = size(polygon, 2)
     inside = false
     j = n
     for i in 1:n
-        xi, yi = polygon[i, 1], polygon[i, 2]
-        xj, yj = polygon[j, 1], polygon[j, 2]
+        xi, yi = polygon[1, i], polygon[2, i]
+        xj, yj = polygon[1, j], polygon[2, j]
         if (yi > y) != (yj > y) && (x < (xj - xi) * (y - yi) / (yj - yi) + xi)
             inside = !inside
         end
@@ -292,18 +292,18 @@ end
 Determines whether multiple points are inside a polygon.
 
 # Arguments
-- `points::AbstractMatrix`: Matrix (Mx2) of points to check.
-- `polygon::AbstractMatrix`: Matrix (Nx2) representing the vertices of the polygon.
+- `points::AbstractMatrix`: Matrix (2×M) of points to check.
+- `polygon::AbstractMatrix`: Matrix (2×N) representing the vertices of the polygon.
 
 # Returns
 - `Vector{Bool}`: Vector where `true` indicates the point is inside the polygon.
 """
 function points_in_polygon(points::AbstractMatrix, polygon::AbstractMatrix)
-    return [point_in_polygon(points[i, :], polygon) for i in 1:size(points, 1)]
+    return [point_in_polygon(points[:, i], polygon) for i in 1:size(points, 2)]
 end
 
 function add_geometry_0d(points::AbstractMatrix, h, tag = 0, embed = false)
-    n_points = size(points, 1)
+    n_points = size(points, 1)  # For N×2 matrix (transposed from 2×N)
     tags = Vector{Int}(undef, n_points)
     for i = 1:n_points
         x, y = points[i, 1], points[i, 2]
@@ -317,7 +317,7 @@ function add_geometry_0d(points::AbstractMatrix, h, tag = 0, embed = false)
 end
 
 function add_geometry_1d(points::AbstractMatrix, h, tag_1d = 0, tag_0d = 0, embed = false)
-    n_points = size(points, 1)
+    n_points = size(points, 1)  # For N×2 matrix (transposed from 2×N)
     tags = Vector{Int}(undef, n_points-1)
     
     # Check if curve is closed (first and last points are the same)
