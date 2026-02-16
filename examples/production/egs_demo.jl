@@ -30,7 +30,7 @@ meter, day, watt = si_units(:meter, :day, :watt);
 well_depth = 2500.0meter # Vertical depth to horizontal well section [m]
 well_spacing_x = 100.0meter # Horizontal separation between production wells [m]
 well_spacing_z = sqrt(3/4*well_spacing_x^2) # Vertical offset between injector and producers [m]
-well_lateral = 500.0meter; # Length of horizontal well section [m]
+well_lateral = 1000.0meter; # Length of horizontal well section [m]
 
 # Well coordinates are defined as a vector of nx3 arrays, each containing the
 # (x,y,z) coordinates of a well trajectory. The first well is the injector,
@@ -206,7 +206,7 @@ fdata_inj = Fimbul.get_egs_fracture_data(states, case.model, :Injector; geo=geo)
 fdata_prod = Fimbul.get_egs_fracture_data(states, case.model, :Producer; geo=geo);
 nsteps = length(dt)
 
-colors = reverse(cgrad(:seaborn_icefire_gradient, size(fdata_inj[:Temperature], 2), categorical = true))
+colors = cgrad(:BrBg, size(fdata_inj[:Temperature], 2), categorical = true)
 function plot_fracture_data( # Utility for plotting fracture data
     ax, time, data, stacked = false)
     nsteps = length(time)
