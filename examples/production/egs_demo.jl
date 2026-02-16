@@ -193,17 +193,16 @@ fig
 # ### Fracture metrics
 # Finally, we analyze key performance metrics for each individual fracture over
 # the entire simulation period, including temperature evolution, thermal power
-# production, annual energy production. Notice how the first three fractures
-# contribute more than 50 % of the total energy production throughout the
-# simulation period. The last three fractures contribute only 21 % in the first
-# year, but their relative contribution increases to 27 % in the final year.
+# production, annual energy production. The temperature is almost identical out
+# of each fracture. However, we notice the first and last fractures contribute
+# slightly more to the total energy production.
 
 # Extract fracture data from simulation results
 states, dt, report_step = Jutul.expand_to_ministeps(results.result)
 time = cumsum(dt)./si_unit(:year)
 
-fdata_inj = Fimbul.get_egs_fracture_data(states, case.model, :Injector; geo=geo);
-fdata_prod = Fimbul.get_egs_fracture_data(states, case.model, :Producer; geo=geo);
+fdata_inj = Fimbul.get_egs_fracture_data(states, dt,case.model, :Injector; geo=geo);
+fdata_prod = Fimbul.get_egs_fracture_data(states, dt, case.model, :Producer; geo=geo);
 nsteps = length(dt)
 
 colors = cgrad(:BrBg, size(fdata_inj[:Temperature], 2), categorical = true)
@@ -248,7 +247,12 @@ hidexdecorations!(ax, grid = false)
 
 ax_pwr = make_axis( # Panel 2: thermal power production
     "Thermal power", "Power (MW)", 2)
-power = .-(fdata_prod[:EnergyFlux] .+ fdata_inj[:EnergyFlux])
+
+Er = fdata_prod[:TotalThermalEnergy]
+ΔErΔt⁻¹ = diff(vcat(Er[1,:]', Er), dims=1)./dt
+power = .-(fdata_prod[:EnergyFlux] .+ fdata_inj[:EnergyFlux]) .+ ΔErΔt⁻¹
+
+# power = fdata_prod[:EnergyFlux] # Power production from producers only --- IGNORE ---
 plot_fracture_data(ax_pwr, time[first_step:end], power[first_step:end, :]./1e6, true)
 hidexdecorations!(ax_pwr, grid = false)
 

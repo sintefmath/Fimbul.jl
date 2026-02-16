@@ -333,7 +333,7 @@ Returns:
     indicates flow out of the fracture into the well.
     
 """
-function get_egs_fracture_data(states, model, well; geo = missing)
+function get_egs_fracture_data(states, dt, model, well; geo = missing)
 
     # Mesh and geometry
     msh = physical_representation(reservoir_model(model).data_domain)
@@ -344,16 +344,22 @@ function get_egs_fracture_data(states, model, well; geo = missing)
     WI = model.models[well].data_domain[:well_index]
     N = model.models[well].domain.representation.neighborship # Cell connectivity matrix
     fcells = findall(isapprox.(WI, maximum(WI), rtol=1e-1)) # High-productivity fracture connections
-    jj = [cell_ijk(msh, c)[2] for c in perf.reservoir[fcells]] # Y-indices of fracture cells
+    rcells = perf.reservoir[fcells] # Reservoir cells connected to fractures
+    jj = [cell_ijk(msh, c)[2] for c in rcells] # Y-indices of fracture cells
     ## Initialize data arrays for fracture analysis
     JJ = unique(jj) # Unique fracture Y-locations
     nstep = length(states) # Number of simulation timesteps
     nfrac = length(JJ) # Number of discrete fractures
     Q, Qh, T = zeros(nstep, nfrac), zeros(nstep, nfrac), zeros(nstep, nfrac) # Pre-allocate arrays
-    y = geo.cell_centroids[2, perf.reservoir[fcells]] # Y-coordinates of fracture centers
+    Mr, Er = zeros(nstep, nfrac), zeros(nstep, nfrac)
+    y = geo.cell_centroids[2, rcells] # Y-coordinates of fracture centers
 
     ## Process each simulation timestep
     p1 = minimum(perf.self)
+    ϕ = model.models[:Reservoir].data_domain[:porosity]
+    jjr = [cell_ijk(msh, c)[2] for c in 1:number_of_cells(msh)]
+    is_frac(j) = ϕ .== maximum(ϕ) .&& jjr .== j # Identify fracture cells by porosity
+    
     fcells = fcells .+ (p1 - 1) # Adjust to global well perforation indices
     for (sno, state) in enumerate(states)
         ## Extract mass fluxes and enthalpies from well model
@@ -367,14 +373,14 @@ function get_egs_fracture_data(states, model, well; geo = missing)
         Qhn = Qn.*h # Energy flux [W]
 
         ## Calculate net fluxes per fracture segment (flow into fracture)
-        Tn = state[well][:Temperature][fcells] # Temperature in fracture [K]
+        Tn = state[:Reservoir][:Temperature][rcells] # Temperature in fracture [K]
         Qnf = zeros(length(fcells))
         Qhnf = zeros(length(fcells))
         for (fno, c) in enumerate(fcells)
             fseg = findall(vec(any(N .== c, dims=1)))
             @assert length(fseg) == 2 "Fracture cell $c not found in connectivity matrix"
-            Qnf[fno] = Qn[fseg[1]] - Qn[fseg[2]]
-            Qhnf[fno] = Qhn[fseg[1]] - Qhn[fseg[2]]
+            Qnf[fno] = (Qn[fseg[1]] - Qn[fseg[2]]) # Net mass flow into fracture (accounting for storage)
+            Qhnf[fno] = (Qhn[fseg[1]] - Qhn[fseg[2]]) # Net energy flow into fracture (accounting for storage)
         end
         ## Aggregate data by fracture Y-location
         for (fno, j) in enumerate(JJ)
@@ -382,6 +388,9 @@ function get_egs_fracture_data(states, model, well; geo = missing)
             Q[sno, fno] = sum(Qnf[ix]) # Total mass flow for this fracture
             Qh[sno, fno] = sum(Qhnf[ix]) # Total energy flow for this fracture
             T[sno, fno] = mean(Tn[ix]) # Average temperature for this fracture
+            rc = is_frac(j) # Identify all cells in this fracture
+            Mr[sno, fno] = sum(states[sno][:Reservoir][:TotalMasses][rc])
+            Er[sno, fno] = sum(states[sno][:Reservoir][:TotalThermalEnergy][rc])
         end
     end
 
@@ -391,6 +400,8 @@ function get_egs_fracture_data(states, model, well; geo = missing)
     data[:Temperature] = T # Temperature evolution [K]
     data[:MassFlux] = Q # Mass flux evolution [kg/s]
     data[:EnergyFlux] = Qh # Energy flux evolution [W]
+    data[:TotalMass] = Mr # Total mass in fracture [kg]
+    data[:TotalThermalEnergy] = Er # Total thermal energy in fracture [J]
 
     return data
 end
