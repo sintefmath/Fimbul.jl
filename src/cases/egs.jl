@@ -21,7 +21,7 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     well_names = missing,
     fracture_aperture=0.5e-3,
     porosity = 0.01,
-    permeability = 1e-3 .* darcy,
+    permeability = 1e-4 .* darcy,
     rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
     rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
     temperature_inj = convert_to_si(25, :Celsius),
@@ -84,28 +84,31 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     N = get_neighborship(UnstructuredMesh(msh))
     z = geo.cell_centroids[3, :]
     WI_max = 1e-9
-    cells = find_well_cells(msh, well_coords[1], z, N, is_frac)
-    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in cells]
+    cells, dir = find_well_cells(msh, well_coords[1], z, N, is_frac)
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c, dir[cno]) for (cno, c) in enumerate(cells)]
     open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
     WI[.!open] .= 0.0
     WI = min.(WI, WI_max)
     well_inj = setup_well(domain, cells;
         name = :Injector,
         WI = WI,
+        dir = dir,
         simple_well = false
     )
     push!(wells, well_inj)
 
     cells = [cells[1]]
+    dir = [dir[1]]
     neighbors = [0; 0]
     nodes = [1]
     cell_no = 1;
     for (wno, wc) in enumerate(well_coords)
         wno == 1 ? continue : nothing
         println("Adding producer branch $(wno-1)/$(length(well_coords)-1)")
-        cells_k = find_well_cells(msh, wc, z, N, is_frac)
+        cells_k, dir_k = find_well_cells(msh, wc, z, N, is_frac)
         num_cells = length(cells_k)
         push!(cells, cells_k...)
+        push!(dir, dir_k...)
         joint_neighbors = [1; cell_no + 1]
         branch_nodes = collect(1:num_cells) .+ cell_no
         branch_neighbors = [branch_nodes[1:end-1]'; branch_nodes[2:end]']
@@ -116,15 +119,19 @@ function egs(well_coords, fracture_radius, fracture_spacing;
 
     neighbors = Int64.(neighbors[:, 2:end])
     cells = Int64.(cells)
-    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c) for c in cells]
+    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c, dir[cno]) for (cno, c) in enumerate(cells)]
     open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
     WI[.!open] .= 0.0
     WI = min.(WI, WI_max)[2:end]
     
     well_prod = setup_well(domain, cells[2:end];
-    perforation_cells_well = nodes[2:end],
-    well_cell_centers = geo.cell_centroids[:, cells],
-    N = neighbors, name = :Producer, WI = WI, simple_well = false)
+        perforation_cells_well = nodes[2:end],
+        well_cell_centers = geo.cell_centroids[:, cells],
+        N = neighbors,
+        name = :Producer,
+        WI = WI,
+        dir = dir[2:end],
+        simple_well = false)
     
     wells = [well_inj, well_prod]
 
@@ -135,17 +142,17 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     rho = reservoir_model(model).system.rho_ref[1]
     # Injector: inject cooled water at a rate equal to production
     # TODO: assert that well exists at construction
-    if balanced_injection
-        rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Producer])
-    else
+    # if balanced_injection
+    #     rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Producer])
+    # else
         rate_target = TotalRateTarget(rate)
-    end
+    # end
     ctrl_inj = InjectorControl(
         rate_target, [1.0], density = rho, temperature = temperature_inj, check = false)
     # Producer
     # TODO: support multiple periods with different rates
-    rate_target = TotalRateTarget(-rate)
-    ctrl_prod = ProducerControl(rate_target)
+    bhp_target = BottomHolePressureTarget(25si"bar")
+    ctrl_prod = ProducerControl(bhp_target)
     control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod)
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)#, limits = limits)
@@ -162,17 +169,28 @@ function egs(well_coords, fracture_radius, fracture_spacing;
 end
 
 function find_well_cells(msh, wc, z, N, is_frac)
-    cells = Jutul.find_enclosing_cells(msh, wc, n = 1000)
+    cells, extra = Jutul.find_enclosing_cells(msh, wc, n = 1000, extra_out=true)
+    dir = Vector.(extra[:direction].*extra[:lengths])
     frac_cells = Int[]
+    frac_dir = []
     for cell in cells
         faces = msh.faces.cells_to_faces[cell]
         c = vcat(N[:, faces]...)
         keep = is_frac[c]
-        push!(frac_cells, c[keep]...)
+        if any(keep)
+            fc = c[keep][1]
+            if fc in frac_cells
+                continue
+            end
+            push!(frac_cells, fc)
+            L = cell_dims(msh, fc)[2]
+            push!(frac_dir, [0.0, 1.0, 0.0].*L)
+        end
     end
     push!(cells, frac_cells...)
-    unique!(cells)
-    cells = topo_sort_well(cells, msh, N, z)
+    cells, order = topo_sort_well(cells, msh, N, z)
+    dir = vcat(dir, frac_dir)[order]
+    return cells, dir
 end
 
 function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fracture_spacing;
@@ -193,7 +211,7 @@ function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fra
 
     offset = offset_rel*(well_distance + fracture_radius)
     # Well coordinates
-    hx_min = ismissing(hx_min) ? well_distance/4 : hx_min
+    hx_min = ismissing(hx_min) ? well_distance/3 : hx_min
     hx_max = ismissing(hx_max) ? offset/5 : hx_max
     hz_min = ismissing(hz_min) ? hx_min : hz_min
     hz_max = ismissing(hz_max) ? (depth - fracture_radius)/5 : hz_max
@@ -278,11 +296,11 @@ function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fra
     dy = diff(y)
     ix = [1, length(dy)]
     n = ceil.(dy[ix]./hy[ix])
-    fix = n .< 5 .&& .! is_frac[ix]
+    fix = n .< 5 .&& .!is_frac[ix]
     hy[ix[fix]] .= dy[ix[fix]]./5
 
     y = first(Fimbul.interpolate_z(y, hy))
-
+    
     xyz = (x, y, z)
     sizes = map(x->diff(x), xyz)
     dims = Tuple([length(s) for s in sizes])
@@ -315,7 +333,7 @@ Returns:
     indicates flow out of the fracture into the well.
     
 """
-function get_egs_fracture_data(states, model, well; geo = missing)
+function get_egs_fracture_data(states, dt, model, well; geo = missing)
 
     # Mesh and geometry
     msh = physical_representation(reservoir_model(model).data_domain)
@@ -325,17 +343,23 @@ function get_egs_fracture_data(states, model, well; geo = missing)
     perf = model.models[well].data_domain.representation.perforations # Well-fracture connections
     WI = model.models[well].data_domain[:well_index]
     N = model.models[well].domain.representation.neighborship # Cell connectivity matrix
-    fcells = findall(isapprox.(WI, maximum(WI))) # High-productivity fracture connections
-    jj = [cell_ijk(msh, c)[2] for c in perf.reservoir[fcells]] # Y-indices of fracture cells
+    fcells = findall(isapprox.(WI, maximum(WI), rtol=1e-1)) # High-productivity fracture connections
+    rcells = perf.reservoir[fcells] # Reservoir cells connected to fractures
+    jj = [cell_ijk(msh, c)[2] for c in rcells] # Y-indices of fracture cells
     ## Initialize data arrays for fracture analysis
     JJ = unique(jj) # Unique fracture Y-locations
     nstep = length(states) # Number of simulation timesteps
     nfrac = length(JJ) # Number of discrete fractures
     Q, Qh, T = zeros(nstep, nfrac), zeros(nstep, nfrac), zeros(nstep, nfrac) # Pre-allocate arrays
-    y = geo.cell_centroids[2, perf.reservoir[fcells]] # Y-coordinates of fracture centers
+    Mr, Er = zeros(nstep, nfrac), zeros(nstep, nfrac)
+    y = geo.cell_centroids[2, rcells] # Y-coordinates of fracture centers
 
     ## Process each simulation timestep
     p1 = minimum(perf.self)
+    ϕ = model.models[:Reservoir].data_domain[:porosity]
+    jjr = [cell_ijk(msh, c)[2] for c in 1:number_of_cells(msh)]
+    is_frac(j) = ϕ .== maximum(ϕ) .&& jjr .== j # Identify fracture cells by porosity
+    
     fcells = fcells .+ (p1 - 1) # Adjust to global well perforation indices
     for (sno, state) in enumerate(states)
         ## Extract mass fluxes and enthalpies from well model
@@ -349,14 +373,14 @@ function get_egs_fracture_data(states, model, well; geo = missing)
         Qhn = Qn.*h # Energy flux [W]
 
         ## Calculate net fluxes per fracture segment (flow into fracture)
-        Tn = state[well][:Temperature][fcells] # Temperature in fracture [K]
+        Tn = state[:Reservoir][:Temperature][rcells] # Temperature in fracture [K]
         Qnf = zeros(length(fcells))
         Qhnf = zeros(length(fcells))
         for (fno, c) in enumerate(fcells)
             fseg = findall(vec(any(N .== c, dims=1)))
             @assert length(fseg) == 2 "Fracture cell $c not found in connectivity matrix"
-            Qnf[fno] = Qn[fseg[1]] - Qn[fseg[2]]
-            Qhnf[fno] = Qhn[fseg[1]] - Qhn[fseg[2]]
+            Qnf[fno] = (Qn[fseg[1]] - Qn[fseg[2]]) # Net mass flow into fracture (accounting for storage)
+            Qhnf[fno] = (Qhn[fseg[1]] - Qhn[fseg[2]]) # Net energy flow into fracture (accounting for storage)
         end
         ## Aggregate data by fracture Y-location
         for (fno, j) in enumerate(JJ)
@@ -364,6 +388,9 @@ function get_egs_fracture_data(states, model, well; geo = missing)
             Q[sno, fno] = sum(Qnf[ix]) # Total mass flow for this fracture
             Qh[sno, fno] = sum(Qhnf[ix]) # Total energy flow for this fracture
             T[sno, fno] = mean(Tn[ix]) # Average temperature for this fracture
+            rc = is_frac(j) # Identify all cells in this fracture
+            Mr[sno, fno] = sum(states[sno][:Reservoir][:TotalMasses][rc])
+            Er[sno, fno] = sum(states[sno][:Reservoir][:TotalThermalEnergy][rc])
         end
     end
 
@@ -373,6 +400,8 @@ function get_egs_fracture_data(states, model, well; geo = missing)
     data[:Temperature] = T # Temperature evolution [K]
     data[:MassFlux] = Q # Mass flux evolution [kg/s]
     data[:EnergyFlux] = Qh # Energy flux evolution [W]
+    data[:TotalMass] = Mr # Total mass in fracture [kg]
+    data[:TotalThermalEnergy] = Er # Total thermal energy in fracture [J]
 
     return data
 end

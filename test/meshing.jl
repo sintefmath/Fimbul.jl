@@ -22,13 +22,13 @@ using Jutul, JutulDarcy, Fimbul, Test, LinearAlgebra
 
     # Check extruded mesh with cell constraints
     x = fibonacci_pattern_2d(10, spacing = 5.0)
-    cc = map(x -> [x], x)
+    cc = [x[:, i:i] for i in 1:size(x, 2)]  # Convert 2×N to vector of 2×1 matrices
     depths = [0.0, 10.0, 50.0, 100.0]
     hz = [2.5, 10.0, 25.0]
     mesh, layers, metrics = extruded_mesh(cc, depths; hz = hz)
     @test unique(layers) == collect(1:length(depths)-1)
-    for xi in x
-        xi = [xi[1], xi[2]]
+    for i = 1:size(x, 2)
+        xi = x[:, i]  # Extract 2D coordinates from 2×N matrix
         d = map(xn -> norm(xn[1:2] .- xi,2), mesh.node_points)
         ix = isapprox.(d, 0.0)
         @test sum(ix) == length(layers)+1

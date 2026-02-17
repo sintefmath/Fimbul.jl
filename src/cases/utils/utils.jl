@@ -379,8 +379,13 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
     z = ismissing(z) ? tpfv_geometry(msh).cell_centroids[3, :] : z
 
     sorted_cells = Int[]
+    order_orig = collect(1:length(cells))
+    
     top_ix = last(findmin(z[cells]))
     push!(sorted_cells, popat!(cells, top_ix))
+
+    order = []
+    push!(order, popat!(order_orig, top_ix))
 
     current_cell = sorted_cells[end]
     while !isempty(cells)
@@ -393,11 +398,13 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
             @assert length(wn) <= 1 "Branching wells not supported"
 
             push!(sorted_cells, wn[1])
-            popat!(cells, findfirst(isequal(wn[1]), cells))
+            ix = findfirst(isequal(wn[1]), cells)
+            popat!(cells, ix)
+            push!(order, popat!(order_orig, ix))
             current_cell = wn[1]
         end
     end
 
-    return sorted_cells
+    return sorted_cells, order
 
 end

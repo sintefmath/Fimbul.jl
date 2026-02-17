@@ -55,7 +55,7 @@ function btes(;
 
     # ## Create mesh
     x = fibonacci_pattern_2d(num_wells; spacing = well_spacing)
-    well_coordinates = map(x -> [x], x)
+    well_coordinates = [x[:, i:i] for i in 1:size(x, 2)]  # Convert 2×N to vector of 2×1 matrices
     hz = diff(depths)./n_z
     hxy = well_spacing/n_xy
 
@@ -82,7 +82,7 @@ function btes(;
     for (wno, xw) in enumerate(well_coordinates)
         name = Symbol("B$wno")
         println("Adding well $name ($wno/$num_wells)")
-        xw = xw[1]
+        xw = xw[:, 1]  # Extract 2D coordinates from 2×1 matrix
         d = max(norm(xw, 2))
         v = (d > 0) ? xw./d : (1.0, 0.0)
         # Shift coordiates a bit to avoid being exactly on the node

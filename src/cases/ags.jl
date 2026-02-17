@@ -152,14 +152,25 @@ function get_ags_constraints(well_coords; hxy_min)
         push!(well_coords_2x, wc_right)
     end
 
-    cell_constraints = []
+    cell_constraints = Vector{Matrix{Float64}}()
     for wc in well_coords_2x
-        xw = [Tuple(x) for x in eachrow(unique(wc[:, 1:2], dims=1))]
-        for cc in cell_constraints
-            cor = [norm(collect(x) .- collect(y), 2) for x in xw, y in cc]
-            xw = [xw[i] for i in eachindex(xw) if all(cor[i, :] .>= Δ)]
+        # Get unique coordinates as 2×N matrix
+        cc_new = unique(wc[:, 1:2], dims=1)'  # Transpose to get 2×N
+        # Filter based on distances to existing constraints
+        if !isempty(cell_constraints)
+            # Convert matrix to vector of points for distance comparison
+            for cc in cell_constraints
+                remove = falses(size(cc_new, 2))
+                for (k, x) in enumerate(eachcol(cc_new))
+                    if any(norm(x - y, 2) < Δ for y in eachcol(cc))
+                        remove[k] = true
+                    end
+                end
+                cc_new = cc_new[:, .!remove]
+            end
         end
-        push!(cell_constraints, xw)
+        
+        push!(cell_constraints, cc_new)
     end
 
     return cell_constraints

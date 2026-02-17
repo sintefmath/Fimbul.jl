@@ -1,4 +1,4 @@
-function extruded_mesh(cell_constraints, depths;
+function extruded_mesh(cell_constraints::Vector{<:AbstractMatrix}, depths;
     boundary = missing, offset = missing, offset_rel = 5,
     hxy_min = missing, hxy_max = missing, hz = missing,
     interpolation = :default,
@@ -18,8 +18,21 @@ function extruded_mesh(cell_constraints, depths;
     gmsh.model.add("extruded_mesh")
 
     # ## Get and set domain metrics
-    # Compute radius and center of mass of well region
-    x_cc = vcat(cell_constraints...)
+    # Combine all cell constraints into single matrix for analysis
+    if isempty(cell_constraints)
+        error("At least one cell constraint is required")
+    end
+    
+    # Concatenate all constraint matrices (use only x,y coordinates for 2D analysis)
+    total_points = sum(size(cc, 2) for cc in cell_constraints)
+    x_cc = Matrix{Float64}(undef, 2, total_points)
+    
+    idx = 1
+    for cc in cell_constraints
+        n_points = size(cc, 2)
+        x_cc[:, idx:idx+n_points-1] = cc[1:2, :]  # Extract x,y coordinates
+        idx += n_points
+    end
 
     min_cc_distance, max_cc_distance = min_max_distance(x_cc)
 
@@ -33,10 +46,14 @@ function extruded_mesh(cell_constraints, depths;
         xb_outer = offset_boundary(x_cc, offset; n = 12)
     else
         xb_outer = boundary
-        offset = min_distance(vcat(xb_outer, x_cc...))
+        # Combine boundary with cell constraints for distance calculation
+        combined_points = hcat(xb_outer, x_cc)
+        offset = min_distance(combined_points)
     end
-    if norm(xb_outer[1] .- xb_outer[end], 2) > 0.0
-        xb_outer = push!(xb_outer, xb_outer[1])
+    
+    # Ensure boundary is closed
+    if norm(xb_outer[:, 1] - xb_outer[:, end]) > 1e-12
+        xb_outer = hcat(xb_outer, xb_outer[:, 1:1])
     end
     perimeter = curve_measure(xb_outer)
 
@@ -67,17 +84,22 @@ function extruded_mesh(cell_constraints, depths;
     
     # ## Create 2D mesh
     # Make 2d domain
-    tag2d_brd, tag1d_brd, tag0d_bdr = add_geometry_2d(xb_outer, hxy_max)
+    tag2d_brd, tag1d_brd, tag0d_bdr = add_geometry_2d(xb_outer', hxy_max)
     # Embed well coordinates
     tag0d_cc, tag1d_cc = Vector{Int}(undef, 0), Vector{Int}(undef, 0)
     i0, i1 = tag0d_bdr[end], tag1d_brd[end]
+    
     for (i, cc) in enumerate(cell_constraints)
-        if length(cc) == 1
-            t0d_i = add_geometry_0d(cc, hxy_min, i0, true)
+        n_points = size(cc, 2)
+        
+        if n_points == 1
+            # Single point constraint
+            t0d_i = add_geometry_0d(cc[1:2, 1:1]', hxy_min, i0, true)  # Extract 2D coordinates and transpose
             push!(tag0d_cc, t0d_i...)
             i0 += 1
         else
-            t1d_i, t0d_i = add_geometry_1d(cc, hxy_min, i1, i0, true)
+            # Curve constraint - use only x,y coordinates for 2D mesh
+            t1d_i, t0d_i = add_geometry_1d(cc[1:2, :]', hxy_min, i1, i0, true)
             push!(tag1d_cc, t1d_i...)
             i1 += length(t1d_i)
             i0 += length(t0d_i)
