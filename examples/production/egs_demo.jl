@@ -102,12 +102,10 @@ fig
 # variables (temperature and pressure) between Newton iterations.
 sim, cfg = setup_reservoir_simulator(case;
     info_level = 2, # 0=progress bar, 1=basic, 2=detailed
-    # tol_cnv = Inf, # Disable CNV tolerance - use other criteria
-    # inc_tol_dT = 1e-2, # Temperature increment tolerance [K]
-    # inc_tol_dp_rel = 1e-3, # Relative pressure increment tolerance [-]
     output_substates = true, # Output results at each Newton iteration
     initial_dt = 5.0, # Initial timestep [s]
-    relaxation = true); # Enable relaxation in Newton solver
+    relaxation = true # Enable relaxation in Newton solver
+);
 
 # We add a specialized timestep selector to control solution quality during
 # thermal transients. These selectors monitor temperature changes and adjust
