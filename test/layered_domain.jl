@@ -7,7 +7,7 @@ using Jutul
     # Define simple inputs
     depths = [0.0, 10.0, 20.0, 30.0] # 3 layers
     # Simple constraints: a few points defining a region
-    constraints = [[(0.0, 0.0)], [(10.0, 10.0)]]
+    constraints = [permutedims([0.0 0.0; 10.0 10.0])]
     
     # Layer properties
     # prop_scalar: same for all layers
