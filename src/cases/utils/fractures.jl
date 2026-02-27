@@ -1,9 +1,11 @@
-function add_fractures(mesh, centers, normals, matrix_properties, fracture_properties)
+function add_fractures(mesh::UnstructuredMesh, centers::Vector, normals::Vector;
+    tags=collect(1:length(centers)))
 
+    length(centers) == length(normals) || error("Number of fracture centers and normals must match. Got $(length(centers)) centers and $(length(normals)) normals.")
+    length(tags) == length(centers) || error("Not enough fracture tags provided. Expected $(length(centers)), got $(length(tags)).")
+    
     fracture_faces = Int[]
-    fracture_cells = Int[]
-    fracture_properties_exp = Dict(keys(fracture_properties) .=> [Float64[] for _ in keys(fracture_properties)])
-
+    fracture_tag = []
     for (i, (normal, center)) in enumerate(zip(normals, centers))
         is_frac = falses(number_of_faces(mesh))
         is_frac[fracture_faces] .= true
@@ -13,28 +15,23 @@ function add_fractures(mesh, centers, normals, matrix_properties, fracture_prope
         face_index = filter(x->x>0, info["face_index"])
         is_frac = is_frac[face_index]
         new_faces = findall(info["face_index"] .== 0)
-        if any(is_frac)
-            old_to_new_faces = face_index[is_frac]
-            face_to_cell = Dict((f, c) for (f, c) in zip(face_index, 1:length(face_index)))
-            old_to_new_cells = face_to_cell[old_to_new_faces]
-        else
-            old_to_new_cells = Int[]
-        end
-        # Expand fracture porperties
-        for (key, values) in fracture_properties
-            value_exp = fracture_properties_exp[key]
-            value_exp = value_exp[old_to_new_cells]
-            append!(fracture_properties_exp[key], fill(values[i], length(new_faces)))
-        end
+        # Utils for mapping old to new faces and cells
+        old_to_new_faces = face_index[is_frac]
+        face_to_cell = zeros(Int, number_of_faces(mesh))
+        face_to_cell[fracture_faces] .= 1:length(fracture_faces)
+        old_to_new_cells = face_to_cell[old_to_new_faces]
+        # Update existing fracture tags
+        fracture_tag = fracture_tag[old_to_new_cells]
+        # Add new fracture tags
+        append!(fracture_tag, fill(tags[i], length(new_faces)))
+        # Add new fracture faces to fracture face vector
         fracture_faces = findall(is_frac)
         append!(fracture_faces, new_faces)
-        append!(fracture_cells, collect(1:length(new_faces)))
-        println("Fracture $i: $(length(fracture_faces)) faces, new faces: $(length(new_faces))")
     end
     # Generate embedded mesh for fractures
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(mesh, fracture_faces)
 
-    return mesh, fracture_mesh, fracture_properties_exp
+    return mesh, fracture_mesh, fracture_tag
 
 end
 
