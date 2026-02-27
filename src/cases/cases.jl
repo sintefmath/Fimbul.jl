@@ -8,6 +8,8 @@ darcy = si_unit(:darcy)
 # Include utilities and setup functions
 include("utils/utils.jl")
 include("utils/layered_domain.jl")
+include("utils/wells.jl")
+include("utils/fractures.jl")
 include("analytical.jl")
 include("doublet.jl")
 include("egs.jl")
