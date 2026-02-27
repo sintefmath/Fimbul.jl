@@ -79,7 +79,7 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     connectivity[2:end, 1] .= 1
     println(connectivity)
     cells, wcells, neighborship = Fimbul.get_well_neighborship(
-        matrix_mesh, x_prod, connectivity, geo; top_node=true,  n=1_000_000)
+        matrix_mesh, x_prod, connectivity, geo; top_node=true, n=1_000_000)
     well_cell_centers = hcat([0; 0; 0], geo.cell_centroids[:, cells])
 
     well_prod = setup_well(matrix_domain, cells, fracture_domain;
