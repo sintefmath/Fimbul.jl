@@ -51,10 +51,9 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
     current = start
 
     hull_indices = Int[]
-    
     while true
         push!(hull_indices, current)  # Add the current point to the hull
-        next_point = mod1(current + 1, n_points)  # Next candidate point
+        next_point = mod1(current+1, n_points)  # Next candidate point
 
         for i in 1:n_points
             if cross_product(points[:, current], points[:, next_point], points[:, i]) < 0
@@ -63,7 +62,7 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
         end
 
         current = next_point  # Move to the next point
-        if current == start
+        if current == start || current ∈ hull_indices
             break  # Stop when we return to the starting point
         end
     end
