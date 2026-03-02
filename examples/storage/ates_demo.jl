@@ -244,8 +244,8 @@ fig_wells
 # asymmetries in the temperature profiles around the cold well during charging
 # and hot well during discharging.
 
-# Extract temperature along a horizontal line in the aquifer layer
-# This transect passes through the center of the aquifer between the two wells
+# Extract temperature along a horizontal line in the aquifer layer. This
+# transect passes through the center of the aquifer between the two wells
 layers = case.input_data[:layers]
 ijk = [cell_ijk(msh, c) for c in 1:number_of_cells(msh)]
 j = div(maximum(getindex.(ijk, 2)) + minimum(getindex.(ijk, 2)), 2)
@@ -282,8 +282,8 @@ function plot_aquifer_temperature!(fig, T_line, stage, cycle)
     return ax
 end;
 
-# Plot temperature profiles during charge and discharge stages for all cycles
-# Shows thermal plume evolution and migration patterns over multiple years
+# Plot temperature profiles during charge and discharge stages for all cycles.
+# This shows thermal plume evolution and migration patterns over multiple years
 fig = Figure(size = (800, 1000))
 for cycle in 1:num_years
     ## Plot charging stage temperatures (thermal plume development)
