@@ -1,4 +1,4 @@
-function get_well_neighborship(mesh, coordinates::Vector{Matrix{Float64}}, connectivity::Matrix{Int64}, geometry=missing;
+function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{Int64}, geometry=missing;
     top_node = false, output_directions=false, kwargs...)
     
     # If geometry is not provided, use the mesh geometry
@@ -19,18 +19,22 @@ function get_well_neighborship(mesh, coordinates::Vector{Matrix{Float64}}, conne
     else
         wc_max = 0
     end
-    size(connectivity) == (length(coordinates)+top_node, 2) || 
+    size(connectivity) == (length(coordinates_or_cells)+top_node, 2) || 
     error("Connectivity matrix must have size (number of well sections, 2) \
     or (number of well sections + 1, 2) if top_node is true.")
-    for (sno, x) in enumerate(coordinates)
+    for (sno, x) in enumerate(coordinates_or_cells)
         sno = sno + top_node
         # Find reservoir cells corresponding to the well section
-        out = Jutul.find_enclosing_cells(mesh, x;
-            geometry=geometry, extra_out=output_directions, kwargs...)
-        if output_directions
-            rc, extra = out
+        if x isa Matrix{Float64}
+            out = Jutul.find_enclosing_cells(mesh, x;
+                geometry=geometry, extra_out=output_directions, kwargs...)
+            if output_directions
+                rc, extra = out
+            else
+                rc = out
+            end
         else
-            rc = out
+            rc = x
         end
         push!(reservoir_cells, rc)
         # Create well cells
