@@ -224,7 +224,7 @@ function setup_ftes_fractures(num::Int, z_min::Float64, z_max::Float64;
     radius::Union{Float64, Tuple{Float64, Float64}}=Inf,
     aperture::Union{Float64, Tuple{Float64, Float64}}=1.0*1e-4,
     porosity::Union{Float64, Tuple{Float64, Float64}}=0.5,
-    xy_center=[0.0, 0.0],
+    boundary_or_center=[0.0, 0.0],
     )
 
     if !(strike isa Tuple{Float64, Float64})
@@ -252,7 +252,24 @@ function setup_ftes_fractures(num::Int, z_min::Float64, z_max::Float64;
     porosity = porosity[1] .+ randn(num).*porosity[2]
 
     z = z_min .+ rand(num) .* (z_max - z_min)
-    centers = [vcat(xy_center, z[i]) for i in 1:num]
+
+    if boundary_or_center isa Vector
+        centers = [vcat(boundary_or_center, z[i]) for i in 1:num]
+    else
+        x_min = minimum(boundary_or_center[1,:])
+        x_max = maximum(boundary_or_center[1,:])
+        y_min = minimum(boundary_or_center[2,:])
+        y_max = maximum(boundary_or_center[2,:])
+        centers = Vector{Vector{Float64}}()
+        while length(centers) < num
+            x = x_min + rand() * (x_max - x_min)
+            y = y_min + rand() * (y_max - y_min)
+            xy = [x, y]
+            if Fimbul.point_in_polygon(xy, boundary_or_center)
+                push!(centers, [x, y, z[length(centers)+1]])
+            end
+        end
+    end
 
     fractures = Dict{Symbol, Any}()
     fractures[:normal] = normal
