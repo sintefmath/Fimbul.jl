@@ -78,7 +78,13 @@ function ags(;
     
     constraints = get_ags_constraints(well_coords; hxy_min = hxy_min)
 
-    domain, layers, metrics = layered_reservoir_domain(constraints, depths;
+    domain, layers, metrics = layered_reservoir_domain(constraints, depths,
+        (
+            porosity = porosity,
+            permeability = permeability,
+            rock_thermal_conductivity = rock_thermal_conductivity,
+            rock_heat_capacity = rock_heat_capacity
+        ),
         mesh_args = (;
             hz = hz, 
             hxy_min = hxy_min, 
@@ -86,12 +92,6 @@ function ags(;
             offset_rel = 1.0, 
             dist_min_factor = 50.0, 
             mesh_args...
-        ),
-        layer_properties = (
-            porosity = porosity,
-            permeability = permeability,
-            rock_thermal_conductivity = rock_thermal_conductivity,
-            rock_heat_capacity = rock_heat_capacity
         )
     )
 
@@ -255,6 +255,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         name = :AGS_supply,
         common_args...
     )
+    w_supply[:section, Cells()] = cell_to_section
 
     w_return = setup_well(domain, rcells[end];
         name = :AGS_return,
