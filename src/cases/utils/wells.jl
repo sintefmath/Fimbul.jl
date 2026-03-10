@@ -5,6 +5,7 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     if ismissing(geometry)
         geometry = tpfv_geometry(mesh)
     end
+    num_sections = length(coordinates_or_cells)
     # Allocate arrays
     reservoir_cells = Vector{Vector{Int64}}(undef, 0)
     well_cells = Vector{Vector{Int64}}(undef, 0)
@@ -15,6 +16,7 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     # For each well section, find the corresponding reservoir and set up neighborship
     if top_node
         push!(well_cells, [1])
+        push!(neighborship, zeros(2,0))
         wc_max = 1
     else
         wc_max = 0
@@ -36,6 +38,7 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         else
             rc = x
         end
+        println("Section $sno: Found $(length(rc)) reservoir cells.")
         push!(reservoir_cells, rc)
         # Create well cells
         wc = collect(1:length(rc)) .+ wc_max
@@ -43,18 +46,8 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         push!(well_cells, wc)
         # Section neighborship
         n = vcat(wc[1:end-1]', wc[2:end]')
-        # Neighborship from previous section
-        from_section = connectivity[sno, 1]
-        if from_section > 0
-            wc_from = well_cells[from_section][end]
-            n = hcat([wc_from; wc[1]], n)
-        end
-        to_section = connectivity[sno, 2]
-        if to_section > 0
-            wc_to = well_cells[to_section][1]
-            n = hcat(n, [wc[end]; wc_to])
-        end
         push!(neighborship, n)
+
         # Direction vectors for each well cell
         if output_directions
             dir = Vector.(extra[:direction].*extra[:lengths])
@@ -62,6 +55,24 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         end
 
     end
+
+    for (sno, wc) in enumerate(well_cells)
+        # Neighborship from previous section
+        n = neighborship[sno]
+        from_section = connectivity[sno, 1]
+        if from_section > 0
+            wc_from = well_cells[from_section][end]
+            n = hcat([wc_from; wc[1]], n)
+        end
+        # Neighborship to next section
+        to_section = connectivity[sno, 2]
+        if to_section > 0
+            wc_to = well_cells[to_section][1]
+            n = hcat(n, [wc[end]; wc_to])
+        end
+        neighborship[sno] = n
+    end
+
     reservoir_cells = vcat(reservoir_cells...)
     well_cells = vcat(well_cells...)
     neighborship = hcat(neighborship...)
