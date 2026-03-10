@@ -46,12 +46,12 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
         plane = PlaneCut(center, normal)
         matrix_mesh, info = cut_mesh(matrix_mesh, plane; min_cut_fraction = 0.0, extra_out=true)
         # Update fracture face vector
-        face_index = filter(x->x>0, info["face_index"])
+        face_index = filter(x->x>0, info[:face_index])
         fracture_faces = findall(is_frac[face_index])
-        new_faces = findall(info["face_index"] .== 0)
+        new_faces = findall(info[:face_index] .== 0)
         append!(fracture_faces, new_faces)
         # Update layer vector
-        layers = layers[info["cell_index"]]
+        layers = layers[info[:cell_index]]
     end
     # Generate embedded mesh for fractures
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(matrix_mesh, fracture_faces)
