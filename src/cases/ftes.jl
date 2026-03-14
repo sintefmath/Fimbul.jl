@@ -37,7 +37,10 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
         depths = sort(depths)
     end
     # Generate mesh
-    matrix_mesh, layers, _ = extruded_mesh(cell_constraints, depths; hxy_min=hxy_min, offset_rel=2.5, mesh_args...)
+    num_fractures = length(fractures[:normal])
+    hz = diff(depths)./[num_fractures*3, 2]
+    matrix_mesh, layers, _ = extruded_mesh(cell_constraints, depths;
+        hxy_min=hxy_min, hz=hz, offset_rel=2.5, mesh_args...)
     # Add fractures
     fracture_faces = Int[]
     for (i, (normal, center)) in enumerate(zip(fractures[:normal], fractures[:centers]))
