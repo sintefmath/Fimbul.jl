@@ -147,8 +147,8 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     # else
         rate_target = TotalRateTarget(rate)
     # end
-    ctrl_inj = InjectorControl(
-        rate_target, [1.0], density = rho, temperature = temperature_inj, check = false)
+    ctrl_inj = InjectorControl(rate_target, [1.0];
+        density = rho, temperature = temperature_inj, check = false)
     # Producer
     # TODO: support multiple periods with different rates
     bhp_target = BottomHolePressureTarget(25si"bar")
