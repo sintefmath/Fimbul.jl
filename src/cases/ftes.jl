@@ -14,6 +14,9 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     mesh_args = NamedTuple(),
     )
 
+    @warn "This function is under development and currently requires the `dfm` \
+    branch of JutulDarcy."
+
     # Make constraints from well coordinates
     collars = hcat([x[1:2, 1] for x in well_coordinates]...)
     Δx_min, Δx_max = Fimbul.min_max_distance(collars)
