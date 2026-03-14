@@ -62,13 +62,13 @@ function btes(;
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite,
     # with a styrofoam layer on top
-    domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths;
-        mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
-        layer_properties = (
+    domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths,
+        (
             rock_density = density,
             rock_thermal_conductivity = thermal_conductivity,
             rock_heat_capacity = heat_capacity
-        ),
+        );
+        mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
         permeability = 1e-6darcy,
         porosity = 0.01,
         component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
@@ -203,7 +203,7 @@ function setup_controls(model, number_of_sectors,
                 control_charge[well_sup] = ctrl_charge
                 # Discharging runs from outer to inner
                 well_prev = get_return(sw[order[k+1]])
-                target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_discharge[well_sup] = ctrl
@@ -212,20 +212,20 @@ function setup_controls(model, number_of_sectors,
                 control_discharge[well_sup] = ctrl_discharge
                 # Charging runs from inner to outer
                 well_prev = get_return(sw[order[k-1]])
-                target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_charge[well_sup] = ctrl
             else
                 # Charging runs from inner to outer
                 well_prev = get_return(sw[order[k-1]])
-                target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_charge[well_sup] = ctrl
                 # Discharging runs from outer to inner
                 well_prev = get_return(sw[order[k+1]])
-                target = JutulDarcy.ReinjectionTarget(NaN, [well_prev])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
                 ctrl = InjectorControl(target, [1.0],
                     density=rho, temperature=NaN; check=false)
                 control_discharge[well_sup] = ctrl
