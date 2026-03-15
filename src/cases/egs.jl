@@ -143,7 +143,7 @@ function egs(well_coords, fracture_radius, fracture_spacing;
     # Injector: inject cooled water at a rate equal to production
     # TODO: assert that well exists at construction
     # if balanced_injection
-    #     rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Producer])
+    #     rate_target = JutulDarcy.ReinjectionTarget([:Producer])
     # else
         rate_target = TotalRateTarget(rate)
     # end

@@ -157,7 +157,6 @@ function plot_lateral_data!(ax, time, data; stacked = false)
         y = data[:, lno+1]
         if stacked
             x = vcat(time, reverse(time))
-            println("Size x: ", size(x), ", size y: ", size(y))
             y .+= y_prev
             y = vcat(y_prev, reverse(y))
             poly!(ax, x, y; color = colors[lno],

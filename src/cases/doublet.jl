@@ -115,7 +115,7 @@ function geothermal_doublet(;
 
     rho = reservoir_model(model).system.rho_ref[1]
 
-    inj_target = JutulDarcy.ReinjectionTarget(NaN, [:Producer])
+    inj_target = JutulDarcy.ReinjectionTarget([:Producer])
     ctrl_inj = InjectorControl(inj_target, [1.0], 
         density=rho, temperature=temperature_inj, tracers = [1.0], check=false)
     # BHP control for producer
