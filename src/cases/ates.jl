@@ -204,7 +204,7 @@ function ates(;
     # ## Set up ATES schedule
     # Set up well controls for charging phase
     if balanced_injection
-        rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Cold])
+        rate_target = JutulDarcy.ReinjectionTarget([:Cold])
     else
         rate_target = TotalRateTarget(rate_charge)
     end
@@ -223,7 +223,7 @@ function ates(;
     ctrl_hot  = ProducerControl(rate_target)
     # Cold well: inject cold water
     if balanced_injection
-        rate_target = JutulDarcy.ReinjectionTarget(NaN, [:Hot])
+        rate_target = JutulDarcy.ReinjectionTarget([:Hot])
     else
         rate_target = TotalRateTarget(rate_discharge)
     end
