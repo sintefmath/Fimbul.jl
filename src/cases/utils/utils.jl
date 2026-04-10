@@ -408,3 +408,36 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
     return sorted_cells, order
 
 end
+
+function scaled_rate(domain, wells, duration::Float64, radius=missing; mean_well_coordinate=false)
+
+    # Get all well coordinates
+    xw = hcat([w[:cell_centroids] for w in wells]...)
+    # Get reservoir cell coordinates
+    mesh = physical_representation(domain)
+    geo = tpfv_geometry(mesh)
+    xr = geo.cell_centroids
+    # Get radius if not provided
+    radius = ismissing(radius) ? Fimbul.max_distance(xw)/2 : radius
+    if mean_well_coordinate
+        xw = mean(xw, dims=2)
+    end
+    # Determine region of interest around wells
+    roi = falses(size(xr, 2))
+    for x in eachcol(xw)
+        roi = vec(sum((x .- xr).^2, dims=1) .< radius^2) .| roi
+    end
+    pv_tot = sum(pore_volume(domain)[roi])
+
+    return pv_tot/duration
+    
+end
+
+function scaled_rate(domain, wells, duration, radius=missing, year=missing; kwargs...)
+
+    year = ismissing(year) ? Dates.year(now()) : year
+    duration = diff(Fimbul.process_periods(year, duration))[1]
+    duration = duration.value*1e-3
+    return scaled_rate(domain, wells, duration, radius; kwargs...)
+
+end

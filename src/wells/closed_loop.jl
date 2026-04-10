@@ -64,6 +64,7 @@ function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     well_cell_centers = missing,
+    dir = :z,
     segment_models = missing,
     end_nodes = missing,
     section = missing,
@@ -127,12 +128,18 @@ function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
         casing_thermal_conductivity = pipe_thermal_conductivity,
         grouting_thermal_conductivity = grouting_thermal_conductivity,
         end_nodes = end_nodes,
+        dir = dir,
         args..., kwarg...)
 
+    if dir isa Vector
+        end_segment = findfirst(vec(any(neighborship .== end_nodes[1], dims=1)))
+        dir = [dir[end_segment]]
+    end
     return_well = setup_well(D::DataDomain, return_reservoir_cell;
         name = Symbol(name, "_return"),
         WIth = 0.0,
         casing_thickness = wall_thickness,
+        dir = dir,
         args..., kwarg...)
 
     return [supply_well, return_well]
