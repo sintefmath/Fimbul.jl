@@ -27,7 +27,7 @@ spacing.
 - `depths = [0.0, 500.0, 1500.0, 2000.0, 2500.0, 3000.0]`: Depth boundaries
   for geological layers [m].
 - `permeability = [1e-3, 1e-3, 1e-3, 1e-2, 1e-3]*darcy`: Permeability per
-  layer [m²].
+  layer [darcy].
 - `porosity = [0.01, 0.01, 0.01, 0.05, 0.01]`: Porosity per layer [-].
 - `rock_thermal_conductivity`: Thermal conductivity per layer [W/(m·K)].
 - `rock_heat_capacity`: Rock heat capacity per layer [J/(kg·K)].

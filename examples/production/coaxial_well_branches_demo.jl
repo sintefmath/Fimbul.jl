@@ -11,7 +11,7 @@ using HYPRE
 using GLMakie
 
 # Useful SI units
-meter, hour, day, watt = si_units(:meter, :hour, :day, :watt);
+meter, hour, watt = si_units(:meter, :hour, :watt);
 
 # ## Set up multi-branch coaxial system
 # We create a system with 4 branches diverging from a 2 km deep trunk. Each
