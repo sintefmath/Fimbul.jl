@@ -62,13 +62,13 @@ function btes(;
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite,
     # with a styrofoam layer on top
-    domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths;
-        mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
-        layer_properties = (
+    domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths,
+        (
             rock_density = density,
             rock_thermal_conductivity = thermal_conductivity,
             rock_heat_capacity = heat_capacity
-        ),
+        );
+        mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
         permeability = 1e-6darcy,
         porosity = 0.01,
         component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
