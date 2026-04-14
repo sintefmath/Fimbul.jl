@@ -170,7 +170,8 @@ Generate a default vertical well trajectory from the surface to the given
 depth.
 
 # Returns
-An m×3 matrix of (x, y, z) coordinates.
+An m×3 matrix of (x, y, z) coordinates [m], where z represents depth with
+z = 0 at the surface.
 """
 function default_coaxial_trajectory(; depth = 2500.0, step = 25.0)
     n = max(Int(ceil(depth / step)), 2)
