@@ -69,8 +69,8 @@ function coaxial_well_branches(;
     schedule_args = NamedTuple(),
     # Mesh parameters
     hz = missing,
-    hxy_min = 25.0,
-    hxy_max = 500.0,
+    hxy_min = 5.0,
+    hxy_max = 10.0,
     mesh_args = NamedTuple(),
     # Well parameters
     well_name = :CoaxialWell,
@@ -99,7 +99,7 @@ function coaxial_well_branches(;
             hxy_min = hxy_min,
             hxy_max = hxy_max,
             offset_rel = 1.0,
-            dist_min_factor = 50.0,
+            # dist_min_factor = 50.0,
             mesh_args...
         ),
         layer_properties = (
@@ -132,11 +132,19 @@ function coaxial_well_branches(;
     rho = reservoir_model(model).system.rho_ref[1]
     supply_name = Symbol(well_name, "_supply")
     return_name = Symbol(well_name, "_return")
+    
     rate_target = TotalRateTarget(rate)
     ctrl_supply = InjectorControl(
         rate_target, [1.0], density = rho, temperature = temperature_inj)
     bhp_target = BottomHolePressureTarget(10atm)
     ctrl_return = ProducerControl(bhp_target)
+
+    rate_target = TotalRateTarget(-rate)
+    bhp_target = BottomHolePressureTarget(20atm)
+    ctrl_supply = InjectorControl(
+        bhp_target, [1.0], density = rho, temperature = temperature_inj)
+    ctrl_return = ProducerControl(rate_target)
+
     control = Dict(
         supply_name => ctrl_supply,
         return_name => ctrl_return,
