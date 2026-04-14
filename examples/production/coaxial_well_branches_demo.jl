@@ -1,9 +1,8 @@
-# # Multi-branch coaxial geothermal well system
+# # Deep coaxial geothermal well
 # This example demonstrates simulation and analysis of geothermal energy
-# production from a deep coaxial well system with multiple branches. The
-# system consists of a shared vertical trunk well that feeds into several
-# lateral branches arranged in a fan-out geometry at depth. All branches
-# share a single wellhead and diverge smoothly with depth.
+# production from a deep coaxial closed-loop well. The well is defined by a
+# general trajectory (m×3 matrix) and uses coaxial heat exchange with the
+# surrounding rock formation.
 
 # Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul
@@ -13,18 +12,24 @@ using GLMakie
 # Useful SI units
 meter, hour, watt = si_units(:meter, :hour, :watt);
 
-# ## Set up multi-branch coaxial system
-# We create a system with 4 branches diverging from a 2 km deep trunk. Each
-# branch extends 1500 m laterally with 400 m of additional vertical depth. The
-# branch collars are placed using a Fibonacci spiral pattern to minimize
-# thermal interference. The well circulates water at 50 m³/h.
+# ## Set up coaxial well system
+# We create a single coaxial well extending to 2500 m depth. The default
+# trajectory is a vertical well. The well circulates water at 50 m³/h with
+# an injection temperature of 25°C.
+
+# Define a custom deviated trajectory (or use the default vertical one)
+trajectory = [
+    0.0  0.0    0.0;
+    0.0  0.0  500.0;
+    0.0  0.0 1000.0;
+    0.0  0.0 1500.0;
+    0.0  0.0 2000.0;
+    0.0  0.0 2500.0;
+]
+
 case = coaxial_well_branches(;
-    n_branches = 4,                                        # Number of branches
-    branch_surface_spacing = 200.0,                        # Inter-branch spacing [m]
-    trunk_depth = 2000.0,                                  # Trunk depth [m]
-    branch_length = 1500.0,                                # Branch length [m]
-    branch_dz = 400.0,                                     # Additional depth per branch [m]
-    rate = 50meter^3/hour,                                 # Total circulation rate
+    well_trajectory = trajectory,                          # m×3 well path
+    rate = 50meter^3/hour,                                 # Circulation rate
     temperature_inj = convert_to_si(25.0, :Celsius),       # Injection temperature
     num_years = 30,                                        # Simulation duration
     report_interval = si_unit(:year)/4,                    # Output 4x per year
@@ -38,12 +43,12 @@ case = coaxial_well_branches(;
 
 # ## Inspect model
 # Visualize the computational mesh and well configuration. The mesh is refined
-# around the wells to accurately capture thermal and hydraulic processes.
+# around the well to accurately capture thermal and hydraulic processes.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(msh)
 fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data, perspectiveness = 0.5,
-    title = "Multi-branch coaxial geothermal system")
+    title = "Deep coaxial geothermal well")
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 wells = get_model_wells(case.model)
 for (name, well) in wells
@@ -56,8 +61,8 @@ fig
 plot_reservoir(case.model; aspect = :data)
 
 # ## Simulate geothermal energy production
-# We simulate the multi-branch system for 30 years. The system injects cooled
-# water at 25°C and extracts heated water from the branches.
+# We simulate the coaxial well system for 30 years. The system injects cooled
+# water at 25°C and extracts heated water.
 sim, cfg = setup_reservoir_simulator(case;
     output_substates = true,
     info_level = 0,
@@ -70,14 +75,14 @@ sel = VariableChangeTimestepSelector(:Temperature, 5.0;
     relative = false, model = :Reservoir)
 push!(cfg[:timestep_selectors], sel);
 sel = VariableChangeTimestepSelector(:Temperature, 5.0;
-    relative = false, model = :CoaxialBranch_supply)
+    relative = false, model = :CoaxialWell_supply)
 push!(cfg[:timestep_selectors], sel);
 
 # Run the simulation
 results = simulate_reservoir(case; simulator = sim, config = cfg)
 
 # ## Visualize results
-# Examine the thermal depletion pattern around the multi-branch system
+# Examine the thermal depletion pattern around the coaxial well
 Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
 plot_reservoir(case.model, Δstates;
     resolution = (600, 800), aspect = :data,
