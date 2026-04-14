@@ -10,6 +10,7 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     reservoir_cells = Vector{Vector{Int64}}(undef, 0)
     well_cells = Vector{Vector{Int64}}(undef, 0)
     neighborship = Vector{Matrix{Int64}}(undef, 0)
+    sections = Vector{Vector{Int64}}(undef, 0)
     if output_directions
         directions = Vector{Vector{Float64}}(undef, 0)
     end
@@ -38,7 +39,6 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         else
             rc = x
         end
-        println("Section $sno: Found $(length(rc)) reservoir cells.")
         push!(reservoir_cells, rc)
         # Create well cells
         wc = collect(1:length(rc)) .+ wc_max
@@ -47,6 +47,7 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         # Section neighborship
         n = vcat(wc[1:end-1]', wc[2:end]')
         push!(neighborship, n)
+        push!(sections, fill(sno, length(wc)))
 
         # Direction vectors for each well cell
         if output_directions
@@ -56,18 +57,32 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
 
     end
 
-    for (sno, wc) in enumerate(well_cells)
+    for (sno, (wc, rc)) in enumerate(zip(well_cells, reservoir_cells))
         # Neighborship from previous section
         n = neighborship[sno]
         from_section = connectivity[sno, 1]
         if from_section > 0
-            wc_from = well_cells[from_section][end]
+            ix = findfirst(reservoir_cells[from_section] .== rc[1])
+            if isnothing(ix)
+                @warn "First reservoir cell of section $sno does not match any \
+                reservoir cell in the from_section $from_section. Connecting \
+                to last cell."
+                ix = length(reservoir_cells[from_section])
+            end
+            wc_from = well_cells[from_section][ix]
             n = hcat([wc_from; wc[1]], n)
         end
         # Neighborship to next section
         to_section = connectivity[sno, 2]
         if to_section > 0
-            wc_to = well_cells[to_section][1]
+            ix = findfirst(reservoir_cells[to_section] .== rc[end])
+            if isnothing(ix)
+                @warn "Last reservoir cell of section $sno does not match any \
+                reservoir cell in the to_section $to_section. Connecting \
+                to first cell."
+                ix = 1
+            end
+            wc_to = well_cells[to_section][ix]
             n = hcat(n, [wc[end]; wc_to])
         end
         neighborship[sno] = n
@@ -76,11 +91,12 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     reservoir_cells = vcat(reservoir_cells...)
     well_cells = vcat(well_cells...)
     neighborship = hcat(neighborship...)
+    sections = vcat(sections...)
 
     if output_directions
-        return reservoir_cells, well_cells, neighborship, directions
+        return reservoir_cells, well_cells, neighborship, sections, directions
     else
-        return reservoir_cells, well_cells, neighborship
+        return reservoir_cells, well_cells, neighborship, sections
     end
 
 end
