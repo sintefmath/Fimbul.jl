@@ -72,7 +72,7 @@ function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
     dir = :z,
     segment_models = missing,
     end_nodes = missing,
-    section = missing,
+    tag = missing,
     name = :CL,
     radius_pipe = 20e-3,
     wall_thickness = 2.5e-3,
@@ -98,19 +98,17 @@ function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
         wc_right = cell_centers[:, reservoir_cells[nc_mid+1:end]] .+ [pipe_spacing/2, 0.0, 0.0]
         well_cell_centers = hcat(wc_left, wc_right)
         end_nodes = [pipe_cells[end]]
-        # Set section for easy lookup
-        if !ismissing(section)
-            @warn "section argument is ignored when neighborship is not \
-                provided. Sections will be created automatically."
+        # Set tag for identifying cell groups (e.g., pipe legs)
+        if !ismissing(tag)
+            @warn "tag argument is ignored when neighborship is not \
+                provided. Tags will be created automatically."
         end
-        # Section entries are (well_index, section_name) tuples for identifying
-        # cell groups (e.g., pipe legs) within the well
-        section = Vector{Any}(undef, nc_pipe)
-        section[pipe_cells[left_ix]] .= [(1, :pipe_left)]
-        section[pipe_cells[right_ix]] .= [(1, :pipe_right)]
+        tag = Vector{Symbol}(undef, nc_pipe)
+        tag[pipe_cells[left_ix]] .= :pipe_left
+        tag[pipe_cells[right_ix]] .= :pipe_right
     else
-        if ismissing(well_cell_centers) || ismissing(end_nodes) 
-            error("""If neighborship is provided, well_cell_centers, and 
+        if ismissing(well_cell_centers) || ismissing(end_nodes)
+            error("""If neighborship is provided, well_cell_centers, and
             end_nodes must also be provided.""")
         end
     end
@@ -137,13 +135,25 @@ function setup_closed_loop_well_simple(D::DataDomain, reservoir_cells;
         end_segment = findfirst(vec(any(neighborship .== end_nodes[1], dims=1)))
         dir = [dir[end_segment]]
     end
-    return_well = setup_well(D, return_reservoir_cell;
-        name = Symbol(name, "_return"),
-        WIth = 0.0,
+    return_well = setup_closed_loop_return_well(D, return_reservoir_cell;
+        name = name,
         casing_thickness = wall_thickness,
         dir = dir,
-        args..., kwarg...)
+        kwarg...)
 
     return [supply_well, return_well]
+
+end
+
+function setup_closed_loop_return_well(D::DataDomain, return_reservoir_cell;
+    name = :CL, kwarg...)
+
+    return setup_well(D, return_reservoir_cell;
+        name = Symbol(name, "_return"),
+        type = :closed_loop,
+        simple_well = false,
+        WI = 0.0,
+        WIth = 0.0,
+        kwarg...)
 
 end

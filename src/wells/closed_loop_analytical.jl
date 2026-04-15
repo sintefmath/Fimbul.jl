@@ -40,9 +40,9 @@ function analytical_closed_loop_u1(rate, temperature_in, temperature_rock,
     density_fluid, heat_capacity_fluid, well::DataDomain)
 
     # Identify pipe and grout cells
-    section = well[:section]
-    is_pipe_cell = last.(section) .== :pipe_left
-    is_grout_cell = last.(section) .== :grout_left
+    tag = well[:tag]
+    is_pipe_cell = tag .== :pipe_left
+    is_grout_cell = tag .== :grout_left
     # Get length
     length = sum(well[:cell_length][is_pipe_cell])
     # Get pipe outer radius
@@ -129,10 +129,10 @@ function analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
     density_fluid, heat_capacity_fluid, well::DataDomain; kwargs...)
 
     # Identify pipe and grout cells
-    section = well[:section]
-    is_inner_pipe_cell = last.(section) .== :pipe_inner
-    is_outer_pipe_cell = last.(section) .== :pipe_outer
-    is_grout_cell = last.(section) .== :grout
+    tag = well[:tag]
+    is_inner_pipe_cell = tag .== :pipe_inner
+    is_outer_pipe_cell = tag .== :pipe_outer
+    is_grout_cell = tag .== :grout
     # Get length
     length = sum(well[:cell_length][is_inner_pipe_cell])
     # Get pipe radii and wall thicknesses

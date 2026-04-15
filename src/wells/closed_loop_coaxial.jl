@@ -6,7 +6,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     pipe_cells_inner = missing,
     pipe_cells_outer = missing,
     grout_cells = missing,
-    section = missing,
+    tag = missing,
     well_cell_centers = missing,
     segment_models = missing,
     end_nodes = missing,
@@ -47,16 +47,15 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         # Set centers and end nodes
         well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
         end_nodes = [nc_r+1]
-        if !ismissing(section)
-            @warn "section argument is ignored when neighborship is not \
-                provided. Sections will be created automatically."
+        if !ismissing(tag)
+            @warn "tag argument is ignored when neighborship is not \
+                provided. Tags will be created automatically."
         end
-        # Section entries are (well_index, section_name) tuples for identifying
-        # cell groups (e.g., inner/outer pipes, grout) within the well
-        section = Vector{Any}(undef, nc_pipe + nc_grout)
-        section[pipe_cells_inner] .= [(1, :pipe_inner)]
-        section[pipe_cells_outer] .= [(1, :pipe_outer)]
-        section[grout_cells] .= [(1, :grout)]
+        # Set tag for identifying cell groups (e.g., inner/outer pipes, grout)
+        tag = Vector{Symbol}(undef, nc_pipe + nc_grout)
+        tag[pipe_cells_inner] .= :pipe_inner
+        tag[pipe_cells_outer] .= :pipe_outer
+        tag[grout_cells] .= :grout
     else
         if ismissing(pipe_cells_inner) || ismissing(pipe_cells_outer) ||
             ismissing(grout_cells) || ismissing(well_cell_centers) ||
@@ -132,18 +131,15 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         radius_grout,
         grouting_heat_capacity,
         grouting_density,
-        section = section
+        tag = tag
     )
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_coaxial!(supply_well)
 
     # Setup return well
     r_eff = sqrt(radius_pipe_outer^2 - radius_pipe_inner^2)
-    return_well = setup_well(D, return_reservoir_cell;
-        name = Symbol(name, "_return"),
-        radius = r_eff,
-        WIth = 0.0,
-        args...)
+    return_well = setup_closed_loop_return_well(D, return_reservoir_cell;
+        name = name, radius = r_eff)
 
     return [supply_well, return_well]
 
@@ -155,7 +151,7 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
     grouting_density;
     pipe_pipe_thermal_index = missing,
     pipe_grout_thermal_index = missing,
-    section = missing
+    tag = missing
 )
 
     c = Cells()
@@ -171,8 +167,8 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
     well[:pipe_pipe_thermal_index, p] = λpp
     well[:pipe_grout_thermal_index, p] = λpg
 
-    if !ismissing(section)
-        well[:section, c] = section
+    if !ismissing(tag)
+        well[:tag, c] = tag
     end
 
 end
