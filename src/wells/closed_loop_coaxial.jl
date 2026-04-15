@@ -106,18 +106,6 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     λ_grout = zeros(num_cells)
     λ_grout[grout_cells] .= grouting_thermal_conductivity
 
-    # Replicate direction vectors for inner, outer pipe and grout cells
-    if dir isa Vector{<:Vector}
-        nc_r = length(pipe_cells_inner)
-        dir_all = Vector{eltype(dir)}(undef, num_cells)
-        dir_all[pipe_cells_inner] .= dir[1:nc_r]
-        dir_all[pipe_cells_outer] .= dir[1:nc_r]
-        dir_all[grout_cells] .= dir[1:nc_r]
-        dir_supply = dir_all
-    else
-        dir_supply = dir
-    end
-
     # Common well arguments
     args = (
         type = :closed_loop,
@@ -138,7 +126,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         grouting_thermal_conductivity = λ_grout,
         segment_models = segment_models,
         end_nodes = end_nodes,
-        dir = dir_supply,
+        dir = dir,
         args..., kwarg...)
     # Augment supply well with closed loop specific data
     augment_closed_loop_domain_coaxial!(supply_well,
