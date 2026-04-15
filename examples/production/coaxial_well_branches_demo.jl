@@ -3,7 +3,7 @@
 # production from a deep coaxial closed-loop well. The well is defined by a
 # general trajectory (m×3 matrix) and uses coaxial heat exchange with the
 # surrounding rock formation. We compare two flow configurations: injection
-# into the supply (inner pipe) side vs. the return (outer annulus) side.
+# into the inner pipe side vs. the outer annulus side.
 
 # Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul
@@ -38,25 +38,25 @@ common_args = (
     mesh_args = (offset = 250.0, offset_rel=missing),
 );
 
-# ### Case 1: Inject into supply side (inner pipe)
+# ### Case 1: Inject into inner pipe
 # Cold water goes down the inner pipe, heats up at the bottom, and returns
 # through the outer annulus.
-case_supply = coaxial_well_branches(; inject_into = :supply, common_args...);
+case_inner = coaxial_well_branches(; inject_into = :inner, common_args...);
 
-# ### Case 2: Inject into return side (outer annulus)
+# ### Case 2: Inject into outer annulus
 # Cold water goes down the outer annulus, heats up along the way, and returns
 # through the inner pipe.
-case_return = coaxial_well_branches(; inject_into = :return, common_args...);
+case_outer = coaxial_well_branches(; inject_into = :outer, common_args...);
 
 # ## Inspect model
 # Visualize the computational mesh and well configuration. The mesh is refined
 # around the well to accurately capture thermal and hydraulic processes.
-msh = physical_representation(reservoir_model(case_supply.model).data_domain)
+msh = physical_representation(reservoir_model(case_inner.model).data_domain)
 fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.5, aspect=(1,1,4),
     title = "Deep coaxial geothermal well")
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
-wells = get_model_wells(case_supply.model)
+wells = get_model_wells(case_inner.model)
 for (name, well) in wells
     plot_well!(ax, msh, well)
 end
@@ -64,7 +64,7 @@ fig
 
 # ### Plot reservoir properties
 # Visualize the layered reservoir properties interactively.
-plot_reservoir(case_supply.model)
+plot_reservoir(case_inner.model)
 
 # ## Simulate both configurations
 # Common simulator settings
@@ -85,19 +85,19 @@ function run_case(case)
     return simulate_reservoir(case; simulator = sim, config = cfg)
 end
 
-# ### Simulate injection into supply side
-results_supply = run_case(case_supply)
+# ### Simulate injection into inner pipe
+results_inner = run_case(case_inner)
 
-# ### Simulate injection into return side
-results_return = run_case(case_return)
+# ### Simulate injection into outer annulus
+results_outer = run_case(case_outer)
 
 # ## Compare results
 # ### Thermal depletion patterns
 fig_cmp = Figure(size = (1200, 800))
 for (i, (results, case, label)) in enumerate(zip(
-    [results_supply, results_return],
-    [case_supply, case_return],
-    ["Inject into supply", "Inject into return"]))
+    [results_inner, results_outer],
+    [case_inner, case_outer],
+    ["Inject into inner", "Inject into outer"]))
     Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
     ax = Axis3(fig_cmp[1, i]; zreversed = true, perspectiveness = 0.5,
         aspect=(1,1,4), title = label)
@@ -106,9 +106,41 @@ for (i, (results, case, label)) in enumerate(zip(
 end
 fig_cmp
 
+# ### Well temperature profiles with depth
+# Side-by-side comparison of temperature profiles in the inner pipe, outer
+# annulus, and grout for the two injection configurations at the final time step.
+fig_temp = Figure(size = (1200, 600))
+colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4]]
+for (i, (results, case, label)) in enumerate(zip(
+    [results_inner, results_outer],
+    [case_inner, case_outer],
+    ["Inject into inner", "Inject into outer"]))
+
+    ax = Axis(fig_temp[1, i];
+        title = label,
+        xlabel = "Temperature (°C)",
+        ylabel = "Depth (m)",
+        yreversed = true)
+
+    well = case.model.models[:CoaxialWell_supply].data_domain
+    T_well = convert_from_si.(
+        results.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+    tags = well[:tag] |> unique |> collect
+
+    for (j, tag) in enumerate(tags)
+        name = titlecase(replace(string(tag), "_" => " "))
+        cells = well[:tag] .== tag
+        Tn = T_well[cells]
+        zn = well[:cell_centroids][3, cells]
+        lines!(ax, Tn, zn; color = colors[j], linewidth = 2, label = name)
+    end
+    axislegend(ax; position = :rb)
+end
+fig_temp
+
 # ### Well performance comparison
 for (results, label) in zip(
-    [results_supply, results_return],
-    ["Supply injection", "Return injection"])
+    [results_inner, results_outer],
+    ["Inner injection", "Outer injection"])
     plot_well_results(results.wells)
 end

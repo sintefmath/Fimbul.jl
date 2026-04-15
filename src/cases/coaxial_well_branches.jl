@@ -31,9 +31,9 @@ well trajectory given as an m×3 matrix. The well is set up using
 ## Operational parameters
 - `rate = 50 m³/h`: Flow rate through the well [m³/s].
 - `temperature_inj = 25°C`: Injection temperature [K].
-- `inject_into = :supply`: Direction of flow. `:supply` injects into the supply
-  (inner pipe) side and produces from the return (outer annulus) side. `:return`
-  injects into the return side and produces from the supply side.
+- `inject_into = :inner`: Direction of flow. `:inner` injects into the inner
+  pipe side and produces from the outer annulus side. `:outer` injects into the
+  outer annulus side and produces from the inner pipe side.
 - `num_years = 30`: Total simulation time [years].
 - `report_interval = year/4`: Reporting interval [s].
 - `schedule_args`: Additional keyword arguments passed to `make_schedule`.
@@ -68,7 +68,7 @@ function coaxial_well_branches(;
     # Operational parameters
     rate = 50meter^3/hour,
     temperature_inj = convert_to_si(25.0, :Celsius),
-    inject_into = :supply,
+    inject_into = :inner,
     num_years = 30,
     report_interval = year/4,
     schedule_args = NamedTuple(),
@@ -83,7 +83,7 @@ function coaxial_well_branches(;
 )
     @assert size(well_trajectory, 2) == 3 "well_trajectory must be an m×3 matrix"
     @assert size(well_trajectory, 1) >= 2 "well_trajectory must have at least 2 points"
-    @assert inject_into ∈ (:supply, :return) "inject_into must be :supply or :return"
+    @assert inject_into ∈ (:inner, :outer) "inject_into must be :inner or :outer"
 
     # ## Set up vertical mesh sizing with refinement where the well is
     if ismissing(hz)
@@ -161,12 +161,12 @@ function coaxial_well_branches(;
     bhp_target = BottomHolePressureTarget(5atm)
     ctrl_prod = ProducerControl(bhp_target)
 
-    if inject_into == :supply
+    if inject_into == :inner
         control = Dict(
             supply_name => ctrl_inj,
             return_name => ctrl_prod,
         )
-    else # inject_into == :return
+    else # inject_into == :outer
         control = Dict(
             supply_name => ctrl_prod,
             return_name => ctrl_inj,
