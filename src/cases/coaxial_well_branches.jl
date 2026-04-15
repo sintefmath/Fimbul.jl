@@ -31,12 +31,16 @@ well trajectory given as an m×3 matrix. The well is set up using
 ## Operational parameters
 - `rate = 50 m³/h`: Flow rate through the well [m³/s].
 - `temperature_inj = 25°C`: Injection temperature [K].
+- `inject_into = :supply`: Direction of flow. `:supply` injects into the supply
+  (inner pipe) side and produces from the return (outer annulus) side. `:return`
+  injects into the return side and produces from the supply side.
 - `num_years = 30`: Total simulation time [years].
 - `report_interval = year/4`: Reporting interval [s].
 - `schedule_args`: Additional keyword arguments passed to `make_schedule`.
 
 ## Mesh parameters
-- `hz`: Vertical cell sizes per layer [m].
+- `hz`: Vertical cell sizes per layer [m]. If `missing`, computed automatically
+  with refinement in layers containing the wellbore.
 - `hxy_min = 25.0`: Minimum horizontal cell size [m].
 - `hxy_max = 500.0`: Maximum horizontal cell size [m].
 - `mesh_args`: Additional keyword arguments passed to `extruded_mesh`.
@@ -64,6 +68,7 @@ function coaxial_well_branches(;
     # Operational parameters
     rate = 50meter^3/hour,
     temperature_inj = convert_to_si(25.0, :Celsius),
+    inject_into = :supply,
     num_years = 30,
     report_interval = year/4,
     schedule_args = NamedTuple(),
@@ -78,21 +83,30 @@ function coaxial_well_branches(;
 )
     @assert size(well_trajectory, 2) == 3 "well_trajectory must be an m×3 matrix"
     @assert size(well_trajectory, 1) >= 2 "well_trajectory must have at least 2 points"
+    @assert inject_into ∈ (:supply, :return) "inject_into must be :supply or :return"
 
-    # ## Set up vertical mesh sizing
+    # ## Set up vertical mesh sizing with refinement where the well is
     if ismissing(hz)
         num_layers = length(depths) - 1
         dz = diff(depths)
         hz = fill(250.0, num_layers)
+        # Determine which layers the well trajectory passes through
+        z_min_well = minimum(well_trajectory[:, 3])
+        z_max_well = maximum(well_trajectory[:, 3])
         for (i, d) in enumerate(dz)
+            layer_top = depths[i]
+            layer_bot = depths[i+1]
+            well_in_layer = z_max_well >= layer_top && z_min_well <= layer_bot
+            if well_in_layer
+                # Finer resolution in layers containing the wellbore
+                hz[i] = min(hz[i], d / 10, 25.0)
+            end
             hz[i] = min(hz[i], d / 5)
         end
     end
 
     # ## Create mesh constraints from well trajectory
     constraints = get_well_constraints(well_trajectory; hxy_min = hxy_min)
-
-    # return constraints
 
     # ## Create domain
     domain, layers, metrics = layered_reservoir_domain(constraints, depths,
@@ -112,12 +126,16 @@ function coaxial_well_branches(;
         )
     )
 
-    # ## Set up the coaxial well
+    # ## Set up the coaxial well with direction vectors
     mesh = physical_representation(domain)
-    cells = Jutul.find_enclosing_cells(mesh, well_trajectory, n = 1_000)
+    cells, extra = Jutul.find_enclosing_cells(mesh, well_trajectory, n = 1_000,
+        extra_out = true)
+    dir = Vector.(extra[:direction] .* extra[:lengths])
+
     wells = setup_closed_loop_well(domain, cells;
         name = well_name,
         closed_loop_type = :coaxial,
+        dir = dir,
         well_args...
     )
 
@@ -128,14 +146,14 @@ function coaxial_well_branches(;
         temperature_surface = temperature_surface,
         geothermal_gradient = thermal_gradient,
     )
-    z = wells[1][:cell_centroids][3, :]
-    state0[:CoaxialWell_supply][:Pressure] .= p(z)
-    state0[:CoaxialWell_supply][:Temperature] .= T(z)
-
-    # ## Set up controls
-    rho = reservoir_model(model).system.rho_ref[1]
     supply_name = Symbol(well_name, "_supply")
     return_name = Symbol(well_name, "_return")
+    z = wells[1][:cell_centroids][3, :]
+    state0[supply_name][:Pressure] .= p(z)
+    state0[supply_name][:Temperature] .= T(z)
+
+    # ## Set up controls based on flow direction
+    rho = reservoir_model(model).system.rho_ref[1]
     
     rate_target = TotalRateTarget(rate)
     ctrl_inj = InjectorControl(
@@ -143,10 +161,17 @@ function coaxial_well_branches(;
     bhp_target = BottomHolePressureTarget(5atm)
     ctrl_prod = ProducerControl(bhp_target)
 
-    control = Dict(
-        supply_name => ctrl_prod,
-        return_name => ctrl_inj,
-    )
+    if inject_into == :supply
+        control = Dict(
+            supply_name => ctrl_inj,
+            return_name => ctrl_prod,
+        )
+    else # inject_into == :return
+        control = Dict(
+            supply_name => ctrl_prod,
+            return_name => ctrl_inj,
+        )
+    end
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)
 
@@ -160,6 +185,7 @@ function coaxial_well_branches(;
     info = Dict(
         :description => "Deep coaxial geothermal well system",
         :well_trajectory => well_trajectory,
+        :inject_into => inject_into,
     )
 
     # ## Create and return the complete simulation case
