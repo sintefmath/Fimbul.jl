@@ -26,7 +26,7 @@ common_args = (
     ],
     rate = 25meter^3/hour,
     temperature_inj = convert_to_si(25.0, :Celsius),
-    num_years = 30,
+    num_years = 15,
     report_interval = si_unit(:year)/4,
     depths = [0.0, 500.0, 1500.0, 2000.0, 3000.0],
     permeability = [1e-1, 1e-2, 1e-2, 1e-3]*si_unit(:darcy),
@@ -70,7 +70,7 @@ plot_reservoir(case_inner.model)
 # Common simulator settings
 function run_case(case)
     sim, cfg = setup_reservoir_simulator(case;
-        tol_dp_well = 1e-2,
+        # tol_dp_well = 1e-2,
         output_substates = true,
         info_level = 2,
         initial_dt = 5.0,
@@ -100,9 +100,11 @@ for (i, (results, case, label)) in enumerate(zip(
     ["Inject into inner", "Inject into outer"]))
     Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
     ax = Axis3(fig_cmp[1, i]; zreversed = true, perspectiveness = 0.5,
-        aspect=(1,1,4), title = label)
+        aspect=(1,1,3), title = label)
+    x = reservoir_model(case.model).data_domain[:cell_centroids]
+    cell_mask = .!(x[1, :] .< 0.0 .&& x[2, :] .< 0.0)
     Jutul.plot_cell_data!(ax, msh, Δstates[end][:Temperature];
-        colormap = :seaborn_icefire_gradient)
+        cells = cell_mask, colormap = :seaborn_icefire_gradient)
 end
 fig_cmp
 
@@ -111,20 +113,22 @@ fig_cmp
 # annulus, and grout for the two injection configurations at the final time step.
 fig_temp = Figure(size = (1200, 600))
 colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4]]
+
 for (i, (results, case, label)) in enumerate(zip(
     [results_inner, results_outer],
     [case_inner, case_outer],
     ["Inject into inner", "Inject into outer"]))
 
     ax = Axis(fig_temp[1, i];
-        title = label,
-        xlabel = "Temperature (°C)",
-        ylabel = "Depth (m)",
-        yreversed = true)
+    title = label,
+    xlabel = "Temperature (°C)",
+    ylabel = "Depth (m)",
+    yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
     T_well = convert_from_si.(
-        results.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+        results.result.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+    # T_well = convert_from_si.(case_inner.state0[:CoaxialWell_supply][:Temperature], :Celsius)
     tags = well[:tag] |> unique |> collect
 
     for (j, tag) in enumerate(tags)
@@ -132,9 +136,15 @@ for (i, (results, case, label)) in enumerate(zip(
         cells = well[:tag] .== tag
         Tn = T_well[cells]
         zn = well[:cell_centroids][3, cells]
-        lines!(ax, Tn, zn; color = colors[j], linewidth = 2, label = name)
+        lines!(ax, Tn, zn; color = colors[j], linewidth = 4, label = name)
     end
-    axislegend(ax; position = :rb)
+    # Plot temperature in perforated cells for reference
+    reservoir_cells = well.representation.perforations.reservoir
+    T_reservoir = convert_from_si.(results.result.states[end][:Reservoir][:Temperature], :Celsius)
+    T_reservoir_perforated = T_reservoir[reservoir_cells]
+    zn_reservoir = case.model.models[:Reservoir].data_domain[:cell_centroids][3, reservoir_cells]
+    scatter!(ax, T_reservoir_perforated, zn_reservoir; color = :black, markersize = 4, label = "Reservoir")
+    axislegend(ax; position = :rt)
 end
 fig_temp
 
