@@ -144,7 +144,7 @@ function analytical_closed_loop_coaxial(rate, temperature_in, temperature_rock,
     # Get grout radius
     L = well[:cell_length][is_grout_cell][1]
     vg = well[:volume_override_grouting][is_grout_cell][1]
-    radius_grout = sqrt((vg + radius_outer_pipe^2*pi*L)/(π*L))
+    radius_grout = sqrt((vg + radius_outer_pipe^2*π*L)/(π*L))
     # Get other parameters
     thermal_conductivity_grout = maximum(well[:grouting_thermal_conductivity])
     thermal_conductivity_inner_pipe = maximum(well[:casing_thermal_conductivity][is_inner_pipe_cell])

@@ -1,6 +1,6 @@
 function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     name = :CL,
-    return_reservoir_cell = missing,
+    return_reservoir_cell = reservoir_cells[1],
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells = missing,
@@ -20,9 +20,9 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     kwarg...)
 
     if ismissing(neighborship)
-        if !ismissing(pipe_cells) && !ismissing(grout_cells)
-            error(["Provide either neighborship, pipe_cells, grout_cells, ",
-                "well_cell_centers, end_nodes, or none of them."])
+        if !ismissing(pipe_cells) || !ismissing(grout_cells)
+            error("Provide either neighborship, pipe_cells, grout_cells, \
+                well_cell_centers, end_nodes, or none of them.")
         end
         # Create grout and pipe cells
         reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
@@ -45,24 +45,22 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
         end_nodes = [pipe_cells[end]]
         # Set section for easy lookup
         if !ismissing(section)
-            @warn(["section argument is ignored when neighborship is not provided. ",
-                "Sections will be created automatically."])
+            @warn "section argument is ignored when neighborship is not \
+                provided. Sections will be created automatically."
         end
+        # Section entries are (well_index, section_name) tuples for identifying
+        # cell groups (e.g., pipe legs, grout zones) within the well
         section = Vector{Any}(undef, nc_pipe + nc_grout)
         section[pipe_cells[left_ix]] .= [(1, :pipe_left)]
         section[pipe_cells[right_ix]] .= [(1, :pipe_right)]
         section[grout_cells[left_ix]] .= [(1, :grout_left)]
         section[grout_cells[right_ix]] .= [(1, :grout_right)]
     else
-        if ismissing(pipe_cells) || ismissing(grout_cells) || 
-            ismissing(well_cell_centers) || ismissing(end_nodes) 
-            error(["If neighborship is provided, pipe_cells, grout_cells, ",
-                "well_cell_centers, and end_nodes must also be provided."])
+        if ismissing(pipe_cells) || ismissing(grout_cells) ||
+            ismissing(well_cell_centers) || ismissing(end_nodes)
+            error("If neighborship is provided, pipe_cells, grout_cells, \
+                well_cell_centers, and end_nodes must also be provided.")
         end
-    end
-    # Set return reservoir cell if missing
-    if ismissing(return_reservoir_cell)
-        return_reservoir_cell = reservoir_cells[end]
     end
 
     # Set up segment flow models
@@ -159,10 +157,6 @@ function augment_closed_loop_domain_u1!(well::DataDomain,
     well[:pipe_spacing, p] = pipe_spacing
     well[:material_heat_capacity, c] = grouting_heat_capacity
     well[:material_density, c] = grouting_density
-
-    treat_defaulted(x) = x
-    treat_defaulted(::Missing) = NaN
-    treat_defaulted(::Nothing) = NaN
 
     λpg = treat_defaulted(pipe_grout_thermal_index)
     λgg = treat_defaulted(grout_grout_thermal_index)
@@ -277,7 +271,7 @@ end
 function closed_loop_thermal_resistance_u1(
     radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
     thermal_conductivity_grout, thermal_conductivity_pipe)
-    # Conveient short-hand notation
+    # Convenient short-hand notation
     radius_pipe_outer = radius_pipe
     radius_pipe_inner = radius_pipe - wall_thickness_pipe
     rg, rp_in, rp_out, w = 

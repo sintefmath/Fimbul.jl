@@ -24,10 +24,10 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
 
 
      if ismissing(neighborship)
-        if !ismissing(pipe_cells_inner) && !ismissing(pipe_cells_outer) && !ismissing(grout_cells)
-            error("""Provide either neighborship, pipe_cells_inner,
-                pipe_cells_outer, grout_cells, "well_cell_centers, end_nodes, or
-                none of them.""")
+        if !ismissing(pipe_cells_inner) || !ismissing(pipe_cells_outer) || !ismissing(grout_cells)
+            error("Provide either neighborship, pipe_cells_inner, \
+                pipe_cells_outer, grout_cells, well_cell_centers, end_nodes, \
+                or none of them.")
         end
         # Set inner/outer pipe and grout cells
         nc_pipe = length(reservoir_cells)*2
@@ -48,22 +48,37 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
         end_nodes = [nc_r+1]
         if !ismissing(section)
-            warn(["section argument is ignored when neighborship is not provided. ",
-                "Sections will be created automatically."])
+            @warn "section argument is ignored when neighborship is not \
+                provided. Sections will be created automatically."
         end
+        # Section entries are (well_index, section_name) tuples for identifying
+        # cell groups (e.g., inner/outer pipes, grout) within the well
         section = Vector{Any}(undef, nc_pipe + nc_grout)
         section[pipe_cells_inner] .= [(1, :pipe_inner)]
         section[pipe_cells_outer] .= [(1, :pipe_outer)]
         section[grout_cells] .= [(1, :grout)]
+    else
+        if ismissing(pipe_cells_inner) || ismissing(pipe_cells_outer) ||
+            ismissing(grout_cells) || ismissing(well_cell_centers) ||
+            ismissing(end_nodes)
+            error("If neighborship is provided, pipe_cells_inner, \
+                pipe_cells_outer, grout_cells, well_cell_centers, and \
+                end_nodes must also be provided.")
+        end
+        num_cells = length(pipe_cells_inner) + length(pipe_cells_outer) + length(grout_cells)
     end
 
     if ismissing(segment_models)
         # Set up segment flow models
         segment_models = Vector{Any}()
-        flow_segs = size(pi2pi, 2) + size(po2po, 2) + 1
-        nseg = size(neighborship,2)
-        for s in 1:nseg
-            if s <= flow_segs
+        pipe_connection = [pipe_cells_inner[end], pipe_cells_outer[end]]
+        # Check that segment is either from inner to inner, outer to outer, or inner to outer at bottom
+        is_flow(seg) =
+            all([n ∈ pipe_cells_inner for n in seg]) ||
+            all([n ∈ pipe_cells_outer for n in seg]) ||
+            all([n ∈ pipe_connection for n in seg])
+        for seg in eachcol(neighborship)
+            if is_flow(seg)
                 # Pipe segments use standard wellbore friction model
                 seg_model = SegmentWellBoreFrictionHB()
             else
@@ -151,10 +166,6 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
     well[:material_heat_capacity, c] = grouting_heat_capacity
     well[:material_density, c] = grouting_density
 
-    treat_defaulted(x) = x
-    treat_defaulted(::Missing) = NaN
-    treat_defaulted(::Nothing) = NaN
-
     λpp = treat_defaulted(pipe_pipe_thermal_index)
     λpg = treat_defaulted(pipe_grout_thermal_index)
     well[:pipe_pipe_thermal_index, p] = λpp
@@ -178,7 +189,7 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
     casing_volumes = zeros(Float64, num_nodes)
     grout_volumes = zeros(Float64, num_nodes)
 
-    nc = Int.(num_nodes/3)
+    nc = div(num_nodes, 3)
     pipe_cells_inner = Int.(1:nc)
     pipe_cells_outer = Int.(1:nc) .+ nc
     grout_cells = Int.(1:nc) .+ 2*nc
