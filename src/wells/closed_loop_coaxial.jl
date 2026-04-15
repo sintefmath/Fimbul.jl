@@ -40,7 +40,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
         num_cells = nc_pipe + nc_grout
         pi2pi = vcat(pipe_cells_inner[1:end-1]', pipe_cells_inner[2:end]')
         po2po = vcat(pipe_cells_outer[1:end-1]', pipe_cells_outer[2:end]')
-        pi2po_bottom = [pipe_cells_inner[end]', pipe_cells_outer[end]']
+        pi2po_bottom = [pipe_cells_inner[end], pipe_cells_outer[end]]
         pi2po = vcat(pipe_cells_inner[1:end-1]', pipe_cells_outer[1:end-1]')
         po2g = vcat(pipe_cells_outer', grout_cells')
         neighborship = hcat(pi2pi, po2po, pi2po_bottom, pi2po, po2g)
@@ -60,7 +60,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     if ismissing(segment_models)
         # Set up segment flow models
         segment_models = Vector{Any}()
-        flow_segs = size(pi2pi, 2) + size(po2po, 2) + size(pi2po_bottom, 2)
+        flow_segs = size(pi2pi, 2) + size(po2po, 2) + 1
         nseg = size(neighborship,2)
         for s in 1:nseg
             if s <= flow_segs
@@ -123,8 +123,10 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     set_default_closed_loop_thermal_indices_coaxial!(supply_well)
 
     # Setup return well
+    r_eff = sqrt(radius_pipe_outer^2 - radius_pipe_inner^2)
     return_well = setup_well(D, return_reservoir_cell;
         name = Symbol(name, "_return"),
+        radius = r_eff,
         WIth = 0.0,
         args...)
 
