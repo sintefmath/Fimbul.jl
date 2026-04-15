@@ -17,29 +17,27 @@ meter, hour, watt = si_units(:meter, :hour, :watt);
 # trajectory is a vertical well. The well circulates water at 50 m³/h with
 # an injection temperature of 25°C.
 
-# Define a custom deviated trajectory (or use the default vertical one) The
-# trajectory extends vertically down to 2500 m, then bends laterally with a
-# radius of 150 m.
-
+# Define a trajectory
 trajectory = [
-    0.0    0.0    0.0;
+    0.0    0.0      0.0;
     0.0    0.0   2500.0;
 ]
 
 case = coaxial_well_branches(;
     well_trajectory = trajectory,                          # m×3 well path
-    rate = 50meter^3/hour,                                 # Circulation rate
+    rate = 25meter^3/hour,                                 # Circulation rate
     temperature_inj = convert_to_si(25.0, :Celsius),       # Injection temperature
     num_years = 30,                                        # Simulation duration
     report_interval = si_unit(:year)/4,                    # Output 4x per year
     # Layered reservoir properties
-    depths = [0.0, 500.0, 1500.0, 2000.0, 2500.0, 3000.0],
+    depths = [0.0, 500.0, 1500.0, 2000.0, 3000.0],
     # depths = [0.0, 50.0, 150.0, 200.0, 250.0, 1200.0],
-    permeability = [1e-3, 1e-3, 1e-3, 1e-2, 1e-3]*si_unit(:darcy),
-    porosity = [0.01, 0.01, 0.01, 0.05, 0.01],
-    rock_thermal_conductivity = [2.5, 2.5, 2.8, 3.5, 2.5]*watt/(meter*si_unit(:Kelvin)),
-    rock_heat_capacity = [900, 900, 900, 900, 900]*si_unit(:joule)/(si_unit(:kilogram)*si_unit(:Kelvin)),
-    mesh_args = (offset = 25.0, offset_rel=missing), # Mesh refinement parameters
+    permeability = [1e-1, 1e-2, 1e-2, 1e-3]*si_unit(:darcy),
+    porosity = [0.1, 0.01, 0.05, 0.01],
+    rock_thermal_conductivity = [2.5, 2.8, 3.5, 2.5]*watt/(meter*si_unit(:Kelvin)),
+    rock_heat_capacity = [900, 900, 900, 900]*si_unit(:joule)/(si_unit(:kilogram)*si_unit(:Kelvin)),
+    rock_density = [2600, 2600, 2600, 2600]*si_unit(:kilogram)/si_unit(:meter)^3,
+    hxy_min = 5.0, mesh_args = (offset = 250.0, offset_rel=missing), # Mesh refinement parameters
 );
 
 # ## Inspect model
@@ -48,7 +46,7 @@ case = coaxial_well_branches(;
 msh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(msh)
 fig = Figure(size = (800, 800))
-ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.5,
+ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.5, aspect=(1,1,4),
     title = "Deep coaxial geothermal well")
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 wells = get_model_wells(case.model)
@@ -69,7 +67,7 @@ sim, cfg = setup_reservoir_simulator(case;
     output_substates = true,
     info_level = 2,
     initial_dt = 5.0,
-    # presolve_wells = true,
+    presolve_wells = true,
     relaxation = true);
 
 # Add temperature-based timestep control

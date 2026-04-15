@@ -57,7 +57,7 @@ function coaxial_well_branches(;
     porosity = [0.01, 0.01, 0.01, 0.05, 0.01],
     rock_thermal_conductivity = [2.5, 2.5, 2.8, 3.5, 2.5]*watt/(meter*Kelvin),
     rock_heat_capacity = [900, 900, 900, 900, 900]*joule/(kilogram*Kelvin),
-    rock_density = [2600, 2600, 2600, 2600, 2600]*kilogram/meter^3,
+    rock_density = [2600, 2600, 2600, 2600]*kilogram/meter^3,
     # Thermal parameters
     temperature_surface = convert_to_si(10.0, :Celsius),
     thermal_gradient = 0.03Kelvin/meter,
@@ -70,7 +70,7 @@ function coaxial_well_branches(;
     # Mesh parameters
     hz = missing,
     hxy_min = 5.0,
-    hxy_max = 10.0,
+    hxy_max = 10*hxy_min,
     mesh_args = NamedTuple(),
     # Well parameters
     well_name = :CoaxialWell,
@@ -92,28 +92,29 @@ function coaxial_well_branches(;
     # ## Create mesh constraints from well trajectory
     constraints = get_well_constraints(well_trajectory; hxy_min = hxy_min)
 
+    # return constraints
+
     # ## Create domain
-    domain, layers, metrics = layered_reservoir_domain(constraints, depths;
-        mesh_args = (;
-            hz = hz,
-            hxy_min = hxy_min,
-            hxy_max = hxy_max,
-            offset_rel = 1.0,
-            # dist_min_factor = 50.0,
-            mesh_args...
-        ),
-        layer_properties = (
+    domain, layers, metrics = layered_reservoir_domain(constraints, depths,
+        (
             permeability = permeability,
             porosity = porosity,
             rock_thermal_conductivity = rock_thermal_conductivity,
             rock_heat_capacity = rock_heat_capacity,
             rock_density = rock_density,
+        );
+        mesh_args = (;
+            hz = hz,
+            hxy_min = hxy_min,
+            hxy_max = hxy_max,
+            offset_rel = 1.0,
+            mesh_args...
         )
     )
 
     # ## Set up the coaxial well
     mesh = physical_representation(domain)
-    cells = Jutul.find_enclosing_cells(mesh, well_trajectory, n = 1000)
+    cells = Jutul.find_enclosing_cells(mesh, well_trajectory, n = 1_000)
     wells = setup_closed_loop_well(domain, cells;
         name = well_name,
         closed_loop_type = :coaxial,
@@ -122,11 +123,14 @@ function coaxial_well_branches(;
 
     model = setup_reservoir_model(
         domain, :geothermal; wells = wells)
-    bc, state0 = set_dirichlet_bcs(model;
+    bc, state0, p, T = set_dirichlet_bcs(model;
         pressure_surface = 10atm,
         temperature_surface = temperature_surface,
         geothermal_gradient = thermal_gradient,
     )
+    z = wells[1][:cell_centroids][3, :]
+    state0[:CoaxialWell_supply][:Pressure] .= p(z)
+    state0[:CoaxialWell_supply][:Temperature] .= T(z)
 
     # ## Set up controls
     rho = reservoir_model(model).system.rho_ref[1]
@@ -134,20 +138,14 @@ function coaxial_well_branches(;
     return_name = Symbol(well_name, "_return")
     
     rate_target = TotalRateTarget(rate)
-    ctrl_supply = InjectorControl(
+    ctrl_inj = InjectorControl(
         rate_target, [1.0], density = rho, temperature = temperature_inj)
-    bhp_target = BottomHolePressureTarget(10atm)
-    ctrl_return = ProducerControl(bhp_target)
-
-    rate_target = TotalRateTarget(-rate)
-    bhp_target = BottomHolePressureTarget(20atm)
-    ctrl_supply = InjectorControl(
-        bhp_target, [1.0], density = rho, temperature = temperature_inj)
-    ctrl_return = ProducerControl(rate_target)
+    bhp_target = BottomHolePressureTarget(5atm)
+    ctrl_prod = ProducerControl(bhp_target)
 
     control = Dict(
-        supply_name => ctrl_supply,
-        return_name => ctrl_return,
+        supply_name => ctrl_prod,
+        return_name => ctrl_inj,
     )
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)
@@ -200,10 +198,10 @@ function get_well_constraints(well_trajectory; hxy_min)
     Δ = hxy_min / 2
     well_coords_2x = []
     wc_left = copy(well_trajectory)
-    wc_left[:, 2] .-= Δ / 2
+    wc_left[:, 1] .-= Δ / 2
     push!(well_coords_2x, wc_left)
     wc_right = copy(well_trajectory)
-    wc_right[:, 2] .+= Δ / 2
+    wc_right[:, 1] .+= Δ / 2
     push!(well_coords_2x, wc_right)
 
     cell_constraints = Vector{Matrix{Float64}}()
