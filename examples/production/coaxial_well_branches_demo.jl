@@ -107,9 +107,8 @@ end
 fig_cmp
 
 # ### Well performance comparison
-fig_wells = Figure(size = (1200, 600))
-for (i, (results, label)) in enumerate(zip(
+for (results, label) in zip(
     [results_supply, results_return],
-    ["Supply injection", "Return injection"]))
+    ["Supply injection", "Return injection"])
     plot_well_results(results.wells)
 end
