@@ -18,6 +18,7 @@
 using Jutul, JutulDarcy, Fimbul
 using HYPRE
 using GLMakie
+using Statistics
 
 # Useful SI units
 meter, hour, watt, Kelvin, joule, kilogram = si_units(
@@ -91,6 +92,25 @@ fig
 # ### Simulate
 results_hom_inner = run_case(case_hom_inner);
 results_hom_outer = run_case(case_hom_outer);
+
+# ### Thermal depletion – inner vs. outer injection
+# Visualize the temperature change (ΔT) from initial conditions in the
+# reservoir after 10 years for each flow configuration. A quadrant is cut
+# away for better visibility.
+fig_cmp = Figure(size = (1200, 800))
+for (i, (results, case, label)) in enumerate(zip(
+    [results_hom_inner, results_hom_outer],
+    [case_hom_inner, case_hom_outer],
+    ["Inject into inner", "Inject into outer"]))
+    Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
+    ax = Axis3(fig_cmp[1, i]; zreversed = true, perspectiveness = 0.5,
+        aspect = (1, 1, 3), title = label)
+    x = reservoir_model(case.model).data_domain[:cell_centroids]
+    cell_mask = .!(x[1, :] .< 0.0 .&& x[2, :] .< 0.0)
+    Jutul.plot_cell_data!(ax, msh_homo, Δstates[end][:Temperature];
+        cells = cell_mask, colormap = :seaborn_icefire_gradient)
+end
+fig_cmp
 
 # ### Well temperature profiles
 # Side-by-side comparison of temperature with depth for the two flow
@@ -167,13 +187,18 @@ results_layered = run_case(case_layered);
 
 # ### Thermal depletion in the layered reservoir
 # To highlight the extent of the thermal depletion zone around the well, we
-# compute the change in temperature relative to the initial conditions. This
-# view reveals how the different rock layers influence the spatial pattern of
-# heat extraction.
+# compute the change in temperature relative to the initial conditions. A
+# quadrant is cut away for better visibility.
 Δstates = JutulDarcy.delta_state(results_layered.states, case_layered.state0[:Reservoir])
-plot_reservoir(case_layered.model, Δstates;
-    colormap = :seaborn_icefire_gradient, key = :Temperature,
-    well_arg = (markersize = 0.0, ))
+msh_lay = physical_representation(reservoir_model(case_layered.model).data_domain)
+fig_dt = Figure(size = (800, 800))
+ax_dt = Axis3(fig_dt[1, 1]; zreversed = true, perspectiveness = 0.5,
+    aspect = (1, 1, 3), title = "Layered reservoir – ΔT")
+x_lay = reservoir_model(case_layered.model).data_domain[:cell_centroids]
+cell_mask_lay = .!(x_lay[1, :] .< 0.0 .&& x_lay[2, :] .< 0.0)
+Jutul.plot_cell_data!(ax_dt, msh_lay, Δstates[end][:Temperature];
+    cells = cell_mask_lay, colormap = :seaborn_icefire_gradient)
+fig_dt
 
 # ### Compare homogeneous vs layered well temperature profiles
 # The homogeneous result (outer injection) is shown alongside the layered
@@ -282,3 +307,25 @@ for (i, (results, case, label)) in enumerate(
 end
 linkaxes!(filter(c -> c isa Axis, fig_lambda.content)...)
 fig_lambda
+
+# ### Power output over time
+# Compare the thermal power output at the production well for each inner
+# pipe conductivity. Power is computed as mass flow rate × heat capacity ×
+# (production temperature − injection temperature).
+fig_power = Figure(size = (800, 500))
+ax_pwr = Axis(fig_power[1, 1];
+    title = "Effect of inner pipe thermal conductivity",
+    xlabel = "Time (years)",
+    ylabel = "Power (MW)")
+colors_λ = cgrad(:viridis, length(λ_values), categorical = true)
+T_inj = base_args.temperature_inj
+for (i, (results, case, label)) in enumerate(zip(results_λ, cases_λ, labels_λ))
+    T_prod = results.wells[:CoaxialWell_return][:temperature]
+    mrate = results.wells[:CoaxialWell_return][:mass_rate]
+    Cp = mean(reservoir_model(case.model).data_domain[:component_heat_capacity])
+    power_mw = abs.(mrate .* Cp .* (T_prod .- T_inj)) ./ 1e6
+    t_years = results.time ./ si_unit(:year)
+    lines!(ax_pwr, t_years, power_mw; color = colors_λ[i], linewidth = 2, label = label)
+end
+axislegend(ax_pwr; position = :rb)
+fig_power
