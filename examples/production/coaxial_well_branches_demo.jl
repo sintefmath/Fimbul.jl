@@ -104,7 +104,7 @@ for (i, (c, r, l)) in enumerate(zip(
     [case_hom_inner, case_hom_outer],
     ["Injection in inner pipe", "Injection in outer annulus"]))
 
-    ax = Axis(fig_hom[1, i];
+    ax = Axis(fig_hom[i, 1];
         title = l,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
@@ -179,14 +179,14 @@ plot_reservoir(case_layered.model, Δstates;
 # The homogeneous result (outer injection) is shown alongside the layered
 # result to emphasize how layer contrasts in thermal conductivity affect the
 # temperature distribution along the wellbore.
-fig_layers = Figure(size = (1200, 600))
+fig_layers = Figure(size = (600, 800))
 
 for (i, (results, case, label)) in enumerate(zip(
     [results_hom_outer, results_layered],
     [case_hom_outer, case_layered],
     ["Homogeneous", "Layered (clay / sandstone / granite / sandstone)"]))
 
-    ax = Axis(fig_layers[1, i];
+    ax = Axis(fig_layers[i, 1];
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
