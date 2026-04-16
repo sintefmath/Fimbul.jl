@@ -128,7 +128,7 @@ for (i, (c, r, l)) in enumerate(zip(
         title = l,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
-        xticks = 0:10:100,
+        xticks = 0:5:100,
         yreversed = true)
 
     well = r.model.models[:CoaxialWell_supply].data_domain
@@ -185,21 +185,6 @@ plot_reservoir(case_layered.model)
 # ### Simulate
 results_layered = run_case(case_layered);
 
-# ### Thermal depletion in the layered reservoir
-# To highlight the extent of the thermal depletion zone around the well, we
-# compute the change in temperature relative to the initial conditions. A
-# quadrant is cut away for better visibility.
-Δstates = JutulDarcy.delta_state(results_layered.states, case_layered.state0[:Reservoir])
-msh_lay = physical_representation(reservoir_model(case_layered.model).data_domain)
-fig_dt = Figure(size = (800, 800))
-ax_dt = Axis3(fig_dt[1, 1]; zreversed = true, perspectiveness = 0.5,
-    aspect = (1, 1, 3), title = "Layered reservoir – ΔT")
-x_lay = reservoir_model(case_layered.model).data_domain[:cell_centroids]
-cell_mask_lay = .!(x_lay[1, :] .< 0.0 .&& x_lay[2, :] .< 0.0)
-Jutul.plot_cell_data!(ax_dt, msh_lay, Δstates[end][:Temperature];
-    cells = cell_mask_lay, colormap = :seaborn_icefire_gradient)
-fig_dt
-
 # ### Compare homogeneous vs layered well temperature profiles
 # The homogeneous result (outer injection) is shown alongside the layered
 # result to emphasize how layer contrasts in thermal conductivity affect the
@@ -215,7 +200,7 @@ for (i, (results, case, label)) in enumerate(zip(
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
-        xticks = 0:10:100,
+        xticks = 0:5:100,
         yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
@@ -279,7 +264,7 @@ for (i, (results, case, label)) in enumerate(
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
-        xticks = 0:10:100,
+        xticks = 0:5:100,
         yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
@@ -316,16 +301,18 @@ fig_power = Figure(size = (800, 500))
 ax_pwr = Axis(fig_power[1, 1];
     title = "Effect of inner pipe thermal conductivity",
     xlabel = "Time (years)",
-    ylabel = "Power (MW)")
-colors_λ = cgrad(:viridis, length(λ_values), categorical = true)
+    ylabel = "Power (MW)", 
+    limits = (nothing, (0.0, 0.4)),
+    xticks = 0:1:10, yticks = 0:0.05:0.4)
+colors_λ = Makie.wong_colors(length(λ_values))
 T_inj = base_args.temperature_inj
 for (i, (results, case, label)) in enumerate(zip(results_λ, cases_λ, labels_λ))
-    T_prod = results.wells[:CoaxialWell_return][:temperature]
-    mrate = results.wells[:CoaxialWell_return][:mass_rate]
+    T_prod = results.wells[:CoaxialWell_supply][:temperature]
+    mrate = results.wells[:CoaxialWell_supply][:mass_rate]
     Cp = mean(reservoir_model(case.model).data_domain[:component_heat_capacity])
     power_mw = abs.(mrate .* Cp .* (T_prod .- T_inj)) ./ 1e6
     t_years = results.time ./ si_unit(:year)
     lines!(ax_pwr, t_years, power_mw; color = colors_λ[i], linewidth = 2, label = label)
 end
-axislegend(ax_pwr; position = :rb)
+axislegend(ax_pwr; position = :rt)
 fig_power
