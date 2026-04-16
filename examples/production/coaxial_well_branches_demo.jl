@@ -193,7 +193,7 @@ fig_layers
 # ---
 # ## Scenario 3 – Effect of inner pipe wall thermal conductivity
 # Using the homogeneous reservoir, we vary the inner pipe wall thermal
-# conductivity from 0.0 (perfectly insulating) to 2× the default value
+# conductivity from 0.0 (perfectly insulating) to 4× the default value
 # (0.76 W/(m·K)). A higher conductivity increases heat transfer between the
 # supply and return pipes, causing more thermal short-circuiting and lower
 # production temperatures.
@@ -215,16 +215,17 @@ for λ in λ_values
 end
 
 # ### Well temperature profiles for different inner pipe conductivities
-fig_lambda = Figure(size = (1600, 600))
+fig_lambda = Figure(size = (600, 800))
 colors_λ = cgrad(:viridis, length(λ_values), categorical = true)
 
 for (i, (results, case, label)) in enumerate(
     zip(results_λ, cases_λ, labels_λ))
 
-    ax = Axis(fig_lambda[1, i];
+    ax = Axis(fig_lambda[i, 1];
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
+        xticks = 0:5:50,
         yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
@@ -244,25 +245,13 @@ for (i, (results, case, label)) in enumerate(
         results.result.states[end][:Reservoir][:Temperature], :Celsius)
     T_res_perf = T_res[res_cells]
     zn_res = case.model.models[:Reservoir].data_domain[:cell_centroids][3, res_cells]
-    scatter!(ax, T_res_perf, zn_res; color = :black, markersize = 4, label = "Reservoir")
-    if i == length(λ_values)
-        axislegend(ax; position = :rt)
+    lines!(ax, T_res_perf, zn_res; color = :black, linewidth = 2, label = "Reservoir")
+    if i < length(λ_values)
+        hidexdecorations!(ax, grid=false)
     end
+    i == 1 && axislegend(ax; position = :rt)
 end
+linkaxes!(filter(c -> c isa Axis, fig_lambda.content)...)
 fig_lambda
 
-# ### Production temperature comparison
-# Overlay the outlet temperature over time for each inner pipe conductivity
-# to show the effect on thermal short-circuiting.
-fig_prod = Figure(size = (800, 500))
-ax = Axis(fig_prod[1, 1];
-    title = "Effect of inner pipe thermal conductivity",
-    xlabel = "Time (years)",
-    ylabel = "Production temperature (°C)")
-for (i, (results, case, label)) in enumerate(zip(results_λ, cases_λ, labels_λ))
-    T_prod = convert_from_si.(results.wells[:CoaxialWell_return][:temperature], :Celsius)
-    t_years = convert_from_si.(cumsum(case.dt), :year)
-    lines!(ax, t_years, T_prod; color = colors_λ[i], linewidth = 2, label = label)
-end
-axislegend(ax; position = :rb)
-fig_prod
+# ## Plot power output over time for different inner pipe conductivities
