@@ -5,13 +5,14 @@
 # surrounding rock formation.
 #
 # We explore three scenarios:
-# 1. **Homogeneous reservoir**: A single uniform layer to establish a baseline.
-# 2. **Layered reservoir**: Four distinct geological layers (styrofoam, clay,
-#    sandstone, granite) with exaggerated thermal conductivities to highlight
-#    the effect of heterogeneity.
+# 1. **Homogeneous reservoir**: A single uniform layer to establish a baseline,
+#    comparing injection into the inner pipe vs. the outer annulus.
+# 2. **Layered reservoir**: Four distinct geological layers (clay, sandstone,
+#    granite, sandstone) with varying thermal conductivities to highlight the
+#    effect of heterogeneity on heat extraction.
 # 3. **Inner pipe conductivity study**: Homogeneous reservoir with varying
-#    inner pipe wall thermal conductivity (from 0 to 2× default) to
-#    demonstrate heat loss between supply and return pipes.
+#    inner pipe wall thermal conductivity (from 0 to 4× default) to
+#    demonstrate the effect of heat loss between supply and return pipes.
 
 # Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul
@@ -59,8 +60,9 @@ end
 
 # ---
 # ## Scenario 1 – Homogeneous reservoir
-# A single layer from the surface to 3000 m with uniform rock properties.
-# This serves as a baseline for comparison.
+# A single uniform reservoir from the surface to 3000 m depth with constant
+# rock properties. We compare two flow configurations: injection into the
+# inner pipe vs. the outer annulus.
 homogeneous_args = (;
     base_args...,
     depths = [0.0, 2550.0, 3000.0],
@@ -90,21 +92,29 @@ fig
 results_hom_inner = run_case(case_hom_inner);
 results_hom_outer = run_case(case_hom_outer);
 
-# ### Well temperature profile
+# ### Well temperature profiles
+# Side-by-side comparison of temperature with depth for the two flow
+# configurations. The black line shows the reservoir temperature at the
+# perforated cells for reference.
 fig_hom = Figure(size = (600, 600))
 colors = cgrad(:BrBG_4, 4, categorical = true)[[1, 2, 4]]
 
-for (i, (c, r, l)) in enumerate(zip([results_hom_inner, results_hom_outer], [case_hom_inner, case_hom_outer], ["Injection in Inner pipe", "Injection in Outer pipe"]))
+for (i, (c, r, l)) in enumerate(zip(
+    [results_hom_inner, results_hom_outer],
+    [case_hom_inner, case_hom_outer],
+    ["Injection in inner pipe", "Injection in outer annulus"]))
+
     ax = Axis(fig_hom[1, i];
         title = l,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
+        xticks = 0:10:100,
         yreversed = true)
 
-        well = r.model.models[:CoaxialWell_supply].data_domain
-        T_well = convert_from_si.(
-            c.result.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
-        tags = well[:tag] |> unique |> collect
+    well = r.model.models[:CoaxialWell_supply].data_domain
+    T_well = convert_from_si.(
+        c.result.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+    tags = well[:tag] |> unique |> collect
 
     for (j, tag) in enumerate(tags)
         name = titlecase(replace(string(tag), "_" => " "))
@@ -121,19 +131,20 @@ for (i, (c, r, l)) in enumerate(zip([results_hom_inner, results_hom_outer], [cas
     lines!(ax, T_reservoir_perf, zn_reservoir; color = :black, linewidth = 2, label = "Reservoir")
     axislegend(ax; position = :rt)
 end
+linkaxes!(filter(c -> c isa Axis, fig_hom.content)...)
 fig_hom
 
 # ---
 # ## Scenario 2 – Layered reservoir
 # Four geological layers span the same 0–3000 m interval, each with distinct
-# thermal and hydraulic properties. The layers mimic (from top to bottom):
-# - **Clay** (0–250 m): moderate conductivity, low permeability
-# - **Sandstone** (250–750 m): higher conductivity, higher permeability
-# - **Granite** (750–1250 m): high conductivity, very low permeability
-# - **Sandstone** (1250–3000 m): very low conductivity, low permeability (representing a shallow cap rock or insulating layer)
+# thermal and hydraulic properties. The layers are (from top to bottom):
+# - **Clay** (0–250 m): low conductivity (1.0 W/(m·K)), low permeability
+# - **Sandstone** (250–750 m): moderate conductivity (2.0 W/(m·K)), higher permeability
+# - **Granite** (750–1250 m): high conductivity (4.0 W/(m·K)), very low permeability
+# - **Sandstone** (1250–3000 m): moderate conductivity (2.0 W/(m·K)), higher permeability
 #
-# Thermal conductivities are somewhat exaggerated to clearly show the impact
-# of layering on the temperature profiles.
+# The thermal conductivity contrast is somewhat exaggerated to clearly show
+# the impact of layering on the well temperature profiles.
 layered_args = (;
     base_args...,
     depths = [0.0, 250.0, 750.0, 1250.0, 3000.0],
@@ -154,18 +165,32 @@ plot_reservoir(case_layered.model)
 # ### Simulate
 results_layered = run_case(case_layered);
 
-# ### Compare homogeneous vs layered temperature profiles
+# ### Thermal depletion in the layered reservoir
+# To highlight the extent of the thermal depletion zone around the well, we
+# compute the change in temperature relative to the initial conditions. This
+# view reveals how the different rock layers influence the spatial pattern of
+# heat extraction.
+Δstates = JutulDarcy.delta_state(results_layered.states, case_layered.state0[:Reservoir])
+plot_reservoir(case_layered.model, Δstates;
+    colormap = :seaborn_icefire_gradient, key = :Temperature,
+    well_arg = (markersize = 0.0, ))
+
+# ### Compare homogeneous vs layered well temperature profiles
+# The homogeneous result (outer injection) is shown alongside the layered
+# result to emphasize how layer contrasts in thermal conductivity affect the
+# temperature distribution along the wellbore.
 fig_layers = Figure(size = (1200, 600))
 
 for (i, (results, case, label)) in enumerate(zip(
     [results_hom_outer, results_layered],
     [case_hom_outer, case_layered],
-    ["Injection in Outer pipe", "Layered (styrofoam / clay / sandstone / granite)"]))
+    ["Homogeneous", "Layered (clay / sandstone / granite / sandstone)"]))
 
     ax = Axis(fig_layers[1, i];
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
+        xticks = 0:10:100,
         yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
@@ -185,18 +210,19 @@ for (i, (results, case, label)) in enumerate(zip(
         results.result.states[end][:Reservoir][:Temperature], :Celsius)
     T_res_perf = T_res[res_cells]
     zn_res = case.model.models[:Reservoir].data_domain[:cell_centroids][3, res_cells]
-    scatter!(ax, T_res_perf, zn_res; color = :black, markersize = 4, label = "Reservoir")
+    lines!(ax, T_res_perf, zn_res; color = :black, linewidth = 2, label = "Reservoir")
     axislegend(ax; position = :rt)
 end
+linkaxes!(filter(c -> c isa Axis, fig_layers.content)...)
 fig_layers
 
 # ---
 # ## Scenario 3 – Effect of inner pipe wall thermal conductivity
-# Using the homogeneous reservoir, we vary the inner pipe wall thermal
-# conductivity from 0.0 (perfectly insulating) to 4× the default value
-# (0.76 W/(m·K)). A higher conductivity increases heat transfer between the
-# supply and return pipes, causing more thermal short-circuiting and lower
-# production temperatures.
+# Using the homogeneous reservoir with outer injection, we vary the inner
+# pipe wall thermal conductivity from 0.0 (perfectly insulating inner pipe)
+# to 4× the default value of 0.38 W/(m·K). A higher conductivity increases
+# heat transfer between the supply and return pipes, causing more thermal
+# short-circuiting and a lower production temperature.
 λ_default = 0.38  # default inner pipe wall thermal conductivity [W/(m·K)]
 λ_values = [0.0*λ_default, λ_default, 4.0*λ_default]
 labels_λ = ["λ = 0.00", "λ = 0.38 (default)", "λ = 1.52"]
@@ -215,8 +241,11 @@ for λ in λ_values
 end
 
 # ### Well temperature profiles for different inner pipe conductivities
+# Each panel shows the temperature–depth profile for a given inner pipe
+# conductivity value. Higher conductivity leads to more heat leakage from
+# the hot return flow to the cold supply flow, reducing the net temperature
+# gain at the surface.
 fig_lambda = Figure(size = (600, 800))
-colors_λ = cgrad(:viridis, length(λ_values), categorical = true)
 
 for (i, (results, case, label)) in enumerate(
     zip(results_λ, cases_λ, labels_λ))
@@ -225,7 +254,7 @@ for (i, (results, case, label)) in enumerate(
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
-        xticks = 0:5:50,
+        xticks = 0:10:100,
         yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
@@ -247,11 +276,9 @@ for (i, (results, case, label)) in enumerate(
     zn_res = case.model.models[:Reservoir].data_domain[:cell_centroids][3, res_cells]
     lines!(ax, T_res_perf, zn_res; color = :black, linewidth = 2, label = "Reservoir")
     if i < length(λ_values)
-        hidexdecorations!(ax, grid=false)
+        hidexdecorations!(ax, grid = false)
     end
     i == 1 && axislegend(ax; position = :rt)
 end
 linkaxes!(filter(c -> c isa Axis, fig_lambda.content)...)
 fig_lambda
-
-# ## Plot power output over time for different inner pipe conductivities
