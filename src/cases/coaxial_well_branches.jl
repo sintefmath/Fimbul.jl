@@ -74,8 +74,8 @@ function coaxial_well_branches(;
     schedule_args = NamedTuple(),
     # Mesh parameters
     hz = missing,
-    hxy_min = 5.0,
-    hxy_max = 10*hxy_min,
+    hxy_min = 2.5,
+    hxy_max = 20*hxy_min,
     mesh_args = NamedTuple(),
     # Well parameters
     well_name = :CoaxialWell,
