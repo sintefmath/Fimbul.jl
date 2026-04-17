@@ -165,7 +165,7 @@ function interpolate_z(depths, hz;
     n = length(depths)
     @assert n >= 2
     
-    hz = length(hz) == 1 ? fill(hz, n-1) : hz
+    hz = length(hz) == 1 ? fill(hz[1], n-1) : hz
     @assert length(hz) == n-1
 
     interpolation = (interpolation isa Symbol) ? [interpolation] : interpolation
