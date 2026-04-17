@@ -18,8 +18,8 @@ using Jutul
     )
     
     # Create domain
-    domain, layers, metrics = Fimbul.layered_reservoir_domain(constraints, depths;
-        layer_properties = layer_props,
+    domain, layers, metrics = Fimbul.layered_reservoir_domain(
+        constraints, depths, layer_props,
         mesh_args = (hxy_min = 5.0, hxy_max = 20.0, hz = 10.0),
         general_ad = false # pass generic arg to reservoir_domain
     )
@@ -65,8 +65,8 @@ using Jutul
             porosity = [0.13, 0.169],
         )
         
-        @test_throws ErrorException Fimbul.layered_reservoir_domain(constraints, depths;
-            layer_properties = bad_props,
+        @test_throws ErrorException Fimbul.layered_reservoir_domain(
+            constraints, depths, bad_props,
             mesh_args = (hxy_min = 5.0, hxy_max = 20.0, hz = 10.0)
         )
     end
