@@ -59,7 +59,6 @@ function run_case(case)
     return simulate_reservoir(case; simulator = sim, config = cfg)
 end
 
-# ---
 # ## Scenario 1 – Homogeneous reservoir
 # A single uniform reservoir from the surface to 3000 m depth with constant
 # rock properties. We compare two flow configurations: injection into the
@@ -78,15 +77,14 @@ case_hom_inner = coaxial_bhe(; inject_into = :inner, homogeneous_args...);
 case_hom_outer = coaxial_bhe(; inject_into = :outer, homogeneous_args...);
 
 # ### Inspect mesh and well
-msh_homo = physical_representation(reservoir_model(case_hom_inner.model).data_domain)
+msh_hom = physical_representation(reservoir_model(case_hom_inner.model).data_domain)
 fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.5, aspect = (1, 1, 4),
     title = "Homogeneous reservoir – mesh")
-Jutul.plot_mesh_edges!(ax, msh_homo, alpha = 0.2)
+Jutul.plot_mesh_edges!(ax, msh_hom, alpha = 0.2)
 wells = get_model_wells(case_hom_inner.model)
-for (name, well) in wells
-    plot_well!(ax, msh_homo, well)
-end
+plot_well!(ax, msh_hom, wells[:CoaxialWell_supply]; fontsize=0.0)
+
 fig
 
 # ### Simulate
@@ -107,7 +105,7 @@ for (i, (results, case, label)) in enumerate(zip(
         aspect = (1, 1, 3), title = label)
     x = reservoir_model(case.model).data_domain[:cell_centroids]
     cell_mask = .!(x[1, :] .< 0.0 .&& x[2, :] .< 0.0)
-    Jutul.plot_cell_data!(ax, msh_homo, Δstates[end][:Temperature];
+    Jutul.plot_cell_data!(ax, msh_hom, Δstates[end][:Temperature];
         cells = cell_mask, colormap = :seaborn_icefire_gradient)
 end
 fig_cmp
@@ -154,7 +152,6 @@ end
 linkaxes!(filter(c -> c isa Axis, fig_hom.content)...)
 fig_hom
 
-# ---
 # ## Scenario 2 – Layered reservoir
 # Four geological layers span the same 0–3000 m interval, each with distinct
 # thermal and hydraulic properties. The layers are (from top to bottom):
@@ -226,7 +223,6 @@ end
 linkaxes!(filter(c -> c isa Axis, fig_layers.content)...)
 fig_layers
 
-# ---
 # ## Scenario 3 – Effect of inner pipe wall thermal conductivity
 # Using the homogeneous reservoir with outer injection, we vary the inner
 # pipe wall thermal conductivity from 0.0 (perfectly insulating inner pipe)
@@ -244,7 +240,7 @@ for λ in λ_values
         inject_into = :outer,
         homogeneous_args...,
         well_args = (inner_pipe_thermal_conductivity = λ,
-        outer_pipe_thermal_conductivity = λ_default,  # keep outer pipe conductivity constant),
+        outer_pipe_thermal_conductivity = λ_default, # keep outer pipe conductivity constant),
     ))
     push!(cases_λ, case_i)
     push!(results_λ, run_case(case_i))
