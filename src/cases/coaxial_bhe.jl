@@ -1,5 +1,5 @@
 """
-    coaxial_well_branches(; kwargs...)
+    coaxial_bhe(; kwargs...)
 
 Create a deep coaxial geothermal well simulation case.
 
@@ -52,7 +52,7 @@ well trajectory given as an m×3 matrix. The well is set up using
 # Returns
 A `JutulCase` for coaxial geothermal well simulation.
 """
-function coaxial_well_branches(;
+function coaxial_bhe(;
     # Well trajectory (m×3 matrix)
     well_trajectory = default_coaxial_trajectory(),
     # Geological parameters

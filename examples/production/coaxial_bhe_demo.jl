@@ -1,4 +1,4 @@
-# # Deep coaxial geothermal well
+# # Deep coaxial borehole heat exchanger (BHE) demo
 # This example demonstrates simulation and analysis of geothermal energy
 # production from a deep coaxial closed-loop well. The well is defined by a
 # general trajectory (m×3 matrix) and uses coaxial heat exchange with the
@@ -74,8 +74,8 @@ homogeneous_args = (;
     rock_density = [2600, 2600]*kilogram/meter^3,
 );
 
-case_hom_inner = coaxial_well_branches(; inject_into = :inner, homogeneous_args...);
-case_hom_outer = coaxial_well_branches(; inject_into = :outer, homogeneous_args...);
+case_hom_inner = coaxial_bhe(; inject_into = :inner, homogeneous_args...);
+case_hom_outer = coaxial_bhe(; inject_into = :outer, homogeneous_args...);
 
 # ### Inspect mesh and well
 msh_homo = physical_representation(reservoir_model(case_hom_inner.model).data_domain)
@@ -175,7 +175,7 @@ layered_args = (;
     rock_density       = [2650, 2600, 2580, 2600]*kilogram/meter^3,
 );
 
-case_layered = coaxial_well_branches(; inject_into = :outer, layered_args...);
+case_layered = coaxial_bhe(; inject_into = :outer, layered_args...);
 
 # ### Plot reservoir properties
 # The interactive viewer shows how conductivity and other properties vary with
@@ -189,7 +189,7 @@ results_layered = run_case(case_layered);
 # The homogeneous result (outer injection) is shown alongside the layered
 # result to emphasize how layer contrasts in thermal conductivity affect the
 # temperature distribution along the wellbore.
-fig_layers = Figure(size = (600, 800))
+fig_layers = Figure(size = (600, 600))
 
 for (i, (results, case, label)) in enumerate(zip(
     [results_hom_outer, results_layered],
@@ -240,7 +240,7 @@ labels_λ = ["λ = 0.00", "λ = 0.38 (default)", "λ = 1.52"]
 cases_λ = []
 results_λ = []
 for λ in λ_values
-    case_i = coaxial_well_branches(;
+    case_i = coaxial_bhe(;
         inject_into = :outer,
         homogeneous_args...,
         well_args = (inner_pipe_thermal_conductivity = λ,

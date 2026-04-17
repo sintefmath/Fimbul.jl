@@ -19,7 +19,7 @@ module Fimbul
     export ags
     export ates
     export btes
-    export coaxial_well_branches
+    export coaxial_bhe
     export egg_geothermal, egg_geothermal_doublet, egg_ates
     # Other utilities
     export thermal_radius_aquifer
