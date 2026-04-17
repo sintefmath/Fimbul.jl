@@ -113,7 +113,10 @@ fig_cmp
 # ### Well temperature profiles
 # Side-by-side comparison of temperature with depth for the two flow
 # configurations. The black line shows the reservoir temperature at the
-# perforated cells for reference.
+# perforated cells for reference. We see that the production temperature is
+# higher for outer injection since temperature difference between injected fluid
+# and reservoir is larger along the wellbore. We therefore use outer injection
+# for the remaining scenarios in this demo.
 fig_hom = Figure(size = (600, 600))
 colors = cgrad(:BrBG_4, 4, categorical = true)[[1, 2, 4]]
 
@@ -290,9 +293,11 @@ linkaxes!(filter(c -> c isa Axis, fig_lambda.content)...)
 fig_lambda
 
 # ### Power output over time
-# Compare the thermal power output at the production well for each inner
-# pipe conductivity. Power is computed as mass flow rate × heat capacity ×
-# (production temperature − injection temperature).
+# Compare the thermal power output at the production well for each inner pipe
+# conductivity. Power is computed as mass flow rate × heat capacity ×
+# (production temperature − injection temperature). With a perfectly insulating
+# inner pipe (λ = 0), the power output is almost thee times higher than the case
+# with the highest conductivity.
 fig_power = Figure(size = (800, 500))
 ax_pwr = Axis(fig_power[1, 1];
     title = "Effect of inner pipe thermal conductivity",
