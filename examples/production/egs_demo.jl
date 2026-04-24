@@ -65,22 +65,21 @@ frac_mesh   = physical_representation(frac_domain)
 frac_geo    = tpfv_geometry(frac_mesh)
 
 fig = Figure(size = (800, 800))
-ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data, perspectiveness = 0.5,
+# Get aspect ration from mesh size
+x_range = extrema(geo.cell_centroids[1, :])
+y_range = extrema(geo.cell_centroids[2, :])
+xy_aspect = (x_range[2]-x_range[1]) / (y_range[2]-y_range[1])
+
+ax = Axis3(fig[1, 1]; zreversed = true, aspect = (xy_aspect,1,3), perspectiveness = 0.5,
     title = "EGS System: Wells and DFM Fracture Network")
 Jutul.plot_mesh_edges!(ax, msh; alpha = 0.2)  # Background matrix mesh
-
-# Scatter-plot fracture cell centroids (coloured by y-position / fracture index)
-xf, yf, zf = frac_geo.cell_centroids[1,:], frac_geo.cell_centroids[2,:], frac_geo.cell_centroids[3,:]
-scatter!(ax, xf, yf, zf; markersize = 4, color = yf, colormap = :viridis,
-    label = "DFM fractures")
+Jutul.plot_mesh!(ax, frac_mesh; color = :lightgray)  # DFM fractures
 
 # Plot wells
-wells_dict = get_model_wells(case.model)
+wells_dict = get_model_wells(case.model; data_domain=true)
 function plot_egs_wells(ax; colors = [:red, :blue])
     for (i, (name, well)) in enumerate(wells_dict)
-        cells = well.perforations.reservoir
-        xy = geo.cell_centroids[1:2, cells]
-        xy = hcat(xy[:,1], xy)'
+        xy = permutedims(well[:cell_centroids][1:2, :])
         plot_mswell_values!(ax, case.model, name, xy;
             geo = geo, linewidth = 3, color = colors[i])
     end
