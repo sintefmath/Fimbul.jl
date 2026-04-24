@@ -1,8 +1,8 @@
 # # Deep coaxial borehole heat exchanger (BHE) demo
 # This example demonstrates simulation and analysis of geothermal energy
 # production from a deep coaxial closed-loop well. The well is defined by a
-# general trajectory (m×3 matrix) and uses coaxial heat exchange with the
-# surrounding rock formation.
+# general trajectory (m×3 matrix) and consists of to concentric pipes: an inner
+# supply pipe and an outer return annulus.
 #
 # We explore three scenarios:
 # 1. **Homogeneous reservoir**: A single uniform layer to establish a baseline,
