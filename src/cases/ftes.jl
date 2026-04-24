@@ -14,9 +14,6 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     mesh_args = NamedTuple(),
     )
 
-    @warn "This function is under development and currently requires the `dfm` \
-    branch of JutulDarcy."
-
     # Make constraints from well coordinates
     collars = hcat([x[1:2, 1] for x in well_coordinates]...)
     Δx_min, Δx_max = Fimbul.min_max_distance(collars)
@@ -44,21 +41,12 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     hz = diff(depths)./[num_fractures*3, 2]
     matrix_mesh, layers, _ = extruded_mesh(cell_constraints, depths;
         hxy_min=hxy_min, hz=hz, offset_rel=2.5, mesh_args...)
-    # Add fractures
-    fracture_faces = Int[]
-    for (i, (normal, center)) in enumerate(zip(fractures[:normal], fractures[:centers]))
-        is_frac = falses(number_of_faces(matrix_mesh))
-        is_frac[fracture_faces] .= true
-        plane = PlaneCut(center, normal)
-        matrix_mesh, info = cut_mesh(matrix_mesh, plane; min_cut_fraction = 0.0, extra_out=true)
-        # Update fracture face vector
-        face_index = filter(x->x>0, info[:face_index])
-        fracture_faces = findall(is_frac[face_index])
-        new_faces = findall(info[:face_index] .== 0)
-        append!(fracture_faces, new_faces)
-        # Update layer vector
-        layers = layers[info[:cell_index]]
-    end
+    # Add fractures using multi-cut
+    planes = [PlaneCut(center, normal)
+              for (normal, center) in zip(fractures[:normal], fractures[:centers])]
+    matrix_mesh, info = cut_mesh(matrix_mesh, planes; extra_out = true, min_cut_fraction = 0.0)
+    fracture_faces = findall(info[:face_index] .== 0)
+    layers = layers[info[:cell_index]]
     # Generate embedded mesh for fractures
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(matrix_mesh, fracture_faces)
 
@@ -70,28 +58,24 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     matrix_domain = layered_reservoir_domain(matrix_mesh, layers, matrix_properties)
     # matrix_domain = reservoir_domain(matrix_mesh;
     #     permeability=marix_permeability, porosity=matrix_porosity)
-    fracture_domain = JutulDarcy.fracture_domain(fracture_mesh;
+    fracture_domain = JutulDarcy.fracture_domain(fracture_mesh, matrix_domain;
         aperture=fractures[:aperture][1],
-        porosity=fractures[:porosity][1],
-        matrix_faces=fracture_faces)
+        porosity=fractures[:porosity][1])
     
-    frac_args = (WI = missing,)
     cells = Jutul.find_enclosing_cells(matrix_mesh, permutedims(well_coordinates[1]), n=1_000_000)
-    well_inj = setup_well(matrix_domain, cells, fracture_domain;
-        name=:Injector, radius=75e-3, frac_args=frac_args)
+    well_inj = setup_well(matrix_domain, cells;
+        name=:Injector, radius=75e-3)
 
     x_prod = [permutedims(x) for x in well_coordinates[2:end]]
     connectivity = zeros(Int, length(x_prod)+1, 2)
     connectivity[2:end, 1] .= 1
-    println(connectivity)
     cells, wcells, neighborship = Fimbul.get_well_neighborship(
         matrix_mesh, x_prod, connectivity, geo; top_node=true, n=1_000_000)
     well_cell_centers = hcat([0; 0; 0], geo.cell_centroids[:, cells])
 
-    well_prod = setup_well(matrix_domain, cells, fracture_domain;
+    well_prod = setup_well(matrix_domain, cells;
         name=:Producer,
         radius=75e-3,
-        frac_args=frac_args,
         neighborship=neighborship,
         perforation_cells_well=wcells[2:end],
         well_cell_centers=well_cell_centers,
@@ -100,7 +84,7 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     
     wells = [well_inj, well_prod]
     
-    model = JutulDarcy.setup_reservoir_model(matrix_domain, fracture_domain, :geothermal;
+    model = JutulDarcy.setup_fractured_reservoir_model(matrix_domain, fracture_domain, :geothermal;
         wells=wells, block_backend=true)
     ρ = reservoir_model(model).system.rho_ref[1]
     dpdz = gravity_constant * ρ
