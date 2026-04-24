@@ -57,17 +57,30 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
 
     end
 
-    for (sno, (wc, rc)) in enumerate(zip(well_cells, reservoir_cells))
+    tn = Int(top_node)
+    for sno in eachindex(well_cells)
+        wc = well_cells[sno]
+        # Correctly map well section index to reservoir_cells index,
+        # accounting for the extra top-node entry in well_cells.
+        rc_idx = sno - tn
+        rc = (rc_idx >= 1 && rc_idx <= length(reservoir_cells)) ? reservoir_cells[rc_idx] : Int[]
         # Neighborship from previous section
         n = neighborship[sno]
         from_section = connectivity[sno, 1]
         if from_section > 0
-            ix = findfirst(reservoir_cells[from_section] .== rc[1])
-            if isnothing(ix)
-                @warn "First reservoir cell of section $sno does not match any \
-                reservoir cell in the from_section $from_section. Connecting \
-                to last cell."
-                ix = length(reservoir_cells[from_section])
+            from_rc_idx = from_section - tn
+            if from_rc_idx >= 1
+                # Normal section: find matching reservoir cell
+                ix = isempty(rc) ? nothing : findfirst(reservoir_cells[from_rc_idx] .== rc[1])
+                if isnothing(ix)
+                    @warn "First reservoir cell of section $sno does not match any \
+                    reservoir cell in the from_section $from_section. Connecting \
+                    to last cell."
+                    ix = length(reservoir_cells[from_rc_idx])
+                end
+            else
+                # from_section is the top node (no reservoir cells): connect to its only well cell
+                ix = 1
             end
             wc_from = well_cells[from_section][ix]
             n = hcat([wc_from; wc[1]], n)
@@ -75,11 +88,16 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         # Neighborship to next section
         to_section = connectivity[sno, 2]
         if to_section > 0
-            ix = findfirst(reservoir_cells[to_section] .== rc[end])
-            if isnothing(ix)
-                @warn "Last reservoir cell of section $sno does not match any \
-                reservoir cell in the to_section $to_section. Connecting \
-                to first cell."
+            to_rc_idx = to_section - tn
+            if to_rc_idx >= 1
+                ix = isempty(rc) ? nothing : findfirst(reservoir_cells[to_rc_idx] .== rc[end])
+                if isnothing(ix)
+                    @warn "Last reservoir cell of section $sno does not match any \
+                    reservoir cell in the to_section $to_section. Connecting \
+                    to first cell."
+                    ix = 1
+                end
+            else
                 ix = 1
             end
             wc_to = well_cells[to_section][ix]

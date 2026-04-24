@@ -42,12 +42,12 @@ fracture_mesh = physical_representation(case.model.models[:Fractures].data_domai
 fig = Figure(size = (900, 700))
 ax = Axis3(fig[1, 1]; perspectiveness = 0.5, zreversed = true, aspect = :data,
     title = "FTES system: matrix mesh and fracture network")
-Jutul.plot_mesh!(ax, fracture_mesh; color = :gray, alpha = 0.6)
+Jutul.plot_mesh!(ax, fracture_mesh; color = :gray)
 Jutul.plot_mesh_edges!(ax, matrix_mesh; alpha = 0.1)
 wells = get_model_wells(case.model)
 colors = [:red; fill(:blue, length(wells) - 1)]
 for (i, (k, w)) in enumerate(wells)
-    plot_well!(ax, matrix_mesh, w; color = colors[i], linewidth = 5)
+    plot_well!(ax, matrix_mesh, w; color = colors[i], linewidth = 3)
 end
 fig
 
@@ -76,15 +76,14 @@ config[:timestep_max_decrease] = 1e-6;
 # ## Simulate the FTES system
 # Run the full multi-year simulation. Setting `info_level = 0` will show a
 # progress bar rather than per-iteration solver output.
-results = simulate_reservoir(case; simulator = simulator, config = config, info_level = 0);
+results = simulate_reservoir(case; simulator = simulator, config = config, info_level = 2);
 
 # ## Visualize results
 # ### Matrix temperature distribution
 # Inspect the temperature distribution in the matrix reservoir after the final
 # simulated timestep to see how thermal energy has spread around the fracture
 # network.
-states_m = [s[:Reservoir] for s in results.states]
-plot_reservoir(case.model, states_m;
+plot_reservoir(case.model, results.states;
     key = :Temperature,
     aspect = :data,
     colormap = :seaborn_icefire_gradient)
@@ -92,7 +91,7 @@ plot_reservoir(case.model, states_m;
 # ### Fracture temperature distribution
 # The fractures are the primary heat transport pathway. We visualize the
 # temperature field on the fracture mesh at the end of the simulation.
-states_f = [s[:Fractures] for s in results.states]
+states_f = [s[:Fractures] for s in results.result.states]
 plot_reservoir(case.model.models[:Fractures], states_f;
     key = :Temperature,
     aspect = :data,

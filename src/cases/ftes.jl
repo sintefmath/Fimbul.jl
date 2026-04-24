@@ -64,7 +64,7 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     
     cells = Jutul.find_enclosing_cells(matrix_mesh, permutedims(well_coordinates[1]), n=1_000_000)
     well_inj = setup_well(matrix_domain, cells;
-        name=:Injector, radius=75e-3)
+        name=:Injector, radius=75e-3, simple_well=false)
 
     x_prod = [permutedims(x) for x in well_coordinates[2:end]]
     connectivity = zeros(Int, length(x_prod)+1, 2)
@@ -80,6 +80,7 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
         perforation_cells_well=wcells[2:end],
         well_cell_centers=well_cell_centers,
         use_top_node=true,
+        simple_well=false,
         )
     
     wells = [well_inj, well_prod]
