@@ -15,7 +15,7 @@ module Fimbul
     # Cases
     export analytical_1d
     export geothermal_doublet
-    export egs
+    export egs, egs_well_coordinates
     export ags
     export ates
     export btes

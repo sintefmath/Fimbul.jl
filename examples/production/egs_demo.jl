@@ -25,71 +25,67 @@ meter, day, watt = si_units(:meter, :day, :watt);
 # thereby enhancing heat extraction.
 
 # ### Define EGS geometry
-# We will use the setup function `egs`, which takes as input the well
-# coordinates, fracture radius, and fracture spacing to create the complete EGS.
-well_depth = 2500.0meter # Vertical depth to horizontal well section [m]
-well_spacing_x = 100.0meter # Horizontal separation between production wells [m]
-well_spacing_z = sqrt(3/4*well_spacing_x^2) # Vertical offset between injector and producers [m]
-well_lateral = 1000.0meter; # Length of horizontal well section [m]
+# We will use `egs_well_coordinates` to generate smooth deviated well
+# trajectories with a curved bend from vertical to horizontal, and `egs` to
+# assemble the complete simulation case using a Discrete Fracture Model (DFM).
+fracture_radius  = 200.0meter  # Radius of stimulated fracture disks [m]
+fracture_spacing = 125.0meter  # Spacing between discrete fractures [m]
 
-# Well coordinates are defined as a vector of nx3 arrays, each containing the
-# (x,y,z) coordinates of a well trajectory. The first well is the injector,
-# while preceding wells are interpreted as producers. All producers are coupled
-# together into a single well at the top to enable controlling/monitoring the
-# total production rate.
-ws_x, ws_z, wd, wl = well_spacing_x, well_spacing_z, well_depth, well_lateral
-well_coords = [
-    [0.0 0.0 0.0; 0.0 0.0 wd; 0.0 wl wd], # Injector
-    [-ws_x/2 0.0  0.0; -ws_x/2 0.0 wd-ws_z; -ws_x/2 wl wd-ws_z], # Producer leg 1
-    [ ws_x/2 0.0  0.0;  ws_x/2 0.0 wd-ws_z;  ws_x/2 wl wd-ws_z] # Producer leg 2
-];
-# The fracture network is defined by the fracture radius and spacing along the
-# wellbore, starting at the horizontal section of the well.
-fracture_radius = 200.0meter # Radius of stimulated fracture network [m]
-fracture_spacing = well_lateral/8; # Spacing between discrete fractures [m]
+# `egs_well_coordinates` returns `(injector_coords, producer_coords)` as vectors
+# of n×3 trajectory matrices. The injector runs vertically to 2500 m depth then
+# horizontally; the two producer legs are offset 100 m in x and raised slightly
+# to leverage buoyancy-driven flow.
+inj, prod = Fimbul.egs_well_coordinates(
+    well_depth      = 2500.0meter,
+    well_spacing_x  = 100.0meter,
+    well_lateral    = 1000.0meter,
+    bend_radius     = 200.0meter,
+);
 
 # ### Create simulation case
 # We set up a scenario describing 10 years of operation with a water injection
 # rate of 9250 m³/day (approximately 107 liters/second) at a temperature of
 # 25°C. The simulation will output results four times per year for analysis.
 num_years = 10 # Total simulation period [years]
-case = Fimbul.egs(well_coords, fracture_radius, fracture_spacing;
-    rate = 9250meter^3/day, # Water injection rate
-    temperature_inj = convert_to_si(25.0, :Celsius), # Injection temperature
-    num_years = num_years, # Years of operation
-    schedule_args = (report_interval = si_unit(:year)/4,)
+case = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
+    rate            = 9250meter^3/day,                   # Water injection rate
+    temperature_inj = convert_to_si(25.0, :Celsius),     # Injection temperature
+    num_years       = num_years,
+    schedule_args   = (report_interval = si_unit(:year)/4,)
 );
 
 # ### Inspect model
-# Visualize the computational mesh, wells, and fracture network. The mesh is
-# refined around wells and fractures to capture thermal and hydraulic processes
-# accurately in these critical regions.
+# Visualize the computational mesh, DFM fracture network, and wells.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(msh)
+
+# Get DFM fracture geometry
+frac_domain = case.model.models[:Fractures].data_domain
+frac_mesh   = physical_representation(frac_domain)
+frac_geo    = tpfv_geometry(frac_mesh)
+
 fig = Figure(size = (800, 800))
 ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data, perspectiveness = 0.5,
-    title = "EGS System: Wells and Fracture Network")
-Jutul.plot_mesh_edges!( # Show computational mesh with transparency
-    ax, msh, alpha = 0.2)
-wells = get_model_wells(case.model)
-function plot_egs_wells( # Utility to plot wells in EGS system
-    ax; colors = [:red, :blue])
-    for (i, (name, well)) in enumerate(wells)
-        color = colors[i]
-        label = i == 1 ? "Injector" : "Producer"
+    title = "EGS System: Wells and DFM Fracture Network")
+Jutul.plot_mesh_edges!(ax, msh; alpha = 0.2)  # Background matrix mesh
+
+# Scatter-plot fracture cell centroids (coloured by y-position / fracture index)
+xf, yf, zf = frac_geo.cell_centroids[1,:], frac_geo.cell_centroids[2,:], frac_geo.cell_centroids[3,:]
+scatter!(ax, xf, yf, zf; markersize = 4, color = yf, colormap = :viridis,
+    label = "DFM fractures")
+
+# Plot wells
+wells_dict = get_model_wells(case.model)
+function plot_egs_wells(ax; colors = [:red, :blue])
+    for (i, (name, well)) in enumerate(wells_dict)
         cells = well.perforations.reservoir
         xy = geo.cell_centroids[1:2, cells]
         xy = hcat(xy[:,1], xy)'
         plot_mswell_values!(ax, case.model, name, xy;
-            geo = geo, linewidth = 3, color = color, label = label)
+            geo = geo, linewidth = 3, color = colors[i])
     end
 end
 plot_egs_wells(ax)
-domain = reservoir_model(case.model).data_domain
-is_fracture = isapprox.(domain[:porosity], maximum(domain[:porosity]))
-fracture_cells = findall(is_fracture)
-plot_mesh!( # Highlight fracture network (high porosity cells)
-    ax, msh; cells = fracture_cells)
 fig
 
 # ## Simulate system
@@ -148,135 +144,120 @@ plot_well_results(results.wells)
 
 # ## Fracture-level performance
 # Understanding the performance of each individual fracture is crucial for
-# optimizing EGS systems. We first visualize the temperature within the fracture
-# network at selected timesteps to understand thermal depletion patterns.
+# optimizing EGS systems. We first visualize the DFM fracture temperature at
+# selected timesteps.
 
-# Extract fracture temperature changes and prepare plotting
-time = convert_from_si.(results.time, :year)
-ΔT = [Δstate[:Temperature][is_fracture] for Δstate in Δstates]
-colorrange = extrema(vcat(ΔT...))
-x = geo.cell_centroids[:, is_fracture]
-xlim = extrema(x, dims=2)
-limits = Tuple([xl .+ (xl[2]-xl[1]).*(-0.1, 0.1) for xl in xlim])
+# Expand to all internal sub-steps to obtain the full time axis with dt
+states_full, dt_full, _ = Jutul.expand_to_ministeps(results.result)
+time_full = cumsum(dt_full) ./ si_unit(:year)
 
-# Visualize fracture temperature at three representative timesteps
+# Compute fracture temperature change (ΔT) vs. initial state
+T0_frac = case.state0[:Fractures][:Temperature]
+ΔT_frac = [state[:Fractures][:Temperature] .- T0_frac for state in states_full]
+colorrange = extrema(vcat(ΔT_frac...))
+fxf, fyf, fzf = frac_geo.cell_centroids[1,:], frac_geo.cell_centroids[2,:], frac_geo.cell_centroids[3,:]
+xlim_f = [(extrema(fxf) .+ diff(collect(extrema(fxf))).*[-0.3, 0.3])...]
+ylim_f = [(extrema(fyf) .+ diff(collect(extrema(fyf))).*[-0.1, 0.1])...]
+zlim_f = [(extrema(fzf) .+ diff(collect(extrema(fzf))).*[-0.3, 0.3])...]
+limits_f = (xlim_f, ylim_f, zlim_f)
+
+n_steps_f = length(ΔT_frac)
+steps = Int.(round.([0.125, 0.25, 1.0] .* n_steps_f))
+
 fig = Figure(size = (650, 800))
-n_steps = length(ΔT)
-steps = Int.(round.([0.125, 0.25, 1.0].* n_steps))
-
-for (n, ΔT_n) in enumerate(ΔT[steps])
-    ax_n = Axis3(fig[n, 1],
-    perspectiveness = 0.5,
-    zreversed = true, aspect = (1,6,1),
-    azimuth = 1.2pi,
-    elevation = pi/20,
-    limits = limits,
-    title = "$(round(time[steps[n]], digits=1)) years",
-    titlegap = -10
-    )
-    ## Plot temperature changes in fracture network
-    plot_cell_data!(ax_n, msh, ΔT_n;
-        cells = is_fracture,
-        colorrange = colorrange,
-        colormap = :seaborn_icefire_gradient)
+for (n, ΔT_n) in enumerate(ΔT_frac[steps])
+    ax_n = Axis3(fig[n, 1];
+        perspectiveness = 0.5, zreversed = true, aspect = (1, 6, 1),
+        azimuth = 1.2π, elevation = π/20, limits = limits_f,
+        title = "$(round(time_full[steps[n]], digits=1)) years", titlegap = -10)
+    scatter!(ax_n, fxf, fyf, fzf; color = ΔT_n, colorrange = colorrange,
+        colormap = :seaborn_icefire_gradient, markersize = 6)
     plot_egs_wells(ax_n; colors = [:black, :black])
     hidedecorations!(ax_n)
 end
-Colorbar( # Add colorbar
-    fig[length(steps)+1, 1];
+Colorbar(fig[length(steps)+1, 1];
     colormap = :seaborn_icefire_gradient, colorrange = colorrange,
     label = "ΔT (°C)", vertical = false, flipaxis = false)
 fig
 
 # ### Fracture metrics
 # Finally, we analyze key performance metrics for each individual fracture over
-# the entire simulation period, including temperature evolution, thermal power
-# production, annual energy production. The temperature is almost identical out
-# of each fracture. However, we notice the first and last fractures contribute
-# slightly more to the total energy production.
+# the entire simulation period: temperature evolution, thermal power production,
+# and annual energy production.
 
-# Extract fracture data from simulation results
-states, dt, report_step = Jutul.expand_to_ministeps(results.result)
-time = cumsum(dt)./si_unit(:year)
+# Extract fracture data from simulation results using the DFM-aware helper.
+# `get_egs_fracture_data` groups fracture cells by y-position and returns mean
+# temperature and total thermal energy per fracture for every timestep.
+states, dt, _ = Jutul.expand_to_ministeps(results.result)
+time = cumsum(dt) ./ si_unit(:year)
 
-fdata_inj = Fimbul.get_egs_fracture_data(states, dt,case.model, :Injector; geo=geo);
-fdata_prod = Fimbul.get_egs_fracture_data(states, dt, case.model, :Producer; geo=geo);
-nsteps = length(dt)
+fdata = Fimbul.get_egs_fracture_data(states, case.model)
+n_frac = length(fdata[:y])
+colors = cgrad(:BrBg, n_frac, categorical = true)
 
-colors = cgrad(:BrBg, size(fdata_inj[:Temperature], 2), categorical = true)
-function plot_fracture_data( # Utility for plotting fracture data
-    ax, time, data, stacked = false)
-    nsteps = length(time)
-    df_prev = zeros(nsteps)
+function plot_fracture_data(ax, time, data; stacked = false)
+    df_prev = zeros(length(time))
     for (fno, df) in enumerate(eachcol(data))
+        df = copy(df)
         if stacked
-            ## plot values on top of each other to illustrate realtive contribution
-            x = vcat(time, reverse(time))
             df .+= df_prev
-            y = vcat(df_prev, reverse(df))
-            poly!(ax, x, y; color = colors[fno],
-            strokecolor = :black, strokewidth = 1, label = "Fracture $fno")
+            poly!(ax, vcat(time, reverse(time)), vcat(df_prev, reverse(df));
+                color = colors[fno], strokecolor = :black, strokewidth = 1,
+                label = "Fracture $fno")
             df_prev = df
         else
-            lines!(ax, time, df; color = colors[fno],
-            linewidth = 2, label = "Fracture $fno")
+            lines!(ax, time, df; color = colors[fno], linewidth = 2,
+                label = "Fracture $fno")
         end
     end
 end
+
 fig = Figure(size = (1000, 800))
-xmax = round(maximum(time))
-limits = ((0, xmax).+(-0.1, 0.1).*xmax, nothing)
+xmax   = round(maximum(time))
+limits = ((0, xmax) .+ (-0.1, 0.1) .* xmax, nothing)
 xticks = 0:xmax
-function make_axis( # Utility for making axes
-    title, ylabel, rno; kwargs...)
-    ax = Axis(fig[rno,1];
-    title = title, xlabel = "Time (years)", ylabel = ylabel, limits = limits,
-    xticks = xticks, kwargs...)
-    return ax
+function make_axis(title, ylabel, rno; kwargs...)
+    Axis(fig[rno, 1]; title = title, xlabel = "Time (years)", ylabel = ylabel,
+        limits = limits, xticks = xticks, kwargs...)
 end
 
 first_step = findfirst(time .> 1/104)
 
-ax = make_axis( # Panel 1: fracture temperature
-    "Temperature", "T (°C)", 1)
-temperature = fdata_prod[:Temperature][first_step:end, :]
-plot_fracture_data(ax, time[first_step:end], convert_from_si.(temperature, :Celsius), false)
+ax = make_axis("Temperature", "T (°C)", 1)
+temperature = fdata[:Temperature][first_step:end, :]
+plot_fracture_data(ax, time[first_step:end],
+    convert_from_si.(temperature, :Celsius))
 hidexdecorations!(ax, grid = false)
 
-ax_pwr = make_axis( # Panel 2: thermal power production
-    "Thermal power", "Power (MW)", 2)
+# Thermal power approximated from rate of change of stored thermal energy
+Er     = fdata[:TotalThermalEnergy]
+power  = .-diff(vcat(Er[1,:]', Er), dims = 1) ./ dt  # negative: energy leaving
 
-Er = fdata_prod[:TotalThermalEnergy]
-ΔErΔt⁻¹ = diff(vcat(Er[1,:]', Er), dims=1)./dt
-power = .-(fdata_prod[:EnergyFlux] .+ fdata_inj[:EnergyFlux]) .+ ΔErΔt⁻¹
-
-# power = fdata_prod[:EnergyFlux] # Power production from producers only --- IGNORE ---
-plot_fracture_data(ax_pwr, time[first_step:end], power[first_step:end, :]./1e6, true)
+ax_pwr = make_axis("Thermal power", "Power (MW)", 2)
+plot_fracture_data(ax_pwr, time[first_step:end],
+    power[first_step:end, :] ./ 1e6; stacked = true)
 hidexdecorations!(ax_pwr, grid = false)
 
-ax = make_axis( # Panel 3: annual energy production per fracture
-    "Annual energy production per fracture", "Energy (GWh)", 3)
+ax = make_axis("Annual energy production per fracture", "Energy (GWh)", 3)
 energy_per_year, cat, dodge = [], Int[], Int[]
-GWh = si_unit(:giga)*si_unit(:watt)*si_unit(:hour)
-ix = vcat(0, [findfirst(isapprox.(time, y; atol=1e-2)) for y in 1:num_years]) .+1
+GWh = si_unit(:giga) * si_unit(:watt) * si_unit(:hour)
+ix = vcat(0, [findfirst(isapprox.(time, y; atol = 1e-2)) for y in 1:num_years]) .+ 1
 for (fno, pwr_f) in enumerate(eachcol(power))
-    ## Integrate power over annual periods to get energy [GWh]
-    energy_f = [sum(pwr_f[ix[k]:ix[k+1]-1].*dt[ix[k]:ix[k+1]-1])./GWh for k = 1:length(ix)-1]
+    energy_f = [sum(pwr_f[ix[k]:ix[k+1]-1] .* dt[ix[k]:ix[k+1]-1]) / GWh
+                for k in 1:length(ix)-1]
     push!(energy_per_year, energy_f)
     push!(cat, 1:length(energy_f)...)
     push!(dodge, fill(fno, length(energy_f))...)
 end
 barplot!(ax, cat, vcat(energy_per_year...);
-dodge = dodge, color = colors[dodge], strokecolor = :black, strokewidth = 1)
+    dodge = dodge, color = colors[dodge], strokecolor = :black, strokewidth = 1)
 hidexdecorations!(ax, grid = false)
 
-ax = make_axis( # Panel 4: relative fracture contribution
-    "Annual energy fraction per fracture", "Fraction (-)", 4)
+ax = make_axis("Annual energy fraction per fracture", "Fraction (-)", 4)
 η = reduce(hcat, energy_per_year)
-η = η ./ sum(η, dims=2)
+η = η ./ sum(η, dims = 2)
 barplot!(ax, cat, η[:];
-dodge = dodge, color = colors[dodge], strokecolor = :black, strokewidth = 1)
+    dodge = dodge, color = colors[dodge], strokecolor = :black, strokewidth = 1)
 
-Legend( # Add legend indicating fracture numbers
-    fig[2:3,2], ax_pwr)
+Legend(fig[2:3, 2], ax_pwr)
 fig

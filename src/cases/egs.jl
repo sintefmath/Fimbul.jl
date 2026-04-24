@@ -1,407 +1,309 @@
-"""
-    egs(well_coords, fracture_radius, fracture_spacing; kwargs...)
+import Jutul.CutCellMeshes: PlaneCut, PolygonalSurface, cut_mesh
 
-# Arguments
-- `well_coords`: Array of well coordinates. Each well is defined by an 3x3
-  matrix of (x,y,z) coordinates interpreted as top/heel/toe. The current
-  implementation assumes that the laterals from heel to toe are perfectly
-  horizontal. The first well is the injector, and subsequent trajectories define
-  the producer legs.
-- `fracture_radius`: Radius of EGS fractures, centered at the mean of all well
-  laterals, as see in the y/z plane
-- `fracture_spacing`: Spacing between the fractures along the well laterals 
+"""
+    egs_well_coordinates(; kwargs...)
+
+Generate default EGS well trajectories with a smooth curved bend from the
+vertical to the horizontal section. Returns `(injector_coords, producer_coords)`
+as vectors of `n×3` trajectory matrices (each row is an `(x, y, z)` waypoint).
 
 # Keyword arguments
-- `well_names`: Names of the wells. Defaults to :Injector and :Producer
-- `fracture_aperture`: Aperture of fractures [mm]
-- `poros`
+- `well_depth = 2500.0`: Vertical depth of the injector horizontal section [m]
+- `well_spacing_x = 100.0`: Horizontal separation between injector and
+  producers in x [m]
+- `well_lateral = 1000.0`: Length of horizontal well section [m]
+- `bend_radius = 200.0`: Radius of curvature at the vertical-to-horizontal
+  bend [m]
+- `n_bend = 8`: Number of waypoints along the curved bend
+- `producer_depth_offset = nothing`: Vertical offset of producer horizontal
+  sections above the injector [m]. Defaults to the height of an equilateral
+  triangle with side `well_spacing_x`.
+"""
+function egs_well_coordinates(;
+    well_depth = 2500.0,
+    well_spacing_x = 100.0,
+    well_lateral = 1000.0,
+    bend_radius = 200.0,
+    n_bend = 8,
+    producer_depth_offset = nothing,
+)
+    if isnothing(producer_depth_offset)
+        producer_depth_offset = sqrt(3.0/4.0) * well_spacing_x
+    end
+    r = bend_radius
+    function make_trajectory(x, wd)
+        # Quarter-arc bend in the y-z plane:
+        #   θ = 0   → position (x, 0, wd-r), going downward (+z)
+        #   θ = π/2 → position (x, r, wd),   going horizontal (+y)
+        # Arc center at (x, 0, wd)
+        θ_arr = range(0.0, π/2, length = n_bend + 2)
+        y_bend = r .* sin.(θ_arr)
+        z_bend = wd .- r .* cos.(θ_arr)
+        traj = [x 0.0 0.0;
+                x 0.0 (wd - r)]                       # surface → end-of-vertical
+        for i in 2:length(θ_arr)-1
+            traj = vcat(traj, [x y_bend[i] z_bend[i]])  # interior bend waypoints
+        end
+        traj = vcat(traj, [x well_lateral wd])          # end of horizontal section
+        return traj
+    end
+    injector_coords = [make_trajectory(0.0, well_depth)]
+    producer_coords = [
+        make_trajectory(-well_spacing_x/2, well_depth - producer_depth_offset),
+        make_trajectory( well_spacing_x/2, well_depth - producer_depth_offset),
+    ]
+    return injector_coords, producer_coords
+end
 
 """
-function egs(well_coords, fracture_radius, fracture_spacing;
-    well_names = missing,
-    fracture_aperture=0.5e-3,
+    egs(injector_coords, producer_coords, fracture_radius, fracture_spacing; kwargs...)
+
+Set up an Enhanced Geothermal System (EGS) simulation case using a Discrete
+Fracture Model (DFM) for the fracture network.
+
+Each well group (injectors, producers) is represented as a single multi-segment
+well with branches coupled at a shared top node.
+
+# Arguments
+- `injector_coords`: Vector of `n×3` trajectory matrices for injector legs.
+- `producer_coords`: Vector of `n×3` trajectory matrices for producer legs.
+- `fracture_radius`: Radius of the stimulated fracture disks (in the x-z plane) [m].
+- `fracture_spacing`: Spacing between fractures along the horizontal well [m].
+
+# Keyword arguments
+- `fracture_aperture = 0.5e-3`: Physical fracture aperture [m]
+- `fracture_porosity = 0.5`: Fracture porosity [-]
+- `fracture_permeability = missing`: Fracture permeability (defaults to `a²/12`)
+- `permeability = 1e-4*darcy`: Matrix permeability
+- `porosity = 0.01`: Matrix porosity
+- `rock_thermal_conductivity = 2.5*watt/(meter*Kelvin)`: Rock thermal conductivity
+- `rock_heat_capacity = 900*joule/(kilogram*Kelvin)`: Rock heat capacity
+- `temperature_inj = 25°C`: Injection temperature
+- `rate`: Total injection rate
+- `num_years = 20`: Number of years to simulate
+- `mesh_args = NamedTuple()`: Extra keyword arguments forwarded to `extruded_mesh`
+- `schedule_args = NamedTuple()`: Extra keyword arguments forwarded to
+  `make_schedule` (e.g. `report_interval`)
+"""
+function egs(
+    injector_coords::Vector{<:Matrix{Float64}},
+    producer_coords::Vector{<:Matrix{Float64}},
+    fracture_radius::Real,
+    fracture_spacing::Real;
+    fracture_aperture = 0.5e-3,
+    fracture_porosity = 0.5,
+    fracture_permeability = missing,
+    permeability = 1e-4 * darcy,
     porosity = 0.01,
-    permeability = 1e-4 .* darcy,
-    rock_thermal_conductivity = 2.5 .* watt/(meter*Kelvin),
-    rock_heat_capacity = 900.0*joule/(kilogram*Kelvin),
+    rock_thermal_conductivity = 2.5 * watt/(meter*Kelvin),
+    rock_heat_capacity = 900.0 * joule/(kilogram*Kelvin),
     temperature_inj = convert_to_si(25, :Celsius),
     rate = 100kilogram/second/(1000kilogram/meter^3),
-    balanced_injection = true,
     num_years = 20,
-    model_args = NamedTuple(),
     mesh_args = NamedTuple(),
     schedule_args = NamedTuple(),
 )
+    all_coords = vcat(injector_coords, producer_coords)
 
-    msh = Fimbul.make_egs_cart_mesh(
-        well_coords, fracture_aperture, fracture_radius, fracture_spacing;
+    # ── Key depths ────────────────────────────────────────────────────────────
+    z_wells  = [maximum(traj[:, 3]) for traj in all_coords]
+    wd_min, wd_max = extrema(z_wells)
+
+    # Identify horizontal-section y-range (waypoints within fracture_radius of max depth)
+    y_deep = vcat([traj[traj[:, 3] .>= wd_max - fracture_radius, 2]
+                   for traj in all_coords]...)
+    isempty(y_deep) && (y_deep = vcat([traj[:, 2] for traj in all_coords]...))
+    y_horiz_min = minimum(y_deep)
+    y_horiz_max = maximum(y_deep)
+
+    # Fracture y-positions, evenly distributed along the horizontal section
+    frac_y_start = y_horiz_min + fracture_spacing / 2
+    frac_y_end   = y_horiz_max - fracture_spacing / 2
+    n_frac = max(1, Int(round((frac_y_end - frac_y_start) / fracture_spacing)) + 1)
+    y_fracs = collect(range(frac_y_start, frac_y_end, length = n_frac))
+
+    # Depth layers: overburden | reservoir zone | buffer
+    wd_top = max(0.0, wd_min - max(fracture_radius * 2.0, wd_min * 0.15))
+    depths = [0.0,
+              wd_top,
+              wd_max + fracture_radius * 0.5,
+              wd_max + fracture_radius * 2.0]
+    hz = diff(depths) ./ [2.0, n_frac * 3.0, 2.0]
+
+    # ── 2D cell constraints (well x-y footprints) ─────────────────────────────
+    cell_constraints = Matrix{Float64}[]
+    for traj in all_coords
+        push!(cell_constraints, traj[:, 1:2]')  # 2×n_points
+    end
+
+    x_wells = [mean(traj[:, 1]) for traj in all_coords]
+    Δx_min  = length(x_wells) > 1 ? minimum(abs.(diff(sort(x_wells)))) : 2.0 * fracture_radius
+    hxy_min = min(Δx_min / 3.0, fracture_radius / 4.0)
+
+    # ── Build extruded matrix mesh ─────────────────────────────────────────────
+    msh, layers, _ = extruded_mesh(cell_constraints, depths;
+        hxy_min  = hxy_min,
+        hz       = hz,
+        offset_rel = 3.0,
         mesh_args...
     )
-    msh = UnstructuredMesh(msh)
 
-    Δy = [cell_dims(msh, c)[2] for c in 1:number_of_cells(msh)]
+    # ── Add DFM fractures (disk in x-z plane at each y_frac) ─────────────────
+    # Each fracture is a PolygonalSurface with a circular polygon in the
+    # plane y = y_frac with normal [0, 1, 0].
+    x_c    = mean(x_wells)
+    z_c    = mean(z_wells)
+    n_poly = 16
+    θ_arr  = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
 
-    is_frac = isapprox.(Δy, fracture_aperture)
+    cuts = PolygonalSurface[]
+    for y_frac in y_fracs
+        polygon = [Jutul.SVector{3, Float64}(
+            x_c + fracture_radius * cos(θ),
+            y_frac,
+            z_c + fracture_radius * sin(θ)) for θ in θ_arr]
+        push!(cuts, PolygonalSurface([polygon]))
+    end
+
+    msh, info = cut_mesh(msh, cuts; extra_out = true, min_cut_fraction = 0.0)
+    fracture_faces = findall(info[:face_index] .== 0)
+    layers = layers[info[:cell_index]]
+
+    fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(msh, fracture_faces)
     geo = tpfv_geometry(msh)
-    xz = geo.cell_centroids[[1,3],:]
-    xw, zw = [], []
-    for wc in well_coords
-        push!(xw, mean(wc[:,1]))
-        push!(zw, maximum(wc[:,3]))
-    end
-    xmin, xmax = extrema(xw)
-    zmin, zmax = extrema(zw)
-    xc = ((xmin + xmax)/2, (zmin + zmax)/2)
-    r = vec(sum((xc .- xz).^2, dims=1).^0.5)
-    is_frac = is_frac .&& (r .<= fracture_radius)
 
-    nc = number_of_cells(msh)
-    function process_prop(v, v_frac)
-        v = fill(v, nc)
-        v[is_frac] .= v_frac
-        return v
-    end
-
-    permeability_frac = fracture_aperture^2/12
-    porosity = process_prop(porosity, 0.5)
-    permeability = process_prop(permeability, permeability_frac)
-    domain = reservoir_domain(msh;
-        porosity = porosity,
-        permeability = permeability,
-        rock_thermal_conductivity = rock_thermal_conductivity,
-        rock_heat_capacity = rock_heat_capacity
+    # ── Matrix domain ──────────────────────────────────────────────────────────
+    matrix_domain = layered_reservoir_domain(msh, layers,
+        (
+            permeability              = [permeability],
+            porosity                  = [porosity],
+            rock_thermal_conductivity = [rock_thermal_conductivity],
+            rock_heat_capacity        = [rock_heat_capacity],
+        )
     )
 
-    if ismissing(well_names)
-        well_names = [:Inj]
-        for i in 2:length(well_coords)
-            push!(well_names, Symbol("Prod$(i-1)"))
-        end
+    # ── Fracture domain ────────────────────────────────────────────────────────
+    if ismissing(fracture_permeability)
+        fracture_permeability = fracture_aperture^2 / 12
     end
-
-    # TODO: support multiple producers
-    wells = []
-    N = get_neighborship(UnstructuredMesh(msh))
-    z = geo.cell_centroids[3, :]
-    WI_max = 1e-9
-    cells, dir = find_well_cells(msh, well_coords[1], z, N, is_frac)
-    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c, dir[cno]) for (cno, c) in enumerate(cells)]
-    open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
-    WI[.!open] .= 0.0
-    WI = min.(WI, WI_max)
-    well_inj = setup_well(domain, cells;
-        name = :Injector,
-        WI = WI,
-        dir = dir,
-        simple_well = false
+    frac_domain = JutulDarcy.fracture_domain(fracture_mesh, matrix_domain;
+        aperture     = fracture_aperture,
+        porosity     = fracture_porosity,
+        permeability = fracture_permeability,
     )
-    push!(wells, well_inj)
 
-    cells = [cells[1]]
-    dir = [dir[1]]
-    neighbors = [0; 0]
-    nodes = [1]
-    cell_no = 1;
-    for (wno, wc) in enumerate(well_coords)
-        wno == 1 ? continue : nothing
-        println("Adding producer branch $(wno-1)/$(length(well_coords)-1)")
-        cells_k, dir_k = find_well_cells(msh, wc, z, N, is_frac)
-        num_cells = length(cells_k)
-        push!(cells, cells_k...)
-        push!(dir, dir_k...)
-        joint_neighbors = [1; cell_no + 1]
-        branch_nodes = collect(1:num_cells) .+ cell_no
-        branch_neighbors = [branch_nodes[1:end-1]'; branch_nodes[2:end]']
-        neighbors = hcat(neighbors, joint_neighbors, branch_neighbors)
-        push!(nodes, branch_nodes...)
-        cell_no += num_cells
-    end
+    # ── Injector well (multi-branch MSW, all legs from a shared top node) ─────
+    inj_connectivity = zeros(Int, length(injector_coords) + 1, 2)
+    inj_connectivity[2:end, 1] .= 1
+    inj_cells, inj_wcells, inj_N, _ = Fimbul.get_well_neighborship(
+        msh, injector_coords, inj_connectivity, geo; top_node = true, n = 1_000_000)
+    inj_cell_centers = hcat(zeros(3), geo.cell_centroids[:, inj_cells])
+    well_inj = setup_well(matrix_domain, inj_cells;
+        name                   = :Injector,
+        neighborship           = inj_N,
+        perforation_cells_well = inj_wcells[2:end],
+        well_cell_centers      = inj_cell_centers,
+        use_top_node           = true,
+        simple_well            = false,
+    )
 
-    neighbors = Int64.(neighbors[:, 2:end])
-    cells = Int64.(cells)
-    WI = [compute_peaceman_index(msh, permeability[c], 0.1, c, dir[cno]) for (cno, c) in enumerate(cells)]
-    open = isapprox.(z[cells], maximum(z[cells]), atol=1.0)
-    WI[.!open] .= 0.0
-    WI = min.(WI, WI_max)[2:end]
-    
-    well_prod = setup_well(domain, cells[2:end];
-        perforation_cells_well = nodes[2:end],
-        well_cell_centers = geo.cell_centroids[:, cells],
-        N = neighbors,
-        name = :Producer,
-        WI = WI,
-        dir = dir[2:end],
-        simple_well = false)
-    
+    # ── Producer well (multi-branch MSW, all legs from a shared top node) ─────
+    prod_connectivity = zeros(Int, length(producer_coords) + 1, 2)
+    prod_connectivity[2:end, 1] .= 1
+    prod_cells, prod_wcells, prod_N, _ = Fimbul.get_well_neighborship(
+        msh, producer_coords, prod_connectivity, geo; top_node = true, n = 1_000_000)
+    prod_cell_centers = hcat(zeros(3), geo.cell_centroids[:, prod_cells])
+    well_prod = setup_well(matrix_domain, prod_cells;
+        name                   = :Producer,
+        neighborship           = prod_N,
+        perforation_cells_well = prod_wcells[2:end],
+        well_cell_centers      = prod_cell_centers,
+        use_top_node           = true,
+        simple_well            = false,
+    )
+
     wells = [well_inj, well_prod]
 
-    model = setup_reservoir_model(
-        domain, :geothermal; wells = wells, model_args...)
-    bc, state0 = set_dirichlet_bcs(model, pressure_surface = 10atm)
+    # ── DFM model ─────────────────────────────────────────────────────────────
+    model = JutulDarcy.setup_fractured_reservoir_model(matrix_domain, frac_domain, :geothermal;
+        wells = wells, block_backend = true)
+
+    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 10atm; output_state=false)
+    
 
     rho = reservoir_model(model).system.rho_ref[1]
-    # Injector: inject cooled water at a rate equal to production
-    # TODO: assert that well exists at construction
-    # if balanced_injection
-    #     rate_target = JutulDarcy.ReinjectionTarget([:Producer])
-    # else
-        rate_target = TotalRateTarget(rate)
-    # end
-    ctrl_inj = InjectorControl(rate_target, [1.0];
+    ctrl_inj = InjectorControl(TotalRateTarget(rate), [1.0];
         density = rho, temperature = temperature_inj, check = false)
-    # Producer
-    # TODO: support multiple periods with different rates
-    bhp_target = BottomHolePressureTarget(25si"bar")
-    ctrl_prod = ProducerControl(bhp_target)
+    ctrl_prod = ProducerControl(BottomHolePressureTarget(25si"bar"))
     control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod)
 
-    forces = setup_reservoir_forces(model, control = control, bc = bc)#, limits = limits)
+    forces = setup_reservoir_forces(model, control = control, bc = bc)
+    dt, forces = make_schedule([forces], [(1, 1), (1, 1)];
+        num_years = num_years, schedule_args...)
 
-    dt, forces = make_schedule(
-        [forces], [(1,1), (1,1)];
-        num_years = num_years,
-        schedule_args...)
+    input_data = Dict{Symbol, Any}(
+        :injector_coords => injector_coords,
+        :producer_coords => producer_coords,
+        :fracture_radius => fracture_radius,
+        :fracture_spacing => fracture_spacing,
+        :y_fracs => y_fracs,
+        :cut_no  => info[:cut_no],
+    )
 
-    # ## Create and return the complete simulation case
-    case = JutulCase(model, dt, forces; state0 = state0)
-    return case
-
+    return JutulCase(model, dt, forces; state0 = state0, input_data = input_data)
 end
 
-function find_well_cells(msh, wc, z, N, is_frac)
-    cells, extra = Jutul.find_enclosing_cells(msh, wc, n = 1000, extra_out=true)
-    dir = Vector.(extra[:direction].*extra[:lengths])
-    frac_cells = Int[]
-    frac_dir = []
-    for cell in cells
-        faces = msh.faces.cells_to_faces[cell]
-        c = vcat(N[:, faces]...)
-        keep = is_frac[c]
-        if any(keep)
-            fc = c[keep][1]
-            if fc in frac_cells
-                continue
-            end
-            push!(frac_cells, fc)
-            L = cell_dims(msh, fc)[2]
-            push!(frac_dir, [0.0, 1.0, 0.0].*L)
-        end
-    end
-    push!(cells, frac_cells...)
-    cells, order = topo_sort_well(cells, msh, N, z)
-    dir = vcat(dir, frac_dir)[order]
-    return cells, dir
-end
-
-function make_egs_cart_mesh(well_coords, fracture_aperture, fracture_radius, fracture_spacing;
-    hx_min = missing,
-    hx_max = missing,
-    hy_min = missing,
-    hy_max = missing,
-    hz_min = missing,
-    hz_max = missing,
-    offset_rel = 2.0,
-)
-    # Calculate domain offset to minimize boundary effects
-    well_distance = abs(well_coords[1][1,1] - well_coords[2][1,1])
-    y_min = minimum(well_coords[1][:, 2])
-    y_max = maximum(well_coords[1][:, 2])
-
-    depth = well_coords[1][3,3]
-
-    offset = offset_rel*(well_distance + fracture_radius)
-    # Well coordinates
-    hx_min = ismissing(hx_min) ? well_distance/3 : hx_min
-    hx_max = ismissing(hx_max) ? offset/5 : hx_max
-    hz_min = ismissing(hz_min) ? hx_min : hz_min
-    hz_max = ismissing(hz_max) ? (depth - fracture_radius)/5 : hz_max
-
-    function make_coords_xz(x0, xw, h_min, h_max)
-
-        x_min, x_max = extrema(xw)
-        x_mid = (x_min + x_max)/2
-
-        xw .-= h_min/2
-        xw = vcat(x_mid - fracture_radius, xw, x_mid + fracture_radius)
-        xd = sort(vcat(x0, xw))
-        nx = length(xd)-1
-        hxz = fill(h_max, nx)
-        x_mid = diff(xd)./2 .+ xd[1:end-1]
-        is_frac = x_min - fracture_radius .<= x_mid .<= x_max + fracture_radius
-        hxz[is_frac] .= h_min
-
-        xd = first(Fimbul.interpolate_z(xd, hxz))
-
-        return xd
-
-    end
-
-    xw = []
-    for wc in well_coords
-        x = unique!(wc[:, 1])
-        push!(xw, x...)
-    end
-    x_min, x_max = extrema(xw)
-    x_mid = (x_min + x_max)/2
-    x0 = [
-        x_mid - offset,
-        x_mid + offset
-    ]
-    x = make_coords_xz(x0, xw, hx_min, hx_max)
-
-    zw = []
-    for wc in well_coords
-        z = wc[2,3]
-        push!(zw, z...)
-    end
-    z0 = [
-        0.0,
-        maximum(zw) + offset
-    ]
-    z = make_coords_xz(z0, zw, hz_min, hz_max)
-
-    yw = []
-    for wc in well_coords
-        y = unique!(wc[:, 2])
-        push!(yw, y...)
-    end
-    unique!(yw)
-
-    y_min, y_max = extrema(yw)
-
-    hy_min = ismissing(hy_min) ? fracture_spacing/5 : hy_min
-    hy_max = ismissing(hy_max) ? max(offset, y_max - fracture_radius)/5 : hy_max
-
-    fracture_start = y_min + fracture_spacing/2
-    fracture_end = y_max - fracture_spacing/2
-    fractured_length = fracture_end - fracture_start
-    @assert fractured_length > 0 "Fracture spacing too large for well length"
-    nfrac = Int(round(fractured_length/fracture_spacing)) + 1
-    
-    fracture_y = range(fracture_start, stop=fracture_end, length=nfrac)
-    fracture_y = sort(vcat(fracture_y, fracture_y .+ fracture_aperture))
-
-    y = [
-        y_min - offset,
-        y_min - hy_min/2,
-        fracture_y...,
-        y_max + hy_min/2,
-        y_max + offset
-    ]
-
-    hy = fill(hy_max, length(y)-1)
-    y_mid = diff(y)./2 .+ y[1:end-1]
-    is_frac = y_min .< y_mid .< y_max
-    hy[is_frac] .= hy_min
-    dy = diff(y)
-    ix = [1, length(dy)]
-    n = ceil.(dy[ix]./hy[ix])
-    fix = n .< 5 .&& .!is_frac[ix]
-    hy[ix[fix]] .= dy[ix[fix]]./5
-
-    y = first(Fimbul.interpolate_z(y, hy))
-    
-    xyz = (x, y, z)
-    sizes = map(x->diff(x), xyz)
-    dims = Tuple([length(s) for s in sizes])
-    msh = CartesianMesh(dims, sizes, origin = minimum.(xyz))
-
-    return msh
-
-end
-
- """
-    get_egs_fracture_data(states, model, well)
-
-Extract flow rates, temperatures, and energy fluxes from individual fractures
-connected to the specified well. This function processes simulation results
-to compute fracture-level performance metrics.
-
-Args:
-    states: Simulation state results for all timesteps
-    model: EGS model containing well and fracture geometry
-    well: Well symbol to analyze
-
-Returns:
-    Dictionary containing fracture-level data arrays:
-    - :y: Y-coordinates of fracture locations
-    - :Temperature: Temperature evolution in each fracture
-    - :MassFlux: Mass flow rate to/from well into each fracture
-    - :EnergyFlux: Thermal energy flux to/from well into each fracture
-
-    NOTE: Positive flux indicates flow into the fracture from the well, negative
-    indicates flow out of the fracture into the well.
-    
 """
-function get_egs_fracture_data(states, dt, model, well; geo = missing)
+    egs(well_coords, fracture_radius, fracture_spacing; kwargs...)
 
-    # Mesh and geometry
-    msh = physical_representation(reservoir_model(model).data_domain)
-    geo  = ismissing(geo) ? tpfv_geometry(msh) : geo
+Backward-compatible dispatch: `well_coords[1]` is the injector trajectory,
+`well_coords[2:end]` are the producer trajectories.
+"""
+function egs(well_coords::Vector{<:Matrix}, fracture_radius, fracture_spacing; kwargs...)
+    egs([well_coords[1]], well_coords[2:end], fracture_radius, fracture_spacing; kwargs...)
+end
 
-    ## Extract well perforation data and connectivity information
-    perf = model.models[well].data_domain.representation.perforations # Well-fracture connections
-    WI = model.models[well].data_domain[:well_index]
-    N = model.models[well].domain.representation.neighborship # Cell connectivity matrix
-    fcells = findall(isapprox.(WI, maximum(WI), rtol=1e-1)) # High-productivity fracture connections
-    rcells = perf.reservoir[fcells] # Reservoir cells connected to fractures
-    jj = [cell_ijk(msh, c)[2] for c in rcells] # Y-indices of fracture cells
-    ## Initialize data arrays for fracture analysis
-    JJ = unique(jj) # Unique fracture Y-locations
-    nstep = length(states) # Number of simulation timesteps
-    nfrac = length(JJ) # Number of discrete fractures
-    Q, Qh, T = zeros(nstep, nfrac), zeros(nstep, nfrac), zeros(nstep, nfrac) # Pre-allocate arrays
-    Mr, Er = zeros(nstep, nfrac), zeros(nstep, nfrac)
-    y = geo.cell_centroids[2, rcells] # Y-coordinates of fracture centers
+"""
+    get_egs_fracture_data(states, model)
 
-    ## Process each simulation timestep
-    p1 = minimum(perf.self)
-    ϕ = model.models[:Reservoir].data_domain[:porosity]
-    jjr = [cell_ijk(msh, c)[2] for c in 1:number_of_cells(msh)]
-    is_frac(j) = ϕ .== maximum(ϕ) .&& jjr .== j # Identify fracture cells by porosity
-    
-    fcells = fcells .+ (p1 - 1) # Adjust to global well perforation indices
+Extract per-fracture temperature and thermal-energy data from EGS DFM
+simulation results. Fracture cells are grouped by y-coordinate (fracture
+position) and mean temperature / total thermal energy are returned for every
+timestep.
+
+Returns a `Dict` with:
+- `:y`:                 y-coordinates of each fracture [m]
+- `:Temperature`:       `(n_steps × n_frac)` matrix of mean fracture temperature [K]
+- `:TotalThermalEnergy`: `(n_steps × n_frac)` matrix of total thermal energy [J]
+"""
+function get_egs_fracture_data(states, model)
+    frac_domain = model.models[:Fractures].data_domain
+    frac_mesh   = physical_representation(frac_domain)
+    frac_geo    = tpfv_geometry(frac_mesh)
+    y_all = frac_geo.cell_centroids[2, :]
+
+    # Group fracture cells by y-position (round to nearest metre)
+    y_rounded = round.(y_all; digits = 0)
+    y_unique  = sort(unique(y_rounded))
+    n_frac    = length(y_unique)
+    n_step    = length(states)
+
+    T_mat = zeros(n_step, n_frac)
+    E_mat = zeros(n_step, n_frac)
+
     for (sno, state) in enumerate(states)
-        ## Extract mass fluxes and enthalpies from well model
-        Qn = state[well][:TotalMassFlux] # Mass flux per well segment [kg/s]
-        h = state[well][:FluidEnthalpy] # Fluid enthalpy [J/kg]
-
-        ## Apply upwind scheme for enthalpy (use upstream cell value)
-        h = [q > 0 ? h[N[1,s]] : h[N[2,s]] for (s,q) in enumerate(Qn)]
-        
-        ## Compute energy fluxes combining mass and enthalpy
-        Qhn = Qn.*h # Energy flux [W]
-
-        ## Calculate net fluxes per fracture segment (flow into fracture)
-        Tn = state[:Reservoir][:Temperature][rcells] # Temperature in fracture [K]
-        Qnf = zeros(length(fcells))
-        Qhnf = zeros(length(fcells))
-        for (fno, c) in enumerate(fcells)
-            fseg = findall(vec(any(N .== c, dims=1)))
-            @assert length(fseg) == 2 "Fracture cell $c not found in connectivity matrix"
-            Qnf[fno] = (Qn[fseg[1]] - Qn[fseg[2]]) # Net mass flow into fracture (accounting for storage)
-            Qhnf[fno] = (Qhn[fseg[1]] - Qhn[fseg[2]]) # Net energy flow into fracture (accounting for storage)
-        end
-        ## Aggregate data by fracture Y-location
-        for (fno, j) in enumerate(JJ)
-            ix = jj .== j # Cells belonging to this fracture
-            Q[sno, fno] = sum(Qnf[ix]) # Total mass flow for this fracture
-            Qh[sno, fno] = sum(Qhnf[ix]) # Total energy flow for this fracture
-            T[sno, fno] = mean(Tn[ix]) # Average temperature for this fracture
-            rc = is_frac(j) # Identify all cells in this fracture
-            Mr[sno, fno] = sum(states[sno][:Reservoir][:TotalMasses][rc])
-            Er[sno, fno] = sum(states[sno][:Reservoir][:TotalThermalEnergy][rc])
+        T_frac = state[:Fractures][:Temperature]
+        E_frac = state[:Fractures][:TotalThermalEnergy]
+        for (fno, y) in enumerate(y_unique)
+            ix = y_rounded .== y
+            T_mat[sno, fno] = mean(T_frac[ix])
+            E_mat[sno, fno] = sum(E_frac[ix])
         end
     end
 
-    ## Return organized fracture data
-    data = Dict()
-    data[:y] = y # Spatial coordinates
-    data[:Temperature] = T # Temperature evolution [K]
-    data[:MassFlux] = Q # Mass flux evolution [kg/s]
-    data[:EnergyFlux] = Qh # Energy flux evolution [W]
-    data[:TotalMass] = Mr # Total mass in fracture [kg]
-    data[:TotalThermalEnergy] = Er # Total thermal energy in fracture [J]
-
-    return data
+    return Dict{Symbol, Any}(
+        :y                   => y_unique,
+        :Temperature         => T_mat,
+        :TotalThermalEnergy  => E_mat,
+    )
 end
