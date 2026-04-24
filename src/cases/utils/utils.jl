@@ -316,6 +316,7 @@ function set_dirichlet_bcs(model, subset = :all;
         pressure_surface = 1atm, 
         temperature_surface = convert_to_si(10.0, :Celsius),
         geothermal_gradient = 0.03Kelvin/meter,
+        output_state=true,
     )
 
     if subset == :all
@@ -361,15 +362,20 @@ function set_dirichlet_bcs(model, subset = :all;
     z_hat = z_bc .- z0
     bc = flow_boundary_condition(cells_bc, rmodel.data_domain, p(z_hat), T(z_hat));
 
-    # Set initial conditions
-    z_cells = geo.cell_centroids[3, :]
-    z_hat = z_cells .- z0
-    state0 = setup_reservoir_state(model,
-        Pressure = p(z_hat),
-        Temperature = T(z_hat)
-    );
+    if output_state
+        # Set initial conditions
+        z_cells = geo.cell_centroids[3, :]
+        z_hat = z_cells .- z0
+        state0 = setup_reservoir_state(model,
+            Pressure = p(z_hat),
+            Temperature = T(z_hat)
+        );
+        out = (bc, state0, p, T)
+    else
+        out = (bc, p, T)
+    end
 
-    return bc, state0, p, T
+    return out
 
 end
 
