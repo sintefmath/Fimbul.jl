@@ -118,3 +118,56 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     end
 
 end
+
+"""
+    adjust_well_indices!(well, well_name, fractures=false)
+
+Adjust the drainage radius of well perforations where the equivalent Peaceman
+radius would exceed the cell dimensions (i.e. `re ≤ 3*r_perf`). In such cases
+the drainage radius is set to `r_perf * (1 + 1e-3)` to satisfy the assertion
+in `compute_peaceman_index`.
+
+Set `fractures=true` to operate on the fracture well indices instead of the
+matrix well indices.
+"""
+function adjust_well_indices!(well, well_name, fractures=false)
+    if !fractures
+        cd = :cell_dims
+        pr = :perforation_radius
+        dr = :drainage_radius
+        pd = :perforation_direction
+        e  = Perforations()
+    else
+        cd = :cell_dims_frac
+        pr = :perforation_radius_frac
+        dr = :drainage_radius_frac
+        pd = :perforation_direction_frac
+        e  = JutulDarcy.FracturePerforations()
+    end
+    Δ      = well[cd, e]
+    radius = well[pr, e]
+    dir    = well[pd, e]
+    num_violations = 0
+    for (k, (Δk, rk, dk)) in enumerate(zip(Δ, radius, dir))
+        if dk == :x
+            i, j = 1, 3
+        elseif dk == :y
+            i, j = 2, 3
+        elseif dk == :z
+            i, j = 1, 2
+        else
+            error("Unknown perforation direction $dk for well $well_name")
+        end
+        re = 0.14 * sqrt(Δk[i]^2 + Δk[j]^2)
+        if re <= 3 * rk
+            well[dr, e][k] = rk * (1.0 + 1e-3)
+            num_violations += 1
+        end
+    end
+    if num_violations > 0
+        kind = fractures ? "fracture " : ""
+        @warn "Adjusted $num_violations $(kind)drainage radii for well \
+        $well_name due to cell dimensions smaller than perforation radius."
+    end
+    return well
+end
