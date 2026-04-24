@@ -33,18 +33,18 @@ function egs_well_coordinates(;
     r = bend_radius
     function make_trajectory(x, wd)
         # Quarter-arc bend in the y-z plane:
-        #   θ = 0   → position (x, 0, wd-r), going downward (+z)
-        #   θ = π/2 → position (x, r, wd),   going horizontal (+y)
-        # Arc center at (x, 0, wd)
-        θ_arr = range(0.0, π/2, length = n_bend + 2)
-        y_bend = r .* sin.(θ_arr)
-        z_bend = wd .- r .* cos.(θ_arr)
+        #   θ = 0   → top of arc: position (x, 0,   wd),     going downward (+z)
+        #   θ = π/2 → end of arc: position (x, r,   wd),     going horizontal (+y)
+        # Arc center at (x, r, wd) so the well curves from vertical to horizontal
+        θ_arr = range(0.0, π/2, length = n_bend + 2)   # 0 → π/2
+        y_bend = r .- r .* cos.(θ_arr)                  # 0 → r
+        z_bend = wd .+ r .* (sin.(θ_arr) .- 1)                 # wd-r → wd
         traj = [x 0.0 0.0;
-                x 0.0 (wd - r)]                       # surface → end-of-vertical
+                x 0.0 (wd - r)]                         # surface → start of bend
         for i in 2:length(θ_arr)-1
             traj = vcat(traj, [x y_bend[i] z_bend[i]])  # interior bend waypoints
         end
-        traj = vcat(traj, [x well_lateral wd])          # end of horizontal section
+        traj = vcat(traj, [x well_lateral wd])           # end of horizontal section
         return traj
     end
     injector_coords = [make_trajectory(0.0, well_depth)]
@@ -81,6 +81,12 @@ well with branches coupled at a shared top node.
 - `temperature_inj = 25°C`: Injection temperature
 - `rate`: Total injection rate
 - `num_years = 20`: Number of years to simulate
+- `fracture_offset = 50.0`: Minimum distance along the horizontal section before
+  the first fracture [m], ensuring the well is fully horizontal before fracturing
+- `fracture_theta = 0.0`: Tilt angle(s) between the fracture normal and the well
+  axis (y-direction). A scalar applies the same angle to all fractures; a vector
+  of length `n_frac` sets one angle per fracture; a 2-tuple `(theta, theta_std)`
+  samples angles from `N(theta, theta_std)` independently per fracture [rad]
 - `mesh_args = NamedTuple()`: Extra keyword arguments forwarded to `extruded_mesh`
 - `schedule_args = NamedTuple()`: Extra keyword arguments forwarded to
   `make_schedule` (e.g. `report_interval`)
@@ -100,6 +106,8 @@ function egs(
     temperature_inj = convert_to_si(25, :Celsius),
     rate = 100kilogram/second/(1000kilogram/meter^3),
     num_years = 20,
+    fracture_offset = 50.0,
+    fracture_theta = 0.0,
     mesh_args = NamedTuple(),
     schedule_args = NamedTuple(),
 )
@@ -116,8 +124,9 @@ function egs(
     y_horiz_min = minimum(y_deep)
     y_horiz_max = maximum(y_deep)
 
-    # Fracture y-positions, evenly distributed along the horizontal section
-    frac_y_start = y_horiz_min + fracture_spacing / 2
+    # Fracture y-positions, evenly distributed along the horizontal section.
+    # fracture_offset ensures the well is fully horizontal before the first fracture.
+    frac_y_start = y_horiz_min + fracture_offset + fracture_spacing / 2
     frac_y_end   = y_horiz_max - fracture_spacing / 2
     n_frac = max(1, Int(round((frac_y_end - frac_y_start) / fracture_spacing)) + 1)
     y_fracs = collect(range(frac_y_start, frac_y_end, length = n_frac))
@@ -140,28 +149,53 @@ function egs(
     Δx_min  = length(x_wells) > 1 ? minimum(abs.(diff(sort(x_wells)))) : 2.0 * fracture_radius
     hxy_min = min(Δx_min / 3.0, fracture_radius / 4.0)
 
+    # Shift cell constraints by hxy_min/2 so well coordinates don't land on cell boundaries
+    cell_constraints = [c .+ hxy_min/2 for c in cell_constraints]
+
     # ── Build extruded matrix mesh ─────────────────────────────────────────────
     msh, layers, _ = extruded_mesh(cell_constraints, depths;
         hxy_min  = hxy_min,
         hz       = hz,
-        offset_rel = 3.0,
+        offset_rel = 1.0,
         mesh_args...
     )
 
-    # ── Add DFM fractures (disk in x-z plane at each y_frac) ─────────────────
-    # Each fracture is a PolygonalSurface with a circular polygon in the
-    # plane y = y_frac with normal [0, 1, 0].
+    # ── Add DFM fractures ────────────────────────────────────────────────────
+    # Each fracture is a disk centered on the well at the fracture y-position.
+    # fracture_theta controls the angle between the fracture normal and the well
+    # direction (y-axis): theta=0 means normal parallel to well (fracture ⊥ well).
+    # fracture_theta may be:
+    #   - a scalar (same angle for all fractures)
+    #   - a vector of length n_frac (one angle per fracture)
+    #   - a 2-tuple (theta_mean, theta_std) → sample N(theta_mean, theta_std)
     x_c    = mean(x_wells)
     z_c    = mean(z_wells)
     n_poly = 16
-    θ_arr  = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
+    θ_poly = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
+
+    # Resolve per-fracture tilt angles
+    _n_frac = length(y_fracs)
+    if fracture_theta isa Tuple{<:Real, <:Real}
+        θ_mean, θ_std = fracture_theta
+        tilt_angles = θ_mean .+ θ_std .* randn(_n_frac)
+    elseif fracture_theta isa AbstractVector
+        length(fracture_theta) == _n_frac ||
+            error("fracture_theta vector must have length n_frac = $_n_frac")
+        tilt_angles = Float64.(fracture_theta)
+    else
+        tilt_angles = fill(Float64(fracture_theta), _n_frac)
+    end
 
     cuts = PolygonalSurface[]
-    for y_frac in y_fracs
+    for (fno, y_frac) in enumerate(y_fracs)
+        α = tilt_angles[fno]   # tilt around x-axis: 0 → disk in x-z plane, normal=[0,1,0]
+        # Disk parameterisation: local u = x-axis, v = z-axis rotated by α around x
+        u_vec = Jutul.SVector(1.0, 0.0, 0.0)
+        v_vec = Jutul.SVector(0.0, -sin(α), cos(α))  # tilt in y-z plane
         polygon = [Jutul.SVector{3, Float64}(
-            x_c + fracture_radius * cos(θ),
-            y_frac,
-            z_c + fracture_radius * sin(θ)) for θ in θ_arr]
+            x_c + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
+            y_frac + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
+            z_c + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
         push!(cuts, PolygonalSurface([polygon]))
     end
 
@@ -171,6 +205,8 @@ function egs(
 
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(msh, fracture_faces)
     geo = tpfv_geometry(msh)
+
+    # return fracture_mesh, msh
 
     # ── Matrix domain ──────────────────────────────────────────────────────────
     matrix_domain = layered_reservoir_domain(msh, layers,
@@ -195,14 +231,23 @@ function egs(
     # ── Injector well (multi-branch MSW, all legs from a shared top node) ─────
     inj_connectivity = zeros(Int, length(injector_coords) + 1, 2)
     inj_connectivity[2:end, 1] .= 1
-    inj_cells, inj_wcells, inj_N, _ = Fimbul.get_well_neighborship(
-        msh, injector_coords, inj_connectivity, geo; top_node = true, n = 1_000_000)
+    inj_cells, inj_wcells, inj_N, _, inj_dir = Fimbul.get_well_neighborship(
+        msh, injector_coords, inj_connectivity, geo; top_node = true, output_directions=true, n = 1_000_000)
+    # Change to :x/:y/:z as vector directions are not supported for fractures yet
+    inj_dir_sym = Vector{Symbol}(undef, length(inj_dir))
+    for (i, d) in enumerate(inj_dir)
+        inj_dir_sym[i] = [:x, :y, :z][last(findmax(abs.(d)))]
+    end
+    # TODO: This is a hack to cater for how fractures are added to wells, and
+    # should be removed once this is fixed in setup_fractured_reservoir_model 
+    inj_dir_sym[1] = :y
     inj_cell_centers = hcat(zeros(3), geo.cell_centroids[:, inj_cells])
     well_inj = setup_well(matrix_domain, inj_cells;
         name                   = :Injector,
         neighborship           = inj_N,
         perforation_cells_well = inj_wcells[2:end],
         well_cell_centers      = inj_cell_centers,
+        dir                    = inj_dir_sym,
         use_top_node           = true,
         simple_well            = false,
     )
@@ -210,14 +255,22 @@ function egs(
     # ── Producer well (multi-branch MSW, all legs from a shared top node) ─────
     prod_connectivity = zeros(Int, length(producer_coords) + 1, 2)
     prod_connectivity[2:end, 1] .= 1
-    prod_cells, prod_wcells, prod_N, _ = Fimbul.get_well_neighborship(
-        msh, producer_coords, prod_connectivity, geo; top_node = true, n = 1_000_000)
+    prod_cells, prod_wcells, prod_N, _, prod_dir = Fimbul.get_well_neighborship(
+        msh, producer_coords, prod_connectivity, geo; top_node = true, output_directions=true, n = 1_000_000)
+    prod_dir_sym = Vector{Symbol}(undef, length(prod_dir))
+    for (i, d) in enumerate(prod_dir)
+        prod_dir_sym[i] = [:x, :y, :z][last(findmax(abs.(d)))]
+    end
+    # TODO: This is a hack to cater for how fractures are added to wells, and
+    # should be removed once this is fixed in setup_fractured_reservoir_model
+    prod_dir_sym[1] = :y
     prod_cell_centers = hcat(zeros(3), geo.cell_centroids[:, prod_cells])
     well_prod = setup_well(matrix_domain, prod_cells;
         name                   = :Producer,
         neighborship           = prod_N,
         perforation_cells_well = prod_wcells[2:end],
         well_cell_centers      = prod_cell_centers,
+        dir                    = prod_dir_sym,
         use_top_node           = true,
         simple_well            = false,
     )
@@ -228,8 +281,22 @@ function egs(
     model = JutulDarcy.setup_fractured_reservoir_model(matrix_domain, frac_domain, :geothermal;
         wells = wells, block_backend = true)
 
-    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 10atm; output_state=false)
-    
+    for (well_name, well_model) in get_model_wells(model; data_domain = true)
+        adjust_well_indices!(well_model, well_name, true)
+    end
+
+    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 10atm, output_state=false)
+    z = geo.cell_centroids[3, :]
+    z_hat = z .- minimum(z)
+    state0 = setup_reservoir_state(model; Pressure = p(0.0), Temperature = T(0.0))
+    state0[:Reservoir][:Pressure] .= p(z_hat)
+    state0[:Reservoir][:Temperature] .= T(z_hat)
+
+    geo_frac = tpfv_geometry(fracture_mesh)
+    z = geo_frac.cell_centroids[3, :]
+    z_hat = z .- minimum(z)
+    state0[:Fractures][:Pressure] .= p(z_hat)
+    state0[:Fractures][:Temperature] .= T(z_hat)
 
     rho = reservoir_model(model).system.rho_ref[1]
     ctrl_inj = InjectorControl(TotalRateTarget(rate), [1.0];
@@ -246,6 +313,9 @@ function egs(
         :producer_coords => producer_coords,
         :fracture_radius => fracture_radius,
         :fracture_spacing => fracture_spacing,
+        :fracture_offset  => fracture_offset,
+        :fracture_theta   => fracture_theta,
+        :tilt_angles      => tilt_angles,
         :y_fracs => y_fracs,
         :cut_no  => info[:cut_no],
     )
