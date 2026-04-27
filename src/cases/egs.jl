@@ -119,6 +119,7 @@ function egs(
 
     # ── Key depths ────────────────────────────────────────────────────────────
     z_wells  = [maximum(traj[:, 3]) for traj in all_coords]
+    x_wells = [mean(traj[:, 1]) for traj in all_coords]
     wd_min, wd_max = extrema(z_wells)
 
     # Identify horizontal-section y-range (waypoints within fracture_radius of max depth)
@@ -135,12 +136,15 @@ function egs(
     n_frac = max(1, Int(round((frac_y_end - frac_y_start) / fracture_spacing)) + 1)
     y_fracs = collect(range(frac_y_start, frac_y_end, length = n_frac))
 
+    x_c    = mean(x_wells)
+    z_c    = mean(z_wells)    
+
     # Depth layers: overburden | reservoir zone | buffer
     depths = [0.0,
-              wd_min - fracture_radius * 0.75,
-              wd_max + fracture_radius * 0.75,
-              wd_max + fracture_radius * 2.0]
-    hz = diff(depths) ./ [2.0, n_frac * 3.0, 2.0]
+              z_c - fracture_radius * 0.75,
+              z_c + fracture_radius * 0.75,
+              z_c + fracture_radius * 2.0]
+    hz = diff(depths) ./ [5.0, n_frac * 3.0, 5.0]
 
     # println("Well depths: ", z_wells)
     # println("Depth layers: ", depths)
@@ -153,7 +157,6 @@ function egs(
         push!(cell_constraints, traj[:, 1:2]')  # 2×n_points
     end
 
-    x_wells = [mean(traj[:, 1]) for traj in all_coords]
     Δx_min  = length(x_wells) > 1 ? minimum(abs.(diff(sort(x_wells)))) : 2.0 * fracture_radius
     hxy_min = min(Δx_min / 3.0, fracture_radius / 4.0)
 
@@ -187,8 +190,6 @@ function egs(
     #   - a scalar (same angle for all fractures)
     #   - a vector of length n_frac (one angle per fracture)
     #   - a 2-tuple (theta_mean, theta_std) → sample N(theta_mean, theta_std)
-    x_c    = mean(x_wells)
-    z_c    = mean(z_wells)
     n_poly = 16
     θ_poly = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
 
@@ -281,7 +282,7 @@ function egs(
     inj_connectivity = zeros(Int, length(injector_coords) + 1, 2)
     inj_connectivity[2:end, 1] .= 1
     inj_cells, inj_wcells, inj_N, _, inj_dir = Fimbul.get_well_neighborship(
-        msh, injector_coords, inj_connectivity, geo; top_node = true, output_directions=true, n = 1_000)
+        msh, injector_coords, inj_connectivity, geo; top_node = true, output_directions=true, n = 10_000)
     # Change to :x/:y/:z as vector directions are not supported for fractures yet
     inj_dir_sym = Vector{Symbol}(undef, length(inj_dir))
     for (i, d) in enumerate(inj_dir)
@@ -305,7 +306,7 @@ function egs(
     prod_connectivity = zeros(Int, length(producer_coords) + 1, 2)
     prod_connectivity[2:end, 1] .= 1
     prod_cells, prod_wcells, prod_N, _, prod_dir = Fimbul.get_well_neighborship(
-        msh, producer_coords, prod_connectivity, geo; top_node = true, output_directions=true, n = 1_000)
+        msh, producer_coords, prod_connectivity, geo; top_node = true, output_directions=true, n = 10_000)
     prod_dir_sym = Vector{Symbol}(undef, length(prod_dir))
     for (i, d) in enumerate(prod_dir)
         prod_dir_sym[i] = [:x, :y, :z][last(findmax(abs.(d)))]
