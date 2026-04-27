@@ -187,12 +187,13 @@ fig
 # and annual energy production.
 
 # Extract fracture data from simulation results using the DFM-aware helper.
-# `get_egs_fracture_data` groups fracture cells by y-position and returns mean
-# temperature and total thermal energy per fracture for every timestep.
+# Passing the full `case` lets `get_egs_fracture_data` use the `:cut_no` field
+# from `cut_mesh` to directly assign each fracture cell to its originating
+# fracture plane, avoiding the heuristic y-coordinate grouping.
 states, dt, _ = Jutul.expand_to_ministeps(results.result)
 time = cumsum(dt) ./ si_unit(:year)
 
-fdata = Fimbul.get_egs_fracture_data(states, case.model)
+fdata = Fimbul.get_egs_fracture_data(states, case)
 n_frac = length(fdata[:y])
 colors = cgrad(:BrBg, n_frac, categorical = true)
 
@@ -230,9 +231,18 @@ plot_fracture_data(ax, time[first_step:end],
     convert_from_si.(temperature, :Celsius))
 hidexdecorations!(ax, grid = false)
 
-# Thermal power approximated from rate of change of stored thermal energy
-Er     = fdata[:TotalThermalEnergy]
-power  = .-diff(vcat(Er[1,:]', Er), dims = 1) ./ dt  # negative: energy leaving
+# Thermal power from the fracture energy balance:
+#   power = dE/dt + q_out - q_in = heat extracted from rock matrix
+# where q_in is the energy carried into the fracture by the injected cold fluid
+# and q_out is the energy carried out by the produced warm fluid. This is more
+# accurate than the bare -dE/dt approximation because it isolates the
+# matrix-to-fracture conductive heat extraction from changes in stored fluid
+# energy caused by the circulating fluid.
+Er    = fdata[:TotalThermalEnergy]
+dEdt  = diff(vcat(Er[1,:]', Er), dims = 1) ./ dt  # rate of change of fracture stored energy
+q_in  = fdata[:q_in]   # injector → fracture energy flux [W]
+q_out = fdata[:q_out]  # fracture → producer energy flux [W]
+power = dEdt .+ q_out .- q_in  # heat extracted from rock matrix [W]
 
 ax_pwr = make_axis("Thermal power", "Power (MW)", 2)
 plot_fracture_data(ax_pwr, time[first_step:end],

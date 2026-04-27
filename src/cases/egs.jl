@@ -355,17 +355,161 @@ function egs(well_coords::Vector{<:Matrix}, fracture_radius, fracture_spacing; k
 end
 
 """
-    get_egs_fracture_data(states, model)
+    _well_fracture_energy_exchange(states, model, well_name, cut_no_frac, n_frac)
+
+Compute the net wellbore-to-fracture thermal energy exchange for every fracture
+and every timestep, using the MSW face-based energy balance.
+
+For each fracture-connected well cell `wc`, the net wellbore energy entering
+that cell equals the energy diverted to (or received from) the connected
+fracture, under the quasi-steady assumption that the well-cell stored energy
+changes negligibly over a timestep.
+
+Energy flux at face `f`: `Φ(f) = TotalMassFlux(f) × H(upstream_cell)`.  
+Convention: `TotalMassFlux > 0` means flow from `N[1,f]` to `N[2,f]`.
+
+Returns an `(n_steps × n_frac)` matrix where:
+- For the injector: positive entry = energy carried by cold fluid INTO the fracture.
+- For the producer: negative entry = energy flowing OUT of the fracture into the
+  well (negate to obtain `q_out`).
+"""
+function _well_fracture_energy_exchange(states, model, well_name, cut_no_frac, n_frac)
+    well_domain = physical_representation(model.models[well_name].data_domain)
+    haskey(well_domain.perforations, :fracture) || return zeros(length(states), n_frac)
+
+    fc  = vec(well_domain.perforations.fracture)       # fracture cell indices
+    wc  = vec(well_domain.perforations.self_fracture)  # well cell indices
+
+    # Fracture number for each perforation (0 if cell is an intersection node)
+    fno = [k <= length(cut_no_frac) ? cut_no_frac[k] : 0 for k in fc]
+
+    N            = well_domain.neighborship        # 2 × n_faces
+    n_well_cells = well_domain.num_nodes
+    n_faces      = size(N, 2)
+
+    # Pre-build cell → faces mapping with sign:
+    #   sign = +1: face enters cell  (cell == N[2,f])
+    #   sign = -1: face leaves cell  (cell == N[1,f])
+    cell_faces = [Int[] for _ in 1:n_well_cells]
+    cell_sign  = [Int[] for _ in 1:n_well_cells]
+    for f in 1:n_faces
+        l, r = N[1, f], N[2, f]
+        push!(cell_faces[l], f); push!(cell_sign[l], -1)
+        push!(cell_faces[r], f); push!(cell_sign[r], +1)
+    end
+
+    n_step = length(states)
+    q_mat  = zeros(n_step, n_frac)
+
+    for (sno, state) in enumerate(states)
+        sw  = state[well_name]
+        tmf = sw[:TotalMassFlux]  # mass flux at each face [kg/s], positive = N[1]→N[2]
+        H   = sw[:FluidEnthalpy]  # specific enthalpy [J/kg], size (n_phases, n_cells)
+
+        # Thermal energy flux at each face [W]: positive = from N[1] to N[2]
+        Φ = Vector{Float64}(undef, n_faces)
+        for f in 1:n_faces
+            upstream = tmf[f] >= 0 ? N[1, f] : N[2, f]
+            Φ[f] = tmf[f] * sum(H[:, upstream])
+        end
+
+        # Accumulate net wellbore energy entering each fracture-connected cell
+        for (wc_i, k) in zip(wc, fno)
+            k == 0 && continue
+            q_net = zero(eltype(Φ))
+            for (f, s) in zip(cell_faces[wc_i], cell_sign[wc_i])
+                q_net += s * Φ[f]
+            end
+            q_mat[sno, k] += q_net
+        end
+    end
+
+    return q_mat
+end
+
+"""
+    get_egs_fracture_data(states, case::JutulCase)
 
 Extract per-fracture temperature and thermal-energy data from EGS DFM
-simulation results. Fracture cells are grouped by y-coordinate (fracture
-position) and mean temperature / total thermal energy are returned for every
-timestep.
+simulation results. Fracture cells are assigned to their originating fracture
+plane using the `:cut_no` field stored in `case.input_data`, which is produced
+by `cut_mesh` when given a vector of cuts. This is more robust than grouping by
+rounded y-coordinate.
+
+Well-fracture energy exchange is also computed from the MSW wellbore energy
+balance. For each fracture, `q_in` is the thermal energy carried by the
+injected fluid into the fracture and `q_out` is the thermal energy carried by
+the produced fluid out of the fracture. The matrix-to-fracture heat extraction
+rate (geothermal power) is then `power = dE/dt + q_out - q_in`.
 
 Returns a `Dict` with:
-- `:y`:                 y-coordinates of each fracture [m]
-- `:Temperature`:       `(n_steps × n_frac)` matrix of mean fracture temperature [K]
+- `:y`:                  y-coordinates of each fracture plane [m]
+- `:Temperature`:        `(n_steps × n_frac)` matrix of mean fracture temperature [K]
 - `:TotalThermalEnergy`: `(n_steps × n_frac)` matrix of total thermal energy [J]
+- `:q_in`:               `(n_steps × n_frac)` matrix of injector→fracture energy flux [W]
+- `:q_out`:              `(n_steps × n_frac)` matrix of fracture→producer energy flux [W]
+"""
+function get_egs_fracture_data(states, case::JutulCase)
+    model       = case.model
+    cut_no_all  = case.input_data[:cut_no]
+    y_fracs     = case.input_data[:y_fracs]
+
+    frac_domain = model.models[:Fractures].data_domain
+    frac_mesh   = physical_representation(frac_domain)
+
+    # Each regular fracture cell (1:n_regular) maps to a parent face in the cut
+    # mesh. Look up which cut (fracture plane) produced that face.
+    n_regular = length(frac_mesh.parent_faces)
+    cut_no    = cut_no_all[frac_mesh.parent_faces]
+
+    # Full mapping from any fracture cell index → fracture plane number
+    # (intersection junction cells, if any, get 0 and are ignored)
+    n_total      = number_of_cells(frac_mesh)
+    cut_no_frac  = zeros(Int, n_total)
+    cut_no_frac[1:n_regular] .= cut_no
+
+    n_frac = length(y_fracs)
+    n_step = length(states)
+    T_mat  = zeros(n_step, n_frac)
+    E_mat  = zeros(n_step, n_frac)
+
+    for (sno, state) in enumerate(states)
+        # Index only regular cells; any intersection junction cells (numbered
+        # after n_regular) are excluded as their volume is negligible.
+        T_frac = state[:Fractures][:Temperature][1:n_regular]
+        E_frac = state[:Fractures][:TotalThermalEnergy][1:n_regular]
+        for fno in 1:n_frac
+            ix = cut_no .== fno
+            any(ix) || continue
+            T_mat[sno, fno] = mean(T_frac[ix])
+            E_mat[sno, fno] = sum(E_frac[ix])
+        end
+    end
+
+    # q_in:  net wellbore energy entering fracture k from the injector [W]
+    #        (positive = cold fluid injected into fracture)
+    # q_out: net wellbore energy leaving fracture k to the producer [W]
+    #        (positive = warm fluid extracted from fracture)
+    #        = minus the "net entering" value for the producer cell, because
+    #          the producer cell receives fluid from the fracture but sends
+    #          more up the well than it receives from below.
+    q_in_mat  = _well_fracture_energy_exchange(states, model, :Injector, cut_no_frac, n_frac)
+    q_out_mat = -_well_fracture_energy_exchange(states, model, :Producer, cut_no_frac, n_frac)
+
+    return Dict{Symbol, Any}(
+        :y                   => y_fracs,
+        :Temperature         => T_mat,
+        :TotalThermalEnergy  => E_mat,
+        :q_in                => q_in_mat,
+        :q_out               => q_out_mat,
+    )
+end
+
+"""
+    get_egs_fracture_data(states, model)
+
+Fallback dispatch. Groups fracture cells by rounded y-coordinate.
+Prefer passing the full `JutulCase` to use the exact `:cut_no` mapping.
 """
 function get_egs_fracture_data(states, model)
     frac_domain = model.models[:Fractures].data_domain
