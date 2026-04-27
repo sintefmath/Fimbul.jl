@@ -332,14 +332,14 @@ function set_dirichlet_bcs(model, subset = :all;
     rho = reservoir_model(model).system.rho_ref[1]
     dpdz = rho*gravity_constant
     dTdz = geothermal_gradient
-    p = z -> pressure_surface .+ dpdz.*z
-    T = z -> temperature_surface .+ dTdz*z
+
+    z_bdr = geo.boundary_centroids[3, :]
+    z0 = minimum(z_bdr)
+    p = z -> pressure_surface .+ dpdz.*(z .- z0)
+    T = z -> temperature_surface .+ dTdz.*(z .- z0)
 
     # Set boundary conditions
-    z_bdr = geo.boundary_centroids[3, :]
     cells_bdr = geo.boundary_neighbors
-    z0 = minimum(z_bdr)
-
     top = isapprox.(z_bdr, minimum(z_bdr))
     bottom = isapprox.(z_bdr, maximum(z_bdr))
     sides = .!top .&& .!bottom
