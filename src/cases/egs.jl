@@ -187,21 +187,29 @@ function egs(
     end
 
     cuts = PolygonalSurface[]
+    cuts = PlaneCut[]
     for (fno, y_frac) in enumerate(y_fracs)
         α = tilt_angles[fno]   # tilt around x-axis: 0 → disk in x-z plane, normal=[0,1,0]
         # Disk parameterisation: local u = x-axis, v = z-axis rotated by α around x
         u_vec = Jutul.SVector(1.0, 0.0, 0.0)
         v_vec = Jutul.SVector(0.0, -sin(α), cos(α))  # tilt in y-z plane
-        polygon = [Jutul.SVector{3, Float64}(
-            x_c + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
-            y_frac + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
-            z_c + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
-        push!(cuts, PolygonalSurface([polygon]))
+        # polygon = [Jutul.SVector{3, Float64}(
+        #     x_c + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
+        #     y_frac + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
+        #     z_c + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
+        # push!(cuts, PolygonalSurface([polygon]))
+        push!(cuts, PlaneCut((x_c, y_frac, z_c), (0.0, cos(α), sin(α))))
     end
 
     msh, info = cut_mesh(msh, cuts; extra_out = true, min_cut_fraction = 0.0)
     fracture_faces = findall(info[:face_index] .== 0)
     layers = layers[info[:cell_index]]
+    # Filter out fracture faces outside the fracture radius
+    geo = tpfv_geometry(msh)
+    frac_centroids = geo.face_centroids[:, fracture_faces]
+    dist_to_well = sqrt.((frac_centroids[1, :] .- x_c).^2 .+ (frac_centroids[3, :] .- z_c).^2)
+    valid_fracture_faces = dist_to_well .<= fracture_radius * 1.5
+    fracture_faces = fracture_faces[valid_fracture_faces]
 
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(msh, fracture_faces)
     geo = tpfv_geometry(msh)
@@ -285,23 +293,36 @@ function egs(
         adjust_well_indices!(well_model, well_name, true)
     end
 
-    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 10atm, output_state=false)
+    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 100atm, output_state=false)
     z = geo.cell_centroids[3, :]
-    z_hat = z .- minimum(z)
+    z_min = minimum(z)
+    z_hat = z .- z_min
     state0 = setup_reservoir_state(model; Pressure = p(0.0), Temperature = T(0.0))
-    state0[:Reservoir][:Pressure] .= p(z_hat)
-    state0[:Reservoir][:Temperature] .= T(z_hat)
+    state0[:Reservoir][:Pressure] .= p(z)
+    state0[:Reservoir][:Temperature] .= T(z)
 
     geo_frac = tpfv_geometry(fracture_mesh)
     z = geo_frac.cell_centroids[3, :]
-    z_hat = z .- minimum(z)
-    state0[:Fractures][:Pressure] .= p(z_hat)
-    state0[:Fractures][:Temperature] .= T(z_hat)
+    z_hat = z .- z_min
+    state0[:Fractures][:Pressure] .= p(z)
+    state0[:Fractures][:Temperature] .= T(z)
+
+    z = model.models[:Injector].data_domain[:cell_centroids][3, :]
+    z_hat = z .- z_min
+    println(size(state0[:Injector][:Pressure]), " injector cells")
+    println(size(z_hat), " injector cell centroids")
+    state0[:Injector][:Pressure] .= p(z)
+    state0[:Injector][:Temperature] .= T(z)
+
+    z = model.models[:Producer].data_domain[:cell_centroids][3, :]
+    z_hat = z .- z_min
+    state0[:Producer][:Pressure] .= p(z)
+    state0[:Producer][:Temperature] .= T(z)
 
     rho = reservoir_model(model).system.rho_ref[1]
     ctrl_inj = InjectorControl(TotalRateTarget(rate), [1.0];
         density = rho, temperature = temperature_inj, check = false)
-    ctrl_prod = ProducerControl(BottomHolePressureTarget(25si"bar"))
+    ctrl_prod = ProducerControl(BottomHolePressureTarget(50si"atm"))
     control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod)
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)

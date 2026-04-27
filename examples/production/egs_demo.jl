@@ -66,11 +66,11 @@ frac_geo    = tpfv_geometry(frac_mesh)
 
 fig = Figure(size = (800, 800))
 # Get aspect ration from mesh size
-x_range = extrema(geo.cell_centroids[1, :])
-y_range = extrema(geo.cell_centroids[2, :])
-xy_aspect = (x_range[2]-x_range[1]) / (y_range[2]-y_range[1])
-
-ax = Axis3(fig[1, 1]; zreversed = true, aspect = (xy_aspect,1,3), perspectiveness = 0.5,
+x_range = diff(vcat(extrema(geo.cell_centroids[1, :])...))[1]
+y_range = diff(vcat(extrema(geo.cell_centroids[2, :])...))[1]
+z_range = diff(vcat(extrema(geo.cell_centroids[3, :])...))[1]
+aspect = (x_range, y_range, z_range)./max.(x_range, y_range, z_range)
+ax = Axis3(fig[1, 1]; zreversed = true, aspect = aspect, perspectiveness = 0.0,
     title = "EGS System: Wells and DFM Fracture Network")
 Jutul.plot_mesh_edges!(ax, msh; alpha = 0.2)  # Background matrix mesh
 Jutul.plot_mesh!(ax, frac_mesh; color = :lightgray)  # DFM fractures
@@ -101,6 +101,8 @@ sim, cfg = setup_reservoir_simulator(case;
     initial_dt = 5.0, # Initial timestep [s]
     relaxation = true # Enable relaxation in Newton solver
 );
+cfg[:tolerances][:Fractures][:energy_conservation] = (CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
+cfg[:tolerances][:Fractures][:mass_conservation] = (CNV = Inf, MB = 1e-5, increment_dp_abs = 1e-2*si_unit(:bar))
 
 # We add a specialized timestep selector to control solution quality during
 # thermal transients. These selectors monitor temperature changes and adjust
@@ -121,7 +123,7 @@ results = simulate_reservoir(case; simulator = sim, config = cfg)
 # ### Reservoir state evolution
 # First, plot the reservoir state throughout the simulation.
 plot_res_args = (
-    resolution = (600, 800), aspect = :data, 
+    resolution = (600, 800), aspect = aspect, 
     colormap = :seaborn_icefire_gradient, key = :Temperature,
     well_arg = (markersize = 0.0, ),
 )
@@ -161,7 +163,7 @@ zlim_f = [(extrema(fzf) .+ diff(collect(extrema(fzf))).*[-0.3, 0.3])...]
 limits_f = (xlim_f, ylim_f, zlim_f)
 
 n_steps_f = length(ΔT_frac)
-steps = Int.(round.([0.125, 0.25, 1.0] .* n_steps_f))
+steps = Int.(round.([0.125, 0.5, 1.0] .* n_steps_f))
 
 fig = Figure(size = (650, 800))
 for (n, ΔT_n) in enumerate(ΔT_frac[steps])
@@ -169,8 +171,8 @@ for (n, ΔT_n) in enumerate(ΔT_frac[steps])
         perspectiveness = 0.5, zreversed = true, aspect = (1, 6, 1),
         azimuth = 1.2π, elevation = π/20, limits = limits_f,
         title = "$(round(time_full[steps[n]], digits=1)) years", titlegap = -10)
-    scatter!(ax_n, fxf, fyf, fzf; color = ΔT_n, colorrange = colorrange,
-        colormap = :seaborn_icefire_gradient, markersize = 6)
+    plot_cell_data!(ax_n, frac_mesh, ΔT_n; colorrange = colorrange,
+        colormap = :seaborn_icefire_gradient)
     plot_egs_wells(ax_n; colors = [:black, :black])
     hidedecorations!(ax_n)
 end
