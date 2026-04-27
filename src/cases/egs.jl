@@ -71,7 +71,10 @@ well with branches coupled at a shared top node.
 - `fracture_spacing`: Spacing between fractures along the horizontal well [m].
 
 # Keyword arguments
-- `fracture_aperture = 0.5e-3`: Physical fracture aperture [m]
+- `fracture_aperture = 0.5e-3`: Physical fracture aperture [m]. A scalar applies
+  the same aperture to all fractures; a vector of length `n_frac` sets one
+  aperture per fracture; a 2-tuple `(aperture_mean, aperture_std)` samples from
+  `N(aperture_mean, aperture_std)` independently per fracture
 - `fracture_porosity = 0.5`: Fracture porosity [-]
 - `fracture_permeability = missing`: Fracture permeability (defaults to `a²/12`)
 - `permeability = 1e-4*darcy`: Matrix permeability
@@ -83,10 +86,11 @@ well with branches coupled at a shared top node.
 - `num_years = 20`: Number of years to simulate
 - `fracture_offset = 50.0`: Minimum distance along the horizontal section before
   the first fracture [m], ensuring the well is fully horizontal before fracturing
-- `fracture_theta = 0.0`: Tilt angle(s) between the fracture normal and the well
-  axis (y-direction). A scalar applies the same angle to all fractures; a vector
-  of length `n_frac` sets one angle per fracture; a 2-tuple `(theta, theta_std)`
-  samples angles from `N(theta, theta_std)` independently per fracture [rad]
+- `fracture_theta = 0.0`: Tilt angle(s) of the fracture around the z-axis (vertical).
+  At θ=0 the fracture normal points along y (perpendicular to the well). A scalar
+  applies the same angle to all fractures; a vector of length `n_frac` sets one angle
+  per fracture; a 2-tuple `(theta, theta_std)` samples angles from
+  `N(theta, theta_std)` independently per fracture [rad]
 - `mesh_args = NamedTuple()`: Extra keyword arguments forwarded to `extruded_mesh`
 - `schedule_args = NamedTuple()`: Extra keyword arguments forwarded to
   `make_schedule` (e.g. `report_interval`)
@@ -132,12 +136,16 @@ function egs(
     y_fracs = collect(range(frac_y_start, frac_y_end, length = n_frac))
 
     # Depth layers: overburden | reservoir zone | buffer
-    wd_top = max(0.0, wd_min - max(fracture_radius * 2.0, wd_min * 0.15))
     depths = [0.0,
-              wd_top,
-              wd_max + fracture_radius * 0.5,
+              wd_min - fracture_radius * 0.75,
+              wd_max + fracture_radius * 0.75,
               wd_max + fracture_radius * 2.0]
     hz = diff(depths) ./ [2.0, n_frac * 3.0, 2.0]
+
+    # println("Well depths: ", z_wells)
+    # println("Depth layers: ", depths)
+    # println("Layer thicknesses: ", hz)
+    # return nothing
 
     # ── 2D cell constraints (well x-y footprints) ─────────────────────────────
     cell_constraints = Matrix{Float64}[]
@@ -149,9 +157,18 @@ function egs(
     Δx_min  = length(x_wells) > 1 ? minimum(abs.(diff(sort(x_wells)))) : 2.0 * fracture_radius
     hxy_min = min(Δx_min / 3.0, fracture_radius / 4.0)
 
+    # Add fracture footprint lines to enforce mesh refinement across the full
+    # fracture diameter, not just near the wellbore.
+    x_c_pre = mean(x_wells)
+    for y_f in y_fracs
+        push!(cell_constraints, [x_c_pre - fracture_radius  x_c_pre + fracture_radius;
+                                  y_f                        y_f                       ])
+    end
+
     # Shift cell constraints by hxy_min/2 so well coordinates don't land on cell boundaries
     cell_constraints = [c .+ hxy_min/2 for c in cell_constraints]
 
+    @info "Building extruded mesh with"
     # ── Build extruded matrix mesh ─────────────────────────────────────────────
     msh, layers, _ = extruded_mesh(cell_constraints, depths;
         hxy_min  = hxy_min,
@@ -159,11 +176,13 @@ function egs(
         offset_rel = 1.0,
         mesh_args...
     )
+    @info "Building extruded mesh completed"
 
     # ── Add DFM fractures ────────────────────────────────────────────────────
+    @info "Generating fractures and cutting mesh..."
     # Each fracture is a disk centered on the well at the fracture y-position.
-    # fracture_theta controls the angle between the fracture normal and the well
-    # direction (y-axis): theta=0 means normal parallel to well (fracture ⊥ well).
+    # fracture_theta controls rotation around the vertical z-axis: theta=0 means
+    # the fracture lies in the x-z plane (normal along y, perpendicular to well).
     # fracture_theta may be:
     #   - a scalar (same angle for all fractures)
     #   - a vector of length n_frac (one angle per fracture)
@@ -186,33 +205,55 @@ function egs(
         tilt_angles = fill(Float64(fracture_theta), _n_frac)
     end
 
+    # Resolve per-fracture apertures
+    if fracture_aperture isa Tuple{<:Real, <:Real}
+        a_mean, a_std = fracture_aperture
+        aperture_per_frac = a_mean .+ a_std .* randn(_n_frac)
+    elseif fracture_aperture isa AbstractVector
+        length(fracture_aperture) == _n_frac ||
+            error("fracture_aperture vector must have length n_frac = $_n_frac")
+        aperture_per_frac = Float64.(fracture_aperture)
+    else
+        aperture_per_frac = fill(Float64(fracture_aperture), _n_frac)
+    end
+
     cuts = PolygonalSurface[]
-    cuts = PlaneCut[]
+    # cuts = PlaneCut[]
     for (fno, y_frac) in enumerate(y_fracs)
-        α = tilt_angles[fno]   # tilt around x-axis: 0 → disk in x-z plane, normal=[0,1,0]
-        # Disk parameterisation: local u = x-axis, v = z-axis rotated by α around x
-        u_vec = Jutul.SVector(1.0, 0.0, 0.0)
-        v_vec = Jutul.SVector(0.0, -sin(α), cos(α))  # tilt in y-z plane
-        # polygon = [Jutul.SVector{3, Float64}(
-        #     x_c + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
-        #     y_frac + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
-        #     z_c + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
-        # push!(cuts, PolygonalSurface([polygon]))
-        push!(cuts, PlaneCut((x_c, y_frac, z_c), (0.0, cos(α), sin(α))))
+        α = tilt_angles[fno]   # tilt around z-axis: 0 → disk in x-z plane, normal=[0,1,0]
+        # Disk parameterisation: local u = x-axis rotated by α around z, v = z-axis
+        u_vec = Jutul.SVector(cos(α), sin(α), 0.0)   # rotation in x-y plane
+        v_vec = Jutul.SVector(0.0, 0.0, 1.0)          # z-axis stays fixed
+        polygon = [Jutul.SVector{3, Float64}(
+            x_c + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
+            y_frac + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
+            z_c + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
+        push!(cuts, PolygonalSurface([polygon]))
+        # push!(cuts, PlaneCut((x_c, y_frac, z_c), (0.0, cos(α), sin(α))))
     end
 
     msh, info = cut_mesh(msh, cuts; extra_out = true, min_cut_fraction = 0.0)
     fracture_faces = findall(info[:face_index] .== 0)
     layers = layers[info[:cell_index]]
+    @info "Generating fractures and cutting mesh completed"
     # Filter out fracture faces outside the fracture radius
-    geo = tpfv_geometry(msh)
-    frac_centroids = geo.face_centroids[:, fracture_faces]
-    dist_to_well = sqrt.((frac_centroids[1, :] .- x_c).^2 .+ (frac_centroids[3, :] .- z_c).^2)
-    valid_fracture_faces = dist_to_well .<= fracture_radius * 1.5
-    fracture_faces = fracture_faces[valid_fracture_faces]
+    # geo = tpfv_geometry(msh)
+    # frac_centroids = geo.face_centroids[:, fracture_faces]
+    # dist_to_well = sqrt.((frac_centroids[1, :] .- x_c).^2 .+ (frac_centroids[3, :] .- z_c).^2)
+    # valid_fracture_faces = dist_to_well .<= fracture_radius * 1.5
+    # fracture_faces = fracture_faces[valid_fracture_faces]
 
+    @info "Generating embedded mesh"
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(msh, fracture_faces)
     geo = tpfv_geometry(msh)
+    @info "Generating embedded mesh completed"
+
+    # Map per-fracture apertures to per-cell values using cut_no from cut_mesh.
+    # Intersection junction cells (beyond n_frac_regular) get the mean aperture.
+    n_frac_regular = length(fracture_mesh.parent_faces)
+    cut_no_regular = info[:cut_no][fracture_mesh.parent_faces]
+    cell_aperture  = fill(mean(aperture_per_frac), number_of_cells(fracture_mesh))
+    cell_aperture[1:n_frac_regular] .= aperture_per_frac[cut_no_regular]
 
     # return fracture_mesh, msh
 
@@ -228,10 +269,10 @@ function egs(
 
     # ── Fracture domain ────────────────────────────────────────────────────────
     if ismissing(fracture_permeability)
-        fracture_permeability = fracture_aperture^2 / 12
+        fracture_permeability = cell_aperture .^ 2 ./ 12
     end
     frac_domain = JutulDarcy.fracture_domain(fracture_mesh, matrix_domain;
-        aperture     = fracture_aperture,
+        aperture     = cell_aperture,
         porosity     = fracture_porosity,
         permeability = fracture_permeability,
     )
@@ -240,7 +281,7 @@ function egs(
     inj_connectivity = zeros(Int, length(injector_coords) + 1, 2)
     inj_connectivity[2:end, 1] .= 1
     inj_cells, inj_wcells, inj_N, _, inj_dir = Fimbul.get_well_neighborship(
-        msh, injector_coords, inj_connectivity, geo; top_node = true, output_directions=true, n = 1_000_000)
+        msh, injector_coords, inj_connectivity, geo; top_node = true, output_directions=true, n = 1_000)
     # Change to :x/:y/:z as vector directions are not supported for fractures yet
     inj_dir_sym = Vector{Symbol}(undef, length(inj_dir))
     for (i, d) in enumerate(inj_dir)
@@ -264,7 +305,7 @@ function egs(
     prod_connectivity = zeros(Int, length(producer_coords) + 1, 2)
     prod_connectivity[2:end, 1] .= 1
     prod_cells, prod_wcells, prod_N, _, prod_dir = Fimbul.get_well_neighborship(
-        msh, producer_coords, prod_connectivity, geo; top_node = true, output_directions=true, n = 1_000_000)
+        msh, producer_coords, prod_connectivity, geo; top_node = true, output_directions=true, n = 1_000)
     prod_dir_sym = Vector{Symbol}(undef, length(prod_dir))
     for (i, d) in enumerate(prod_dir)
         prod_dir_sym[i] = [:x, :y, :z][last(findmax(abs.(d)))]
@@ -286,12 +327,14 @@ function egs(
     wells = [well_inj, well_prod]
 
     # ── DFM model ─────────────────────────────────────────────────────────────
+    @info "Setting up DFM model..."
     model = JutulDarcy.setup_fractured_reservoir_model(matrix_domain, frac_domain, :geothermal;
         wells = wells, block_backend = true)
 
     for (well_name, well_model) in get_model_wells(model; data_domain = true)
         adjust_well_indices!(well_model, well_name, true)
     end
+    @info "Setting up DFM model completed"
 
     bc, p, T = set_dirichlet_bcs(model; pressure_surface = 100atm, output_state=false)
     z = geo.cell_centroids[3, :]
@@ -335,8 +378,10 @@ function egs(
         :fracture_radius => fracture_radius,
         :fracture_spacing => fracture_spacing,
         :fracture_offset  => fracture_offset,
-        :fracture_theta   => fracture_theta,
-        :tilt_angles      => tilt_angles,
+        :fracture_theta    => fracture_theta,
+        :tilt_angles       => tilt_angles,
+        :fracture_aperture => fracture_aperture,
+        :aperture_per_frac => aperture_per_frac,
         :y_fracs => y_fracs,
         :cut_no  => info[:cut_no],
     )

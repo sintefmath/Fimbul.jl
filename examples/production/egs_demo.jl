@@ -56,11 +56,11 @@ case = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
 
 # ### Inspect model
 # Visualize the computational mesh, DFM fracture network, and wells.
-msh = physical_representation(reservoir_model(case.model).data_domain)
+msh = physical_representation(reservoir_model(case2.model).data_domain)
 geo = tpfv_geometry(msh)
 
 # Get DFM fracture geometry
-frac_domain = case.model.models[:Fractures].data_domain
+frac_domain = case2.model.models[:Fractures].data_domain
 frac_mesh   = physical_representation(frac_domain)
 frac_geo    = tpfv_geometry(frac_mesh)
 
@@ -271,4 +271,100 @@ barplot!(ax, cat, η[:];
     dodge = dodge, color = colors[dodge], strokecolor = :black, strokewidth = 1)
 
 Legend(fig[2:3, 2], ax_pwr)
+fig
+
+# ## Second run: random fracture angles and apertures
+# To understand how fracture orientation and aperture variability affect EGS
+# performance, we run a second scenario where both properties are drawn from
+# normal distributions. Fracture tilt angles are sampled from N(0°, 12.5°) and
+# apertures from N(0.5 mm, 0.1 mm). All other parameters are kept identical.
+case2 = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
+    rate              = 9250meter^3/day,
+    temperature_inj   = convert_to_si(25.0, :Celsius),
+    num_years         = num_years,
+    fracture_theta    = (0.0, deg2rad(12.5)),    # N(0°, 12.5°) tilt
+    fracture_aperture = (0.5e-3, 1e-4),           # N(0.5 mm, 0.1 mm)
+    schedule_args     = (report_interval = si_unit(:year)/4,)
+);
+
+sim2, cfg2 = setup_reservoir_simulator(case2;
+    info_level       = 2,
+    output_substates = true,
+    initial_dt       = 5.0,
+    relaxation       = true
+);
+cfg2[:tolerances][:Fractures][:energy_conservation] = (CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
+cfg2[:tolerances][:Fractures][:mass_conservation]   = (CNV = Inf, MB = 1e-5, increment_dp_abs = 1e-2*si_unit(:bar))
+sel2 = VariableChangeTimestepSelector(:Temperature, 5.0;
+    relative = false, model = :Reservoir)
+push!(cfg2[:timestep_selectors], sel2);
+
+results2 = simulate_reservoir(case2; simulator = sim2, config = cfg2)
+
+states2, dt2, _ = Jutul.expand_to_ministeps(results2.result)
+time2  = cumsum(dt2) ./ si_unit(:year)
+fdata2 = Fimbul.get_egs_fracture_data(states2, case2)
+
+# ## Comparison: uniform vs. random fracture properties
+# We compare the two runs by looking at the aggregate power and cumulative
+# energy, as well as the spread across individual fractures.
+
+Er2    = fdata2[:TotalThermalEnergy]
+dEdt2  = diff(vcat(Er2[1,:]', Er2), dims = 1) ./ dt2
+q_in2  = fdata2[:q_in]
+q_out2 = fdata2[:q_out]
+power2 = dEdt2 .+ q_out2 .- q_in2
+
+total_power1 = sum(power,  dims = 2)[:]
+total_power2 = sum(power2, dims = 2)[:]
+
+fig = Figure(size = (1000, 700))
+xmax_c   = round(max(maximum(time), maximum(time2)))
+lim_c    = ((0, xmax_c) .+ (-0.1, 0.1) .* xmax_c, nothing)
+xtick_c  = 0:xmax_c
+
+function make_cax(title, ylabel, rno)
+    Axis(fig[rno, 1]; title = title, xlabel = "Time (years)", ylabel = ylabel,
+        limits = lim_c, xticks = xtick_c)
+end
+
+# ── Total power ──────────────────────────────────────────────────────────────
+ax_c1 = make_cax("Total thermal power", "Power (MW)", 1)
+lines!(ax_c1, time[first_step:end],  total_power1[first_step:end]  ./ 1e6;
+    color = :steelblue, linewidth = 2, label = "Uniform")
+lines!(ax_c1, time2[first_step:end], total_power2[first_step:end] ./ 1e6;
+    color = :orangered, linewidth = 2, linestyle = :dash, label = "Random")
+axislegend(ax_c1; position = :rb)
+hidexdecorations!(ax_c1, grid = false)
+
+# ── Per-fracture power spread ────────────────────────────────────────────────
+ax_c2 = make_cax("Per-fracture power (shaded band = min–max)", "Power (MW)", 2)
+function band_fractures!(ax, t, pwr; color = :steelblue, label = "")
+    n_f        = size(pwr, 2)
+    total_pwr  = sum(pwr, dims = 2)[:]
+    pmin = [minimum(r) for r in eachrow(pwr)]
+    pmax = [maximum(r) for r in eachrow(pwr)]
+    band!(ax, t, pmin ./ 1e6, pmax ./ 1e6; color = (color, 0.3))
+    lines!(ax, t, total_pwr ./ n_f ./ 1e6; color = color, linewidth = 2,
+        label = label)
+end
+fs = first_step
+band_fractures!(ax_c2, time[fs:end],  power[fs:end,  :]; color = :steelblue,   label = "Uniform (mean)")
+band_fractures!(ax_c2, time2[fs:end], power2[fs:end, :]; color = :orangered, label = "Random (mean)")
+axislegend(ax_c2; position = :rb)
+hidexdecorations!(ax_c2, grid = false)
+
+# ── Cumulative energy per year ───────────────────────────────────────────────
+ax_c3 = make_cax("Annual energy production", "Energy (GWh)", 3)
+function annual_energy(pwr, t, dt_v)
+    ix = vcat(0, [findfirst(isapprox.(t, y; atol = 1e-2)) for y in 1:num_years]) .+ 1
+    [sum(pwr[ix[k]:ix[k+1]-1] .* dt_v[ix[k]:ix[k+1]-1]) / GWh for k in 1:length(ix)-1]
+end
+ann1 = annual_energy(total_power1, time, dt)
+ann2 = annual_energy(total_power2, time2, dt2)
+years = 1:num_years
+barplot!(ax_c3, years .- 0.2, ann1; width = 0.35, color = :steelblue, label = "Uniform")
+barplot!(ax_c3, years .+ 0.2, ann2; width = 0.35, color = :orangered, label = "Random")
+axislegend(ax_c3; position = :rt)
+
 fig
