@@ -649,4 +649,3 @@ function get_egs_fracture_data(states, model)
         :TotalThermalEnergy  => E_mat,
     )
 end
-end
