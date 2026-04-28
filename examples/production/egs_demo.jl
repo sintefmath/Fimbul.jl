@@ -4,6 +4,11 @@
 # extraction from hot dry rock formations where natural permeability is
 # insufficient for fluid circulation.
 
+# > [!NOTE]
+# > This example is exhibits issues with grid orientation effects, and will
+# > be updates when necessary flux discretization improvements are in place in
+# > JutulDarcy.
+
 # Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul # Core reservoir simulation framework
 using HYPRE # High-performance linear solvers
@@ -259,6 +264,10 @@ plot_reservoir(case.model, results.states; plot_res_args...)
 plot_reservoir(case.model, Δstates; plot_res_args...)
 
 # ### Fracture ΔT
+# Note that there are visual grid orientation effects in the fracture
+# temperature distribution, contributes to accentuate differences in fracture
+# performance. The same is also evident in the next two runs. (See note at the
+# top of this example for details.)
 plot_fracture_dt_fig(case, inj, prod, results)
 
 # ### Fracture metrics
