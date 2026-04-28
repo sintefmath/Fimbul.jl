@@ -40,18 +40,23 @@ case = Fimbul.ftes(
 matrix_mesh = physical_representation(reservoir_model(case.model).data_domain)
 fracture_mesh = physical_representation(case.model.models[:Fractures].data_domain)
 
+axis_args = (perspectiveness = 0.75, zreversed = true, aspect = :data,
+    elevation = 0.025π, azimuth = 1.35π)
 fig = Figure(size = (900, 700))
-ax = Axis3(fig[1, 1]; perspectiveness = 0.0, zreversed = true, aspect = :data,
-    elevation = 0.025π, azimuth = 1.35π,
+ax = Axis3(fig[1, 1]; axis_args...,
     title = "FTES system: matrix mesh and fracture network")
 Jutul.plot_mesh!(ax, fracture_mesh; color = :gray)
 Jutul.plot_mesh_edges!(ax, matrix_mesh; alpha = 0.1)
 colors = Makie.wong_colors(6)[[2,6]]
-for (i, xw) in enumerate(case.input_data[:well_coordinates])
-    color = ifelse(i == 1, colors[1], colors[2])
-    lines!(ax, xw[1,:], xw[2,:],  xw[3,:],
-        color = color, linewidth = 3)
+
+function plot_ftes_wells(ax)
+    for (i, xw) in enumerate(case.input_data[:well_coordinates])
+        color = ifelse(i == 1, colors[1], colors[2])
+        lines!(ax, xw[1,:], xw[2,:],  xw[3,:],
+            color = color, linewidth = 3)
+    end
 end
+plot_ftes_wells(ax)
 fig
 
 # ## Set up reservoir simulator
@@ -59,14 +64,8 @@ fig
 # `ControlChangeTimestepSelector` is used to take very small steps when well
 # controls switch between charging and discharging to maintain convergence.
 simulator, config = setup_reservoir_simulator(case;
-    tol_cnv = 1e-2,
-    tol_mb = 1e-5,
-    tol_dp_well = 1e-2,
-    tol_cnv_well = Inf,
-    tol_cnve_well = Inf,
-    inc_tol_dT = 1e-2,
-    inc_tol_dp_abs = 1e-2 * si_unit(:bar),
     initial_dt = 5.0,
+    output_substates = true,
     relaxation = true,
 );
 
@@ -86,9 +85,18 @@ results = simulate_reservoir(case; simulator = simulator, config = config, info_
 # Inspect the temperature distribution in the matrix reservoir after the final
 # simulated timestep to see how thermal energy has spread around the fracture
 # network.
-plot_reservoir(case.model, results.states;
+msh = physical_representation(reservoir_model(case.model).data_domain)
+geo = tpfv_geometry(msh)
+x_range = diff(vcat(extrema(geo.cell_centroids[1, :])...))[1]
+y_range = diff(vcat(extrema(geo.cell_centroids[2, :])...))[1]
+z_range = diff(vcat(extrema(geo.cell_centroids[3, :])...))[1]
+aspect  = (x_range, y_range, z_range) ./ max.(x_range, y_range, z_range)
+
+states, dt, _ = Jutul.expand_to_ministeps(results.result)
+states_m = [s[:Reservoir] for s in results.result.states]
+plot_reservoir(case.model, states_m;
     key = :Temperature,
-    aspect = :data,
+    aspect = aspect,
     colormap = :seaborn_icefire_gradient)
 
 # ### Fracture temperature distribution
@@ -97,10 +105,41 @@ plot_reservoir(case.model, results.states;
 states_f = [s[:Fractures] for s in results.result.states]
 plot_reservoir(case.model.models[:Fractures], states_f;
     key = :Temperature,
-    aspect = :data,
+    aspect = aspect,
     colormap = :seaborn_icefire_gradient)
 
 # ### Well performance over time
 # Plot injection/production temperatures and flow rates throughout the
 # operational schedule to assess thermal efficiency and system performance.
 plot_well_results(results.wells, field = :temperature)
+
+# ### Plot Reservoir temperature at selected time steps
+^# We visualize the temperature distribution in the reservoir after the first and
+# last charing and discharging cycles
+
+# Extract timesteps after each charing and discharging cycle
+using Dates
+timestamps = case.input_data[:timestamps][2:end]
+
+steps = findall([Dates.monthname(t) ∈ ["December", "April"] .&& Dates.day(t) == 1 for t in timestamps])
+steps = steps[[1, 2, end-1, end]] # Select first two and last two cycles for better visualization
+cells = .!(geo.cell_centroids[1,:] .< 0.0 .&& geo.cell_centroids[2,:] .< 0.0)
+fig = Figure(size = (900, 900))
+for (k, step) in enumerate(steps)
+    row = (k-1)÷2 + 1
+    col = (k-1)%2 + 1
+    month = Dates.monthname(case.input_data[:timestamps][step])
+    year = Dates.year(case.input_data[:timestamps][step])
+    ax = Axis3(fig[row, col];
+        title = "$month $year",
+        zreversed = true, aspect = aspect, axis_args...,
+        azimuth = 1.25π, titlegap = -50)
+    T = convert_from_si.(results.states[step][:Temperature], :Celsius)
+    plot_cell_data!(ax, msh, T;
+        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (20.0, 95.0))
+    hidedecorations!(ax)
+end
+Colorbar(fig[3, 1:2];
+    colormap = :seaborn_icefire_gradient, colorrange = (20.0, 95.0),
+    label = "Temperature (°C)", vertical = false, flipaxis = false)
+fig

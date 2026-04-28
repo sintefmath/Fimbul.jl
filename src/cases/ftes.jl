@@ -22,7 +22,7 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     hxy_min = Δx_min/4
     r_given = filter(!isinf, fractures[:radius])
     r_max = ifelse(isempty(r_given), 0.0, maximum(r_given))
-    well_offset = max(Δx_max/2, r_max-Δx_max/2*0.9)
+    well_offset = max(Δx_max/2, r_max-Δx_max/2)
     well_outline = Fimbul.offset_boundary(collars, well_offset; n=24)
     well_outline = hcat(well_outline, well_outline[:, 1]) # Close the loop
     
@@ -167,13 +167,14 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
 
     forces_rest = setup_reservoir_forces(model, bc=bc)
 
-    dt, forces = make_utes_schedule(forces_charge, forces_discharge, forces_rest;
+    dt, forces, timestamps = make_utes_schedule(forces_charge, forces_discharge, forces_rest;
         charge_period=charge_period, discharge_period=discharge_period,
         utes_schedule_args...)
 
     info = Dict{Symbol, Any}()
     info[:well_coordinates] = well_coordinates
     info[:fractures] = fractures
+    info[:timestamps] = timestamps
     case = JutulCase(model, dt, forces; state0=state0, input_data=info)
 
     return case
