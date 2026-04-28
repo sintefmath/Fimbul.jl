@@ -7,19 +7,25 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     rate_charge = missing,
     rate_discharge = missing,
     temperature_charge = convert_to_si(95.0, :Celsius),
-    temperature_discharge = convert_to_si(10.0, :Celsius),
+    temperature_discharge = convert_to_si(20.0, :Celsius),
     charge_period = ["April", "November"],
     discharge_period = ["December", "March"],
     utes_schedule_args = NamedTuple(),
     mesh_args = NamedTuple(),
+    info_level = 0,
     )
 
     # Make constraints from well coordinates
+    info_level > 0 && @info "Setting up wells and making mesh"
     collars = hcat([x[1:2, 1] for x in well_coordinates]...)
     Δx_min, Δx_max = Fimbul.min_max_distance(collars)
-    hxy_min = Δx_min/3
-    well_outline = Fimbul.offset_boundary(collars, Δx_max; n=24)
+    hxy_min = Δx_min/4
+    r_given = filter(!isinf, fractures[:radius])
+    r_max = ifelse(isempty(r_given), 0.0, maximum(r_given))
+    well_offset = max(Δx_max/2, r_max-Δx_max/2*0.9)
+    well_outline = Fimbul.offset_boundary(collars, well_offset; n=24)
     well_outline = hcat(well_outline, well_outline[:, 1]) # Close the loop
+    
     collars = [permutedims([x[1] x[2]]).+hxy_min/2 for x in eachcol(collars)]
     cell_constraints = [x for x in collars]
     push!(cell_constraints, well_outline)
@@ -40,11 +46,34 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     num_fractures = length(fractures[:normal])
     hz = diff(depths)./[num_fractures*3, 2]
     matrix_mesh, layers, _ = extruded_mesh(cell_constraints, depths;
-        hxy_min=hxy_min, hz=hz, offset_rel=2.5, mesh_args...)
-    # Add fractures using multi-cut
-    planes = [PlaneCut(center, normal)
-              for (normal, center) in zip(fractures[:normal], fractures[:centers])]
-    matrix_mesh, info = cut_mesh(matrix_mesh, planes; extra_out = true, min_cut_fraction = 0.0)
+        hxy_min=hxy_min, hz=hz, offset=well_offset*4, offset_rel=missing, mesh_args...)
+    # Add fractures as polygonal disk cuts (radius from fracture dict)
+    n_poly = 16
+    θ_poly = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
+    function fracture_plane_basis(n_hat)
+        ref = abs(n_hat[1]) < 0.9 ? [1.0, 0.0, 0.0] : [0.0, 1.0, 0.0]
+        u = ref .- dot(ref, n_hat) .* n_hat; u ./= norm(u)
+        v = cross(n_hat, u); v ./= norm(v)
+        return u, v
+    end
+    cuts = []
+    # Compute domain radius
+    info_level > 0 && @info "Adding fractures to the mesh"
+    geo = tpfv_geometry(matrix_mesh)
+    for (normal, center, r) in zip(fractures[:normal], fractures[:centers], fractures[:radius])
+        if isinf(r)
+            push!(cuts, PlaneCut(center, normal))
+        else
+            n_hat = normal ./ norm(normal)
+            u, v = fracture_plane_basis(n_hat)
+            polygon = [Jutul.SVector{3, Float64}(
+                center[1] + r * (cos(θ) * u[1] + sin(θ) * v[1]),
+                center[2] + r * (cos(θ) * u[2] + sin(θ) * v[2]),
+                center[3] + r * (cos(θ) * u[3] + sin(θ) * v[3])) for θ in θ_poly]
+            push!(cuts, PolygonalSurface([polygon]))
+        end
+    end
+    matrix_mesh, info = cut_mesh(matrix_mesh, cuts; extra_out = true, min_cut_fraction = 0.0)
     fracture_faces = findall(info[:face_index] .== 0)
     layers = layers[info[:cell_index]]
     # Generate embedded mesh for fractures
@@ -56,8 +85,6 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
         matrix_properties = (permeability=1e-4si_unit(:darcy), porosity=0.01)
     end
     matrix_domain = layered_reservoir_domain(matrix_mesh, layers, matrix_properties)
-    # matrix_domain = reservoir_domain(matrix_mesh;
-    #     permeability=marix_permeability, porosity=matrix_porosity)
     fracture_domain = JutulDarcy.fracture_domain(fracture_mesh, matrix_domain;
         aperture=fractures[:aperture][1],
         porosity=fractures[:porosity][1])
@@ -85,8 +112,11 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     
     wells = [well_inj, well_prod]
     
+    info_level > 0 && @info "Setting up DFM model"
     model = JutulDarcy.setup_fractured_reservoir_model(matrix_domain, fracture_domain, :geothermal;
         wells=wells, block_backend=true)
+
+    info_level > 0 && @info "Setting up initial state, boundary conditions, and well controls"
     ρ = reservoir_model(model).system.rho_ref[1]
     dpdz = gravity_constant * ρ
     p0(z) = 20si_unit(:atm)# .+ dpdz.*z
@@ -178,7 +208,6 @@ function ftes(wells, fractures=Union{NamedTuple, Int}; kwargs...)
         z_max = fractures.z_max
         # Remove these keys from the named tuple before passing to the setup function
         fractures = (; (k => v for (k, v) in pairs(fractures) if k ∉ (:num, :z_min, :z_max))...)
-        println(fractures)
         fractures = setup_ftes_fractures(num_fractures, z_min, z_max; fractures...)
     end
     fractures isa Dict{Symbol, Any} || error("fractures must be a Dict{Symbol, Any}")

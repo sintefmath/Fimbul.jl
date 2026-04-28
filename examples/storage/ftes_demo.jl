@@ -17,19 +17,20 @@ using Random
 using GLMakie
 
 # ## Set up simulation case
-# We create an FTES system with 8 producer wells arranged in a circle of 25 m
+# We create an FTES system with 8 producer wells arranged in a circle of 35 m
 # radius around the central injector. The wells extend to 300 m depth and the
 # fracture network consists of 25 near-horizontal fractures distributed within
 # the well interval. The system is charged from April to November and
 # discharged from December to March over a 3-year period.
 Random.seed!(20260225)
 case = Fimbul.ftes(
-    (num_producers = 8, radius = 25.0, depth = 300.0),
-    25;
+    (num_producers = 8, radius = 35.0, depth = 300.0),
+    (num = 25, z_min = 50.0, z_max = 290.0, radius = 75.0),;
     rate_charge = 50si"litre/second",
     charge_period = ["April", "November"],
     discharge_period = ["December", "March"],
     utes_schedule_args = (num_years = 3,),
+    info_level = 1,
 );
 
 # ## Visualize the FTES system
@@ -40,14 +41,16 @@ matrix_mesh = physical_representation(reservoir_model(case.model).data_domain)
 fracture_mesh = physical_representation(case.model.models[:Fractures].data_domain)
 
 fig = Figure(size = (900, 700))
-ax = Axis3(fig[1, 1]; perspectiveness = 0.5, zreversed = true, aspect = :data,
+ax = Axis3(fig[1, 1]; perspectiveness = 0.0, zreversed = true, aspect = :data,
+    elevation = 0.025π, azimuth = 1.35π,
     title = "FTES system: matrix mesh and fracture network")
 Jutul.plot_mesh!(ax, fracture_mesh; color = :gray)
 Jutul.plot_mesh_edges!(ax, matrix_mesh; alpha = 0.1)
-wells = get_model_wells(case.model)
-colors = [:red; fill(:blue, length(wells) - 1)]
-for (i, (k, w)) in enumerate(wells)
-    plot_well!(ax, matrix_mesh, w; color = colors[i], linewidth = 3)
+colors = Makie.wong_colors(6)[[2,6]]
+for (i, xw) in enumerate(case.input_data[:well_coordinates])
+    color = ifelse(i == 1, colors[1], colors[2])
+    lines!(ax, xw[1,:], xw[2,:],  xw[3,:],
+        color = color, linewidth = 3)
 end
 fig
 
@@ -67,9 +70,9 @@ simulator, config = setup_reservoir_simulator(case;
     relaxation = true,
 );
 
-sel = JutulDarcy.ControlChangeTimestepSelector(case.model, 0.1, 5.0)
+sel = JutulDarcy.ControlChangeTimestepSelector(case.model, 0.1, 60.0)
 push!(config[:timestep_selectors], sel)
-sel_T = VariableChangeTimestepSelector(:Temperature, 10.0; model = :Fractures, relative = false)
+sel_T = VariableChangeTimestepSelector(:Temperature, 20.0; model = :Fractures, relative = false)
 push!(config[:timestep_selectors], sel_T)
 config[:timestep_max_decrease] = 1e-6;
 
