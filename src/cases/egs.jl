@@ -67,7 +67,8 @@ well with branches coupled at a shared top node.
 # Arguments
 - `injector_coords`: Vector of `n×3` trajectory matrices for injector legs.
 - `producer_coords`: Vector of `n×3` trajectory matrices for producer legs.
-- `fracture_radius`: Radius of the stimulated fracture disks (in the x-z plane) [m].
+- `fracture_radius`: Radius of the stimulated fracture disks [m]. Each disk is
+  placed perpendicular to the injector well tangent at the fracture position.
 - `fracture_spacing`: Spacing between fractures along the horizontal well [m].
 
 # Keyword arguments
@@ -96,6 +97,8 @@ well with branches coupled at a shared top node.
   vector of length `n_frac` sets one angle per fracture; a 2-tuple
   `(angle_mean, angle_std)` samples from `N(angle_mean, angle_std)` independently
   per fracture [rad]
+- `hxy_min = missing`: Minimum cell size in the x-y plane [m]. Defaults to
+  `min(well_spacing / 3, fracture_radius / 4)` when `missing`.
 - `mesh_args = NamedTuple()`: Extra keyword arguments forwarded to `extruded_mesh`
 - `schedule_args = NamedTuple()`: Extra keyword arguments forwarded to
   `make_schedule` (e.g. `report_interval`)
@@ -215,7 +218,7 @@ function egs(
     # Shift cell constraints by hxy_min/2 so well coordinates don't land on cell boundaries
     cell_constraints = [c .+ hxy_min/2 for c in cell_constraints]
 
-    @info "Building extruded mesh with"
+    @info "Building extruded mesh ($n_frac fractures, hxy_min = $hxy_min m)..."
     # ── Build extruded matrix mesh ─────────────────────────────────────────────
     msh, layers, _ = extruded_mesh(cell_constraints, depths;
         hxy_min  = hxy_min,
@@ -285,12 +288,8 @@ function egs(
         # Apply additional rotation around the well-tangent axis by fracture_angle
         α = rotation_angles[fno]
         ca, sa = cos(α), sin(α)
-        # Rotate around z axis
-        M = [ca -sa 0.0;
-             sa  ca 0.0;
-             0.0 0.0 1.0]
-        u_vec = M * u0
-        v_vec = M * v0
+        u_vec = ca .* u0 .+ sa .* v0
+        v_vec = -sa .* u0 .+ ca .* v0
 
         polygon = [Jutul.SVector{3, Float64}(
             pos[1] + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
@@ -321,8 +320,6 @@ function egs(
     cut_no_regular = info[:cut_no][fracture_mesh.parent_faces]
     cell_aperture  = fill(mean(aperture_per_frac), number_of_cells(fracture_mesh))
     cell_aperture[1:n_frac_regular] .= aperture_per_frac[cut_no_regular]
-
-    # return fracture_mesh, msh
 
     # ── Matrix domain ──────────────────────────────────────────────────────────
     matrix_domain = layered_reservoir_domain(msh, layers,
@@ -404,28 +401,24 @@ function egs(
     @info "Setting up DFM model completed"
 
     bc, p, T = set_dirichlet_bcs(model; pressure_surface = 100atm, output_state=false)
-    z = geo.cell_centroids[3, :]
-    z_min = minimum(z)
-    z_hat = z .- z_min
+    z_res  = geo.cell_centroids[3, :]
+    z_min  = minimum(z_res)
     state0 = setup_reservoir_state(model; Pressure = p(0.0), Temperature = T(0.0))
-    state0[:Reservoir][:Pressure] .= p(z)
-    state0[:Reservoir][:Temperature] .= T(z)
+    state0[:Reservoir][:Pressure]    .= p(z_res)
+    state0[:Reservoir][:Temperature] .= T(z_res)
 
     geo_frac = tpfv_geometry(fracture_mesh)
-    z = geo_frac.cell_centroids[3, :]
-    z_hat = z .- z_min
-    state0[:Fractures][:Pressure] .= p(z)
-    state0[:Fractures][:Temperature] .= T(z)
+    z_frac = geo_frac.cell_centroids[3, :]
+    state0[:Fractures][:Pressure]    .= p(z_frac)
+    state0[:Fractures][:Temperature] .= T(z_frac)
 
-    z = model.models[:Injector].data_domain[:cell_centroids][3, :]
-    z_hat = z .- z_min
-    state0[:Injector][:Pressure] .= p(z)
-    state0[:Injector][:Temperature] .= T(z)
+    z_inj = model.models[:Injector].data_domain[:cell_centroids][3, :]
+    state0[:Injector][:Pressure]    .= p(z_inj)
+    state0[:Injector][:Temperature] .= T(z_inj)
 
-    z = model.models[:Producer].data_domain[:cell_centroids][3, :]
-    z_hat = z .- z_min
-    state0[:Producer][:Pressure] .= p(z)
-    state0[:Producer][:Temperature] .= T(z)
+    z_prod = model.models[:Producer].data_domain[:cell_centroids][3, :]
+    state0[:Producer][:Pressure]    .= p(z_prod)
+    state0[:Producer][:Temperature] .= T(z_prod)
 
     rho = reservoir_model(model).system.rho_ref[1]
     ctrl_inj = InjectorControl(TotalRateTarget(rate), [1.0];
@@ -435,7 +428,6 @@ function egs(
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)
     dt, forces = make_schedule([forces], [(1, 1), (1, 1)];
-        report_interval = si_unit(:year)/4,
         num_years = num_years, schedule_args...)
 
     input_data = Dict{Symbol, Any}(
@@ -656,4 +648,5 @@ function get_egs_fracture_data(states, model)
         :Temperature         => T_mat,
         :TotalThermalEnergy  => E_mat,
     )
+end
 end
