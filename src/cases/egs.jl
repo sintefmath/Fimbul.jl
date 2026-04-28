@@ -402,7 +402,7 @@ function egs(
         adjust_well_indices!(well_model, well_name, true)
     end
 
-    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 100atm, output_state=false)
+    bc, p, T = set_dirichlet_bcs(model; pressure_surface = 10atm, output_state=false)
     z_res  = geo.cell_centroids[3, :]
     z_min  = minimum(z_res)
     state0 = setup_reservoir_state(model; Pressure = p(0.0), Temperature = T(0.0))
@@ -425,7 +425,7 @@ function egs(
     rho = reservoir_model(model).system.rho_ref[1]
     ctrl_inj = InjectorControl(TotalRateTarget(rate), [1.0];
         density = rho, temperature = temperature_inj, check = false)
-    ctrl_prod = ProducerControl(BottomHolePressureTarget(50si"atm"))
+    ctrl_prod = ProducerControl(BottomHolePressureTarget(5si"atm"))
     control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod)
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)
