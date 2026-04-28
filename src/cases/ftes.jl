@@ -3,7 +3,6 @@ import Jutul.CutCellMeshes: PlaneCut, PolygonalSurface, cut_mesh
 function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol, Any};
     depths = nothing,
     matrix_properties = NamedTuple(),
-    fracture_properties = NamedTuple(),
     rate_charge = missing,
     rate_discharge = missing,
     temperature_charge = convert_to_si(95.0, :Celsius),

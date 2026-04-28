@@ -3,9 +3,9 @@
 # Energy Storage (FTES) system using Fimbul. FTES systems exploit natural or
 # induced fractures in low-permeability rock to store and recover thermal energy
 # by circulating water through a fracture network connected by an injector–
-# producer well doublet arrangement.
+# producer arrangement.
 #
-# The system consists of one central injector surrounded by multiple producer
+# Our system consists of one central injector surrounded by multiple producer
 # wells. Horizontal fracture planes connect the injector to the producers,
 # enabling thermal transport through the fracture network even in tight rock.
 # During charging, hot water is injected through the central well and produced
@@ -23,10 +23,14 @@ using GLMakie
 # the well interval. The system is charged from April to November and
 # discharged from December to March over a 3-year period.
 Random.seed!(20260225)
+T_charge = convert_to_si(95, :Celsius)
+T_discharge = convert_to_si(20, :Celsius)
 case = Fimbul.ftes(
     (num_producers = 8, radius = 35.0, depth = 300.0),
     (num = 25, z_min = 50.0, z_max = 290.0, radius = 75.0),;
     rate_charge = 50si"litre/second",
+    temperature_charge = T_charge,
+    temperature_discharge = T_discharge,
     charge_period = ["April", "November"],
     discharge_period = ["December", "March"],
     utes_schedule_args = (num_years = 3,),
@@ -62,7 +66,8 @@ fig
 # ## Set up reservoir simulator
 # We configure solver tolerances suited to the thermal DFM system. The
 # `ControlChangeTimestepSelector` is used to take very small steps when well
-# controls switch between charging and discharging to maintain convergence.
+# controls switch between charging and discharging to maintain convergence to
+# aid the nonlinear solver.
 simulator, config = setup_reservoir_simulator(case;
     initial_dt = 5.0,
     output_substates = true,
@@ -76,15 +81,11 @@ push!(config[:timestep_selectors], sel_T)
 config[:timestep_max_decrease] = 1e-6;
 
 # ## Simulate the FTES system
-# Run the full multi-year simulation. Setting `info_level = 0` will show a
-# progress bar rather than per-iteration solver output.
-results = simulate_reservoir(case; simulator = simulator, config = config, info_level = 2);
+results = simulate_reservoir(case;
+    simulator = simulator, config = config, info_level = 0);
 
 # ## Visualize results
-# ### Matrix temperature distribution
-# Inspect the temperature distribution in the matrix reservoir after the final
-# simulated timestep to see how thermal energy has spread around the fracture
-# network.
+# ### Interactive inspection of matrix temperature distribution
 msh = physical_representation(reservoir_model(case.model).data_domain)
 geo = tpfv_geometry(msh)
 x_range = diff(vcat(extrema(geo.cell_centroids[1, :])...))[1]
@@ -100,8 +101,9 @@ plot_reservoir(case.model, states_m;
     colormap = :seaborn_icefire_gradient)
 
 # ### Fracture temperature distribution
-# The fractures are the primary heat transport pathway. We visualize the
-# temperature field on the fracture mesh at the end of the simulation.
+# The fractures are the primary heat transport pathway. We also interactively
+# visualize the temperature field on the fracture mesh at the end of the
+# simulation.
 states_f = [s[:Fractures] for s in results.result.states]
 plot_reservoir(case.model.models[:Fractures], states_f;
     key = :Temperature,
@@ -121,9 +123,11 @@ plot_well_results(results.wells, field = :temperature)
 using Dates
 timestamps = case.input_data[:timestamps][2:end]
 
-steps = findall([Dates.monthname(t) ∈ ["December", "April"] .&& Dates.day(t) == 1 for t in timestamps])
+steps = findall([Dates.monthname(t) ∈ ["December", "April"] .&&
+    Dates.day(t) == 1 for t in timestamps])
 steps = steps[[1, 2, end-1, end]] # Select first two and last two cycles for better visualization
 cells = .!(geo.cell_centroids[1,:] .< 0.0 .&& geo.cell_centroids[2,:] .< 0.0)
+colorrange = convert_from_si.((T_discharge, T_charge), :Celsius)
 fig = Figure(size = (900, 900))
 for (k, step) in enumerate(steps)
     row = (k-1)÷2 + 1
@@ -134,12 +138,12 @@ for (k, step) in enumerate(steps)
         title = "$month $year",
         zreversed = true, aspect = aspect, axis_args...,
         azimuth = 1.25π, titlegap = -50)
-    T = convert_from_si.(results.states[step][:Temperature], :Celsius)
+    T = convert_from_si.(results.result.states[step][:Reservoir][:Temperature], :Celsius)
     plot_cell_data!(ax, msh, T;
-        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (20.0, 95.0))
+        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = colorrange)
     hidedecorations!(ax)
 end
 Colorbar(fig[3, 1:2];
-    colormap = :seaborn_icefire_gradient, colorrange = (20.0, 95.0),
+    colormap = :seaborn_icefire_gradient, colorrange = colorrange,
     label = "Temperature (°C)", vertical = false, flipaxis = false)
 fig
