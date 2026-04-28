@@ -78,36 +78,32 @@ well with branches coupled at a shared top node.
 - `fracture_end = missing`: Ending meters-drilled position of the last
   fracture along the injector. When `missing`, defaults to 90 % into the
   identified lateral section.
-- fracture_angle = 0.0: Additional rotation angle(s) of each fracture disk around the
-  z axis. At 0 the fracture plane is exactly perpendicular to the
-  injector tangent. A scalar applies the same angle to all fractures; a vector
-  of length `n_frac` sets one angle per fracture; a 2-tuple `(angle_mean,
-  angle_std)` samples from `N(angle_mean, angle_std)` independently per fracture
-  [rad]
+- `fracture_angle = 0.0`: Additional rotation angle(s) of each fracture disk
+  around the z axis. At 0 the fracture plane is exactly perpendicular
+  to the injector tangent. A scalar applies the same angle to all fractures; a
+  vector of length `n_frac` sets one angle per fracture; a 2-tuple
+  `(angle_mean, angle_std)` samples from `N(angle_mean, angle_std)` independently
+  per fracture [rad]
 - `fracture_aperture = 0.5e-3`: Physical fracture aperture [m]. A scalar applies
   the same aperture to all fractures; a vector of length `n_frac` sets one
   aperture per fracture; a 2-tuple `(aperture_mean, aperture_std)` samples from
   `N(aperture_mean, aperture_std)` independently per fracture
 - `fracture_porosity = 0.5`: Fracture porosity [-]
-- `fracture_permeability = missing`: Fracture permeability (defaults to `a²/12`)
-- `permeability = 1e-4*darcy`: Matrix permeability
-- `porosity = 0.01`: Matrix porosity
-- `rock_thermal_conductivity = 2.5*watt/(meter*Kelvin)`: Rock thermal conductivity
-- `rock_heat_capacity = 900*joule/(kilogram*Kelvin)`: Rock heat capacity
+- `fracture_permeability = missing`: Fracture permeability [m²]. Defaults to
+  `aperture² / 12` (cubic law)
+- `permeability = 1e-4*darcy`: Matrix permeability [m²]
+- `porosity = 0.01`: Matrix porosity [-]
+- `rock_thermal_conductivity = 2.5 W/(m·K)`: Rock thermal conductivity
+- `rock_heat_capacity = 900 J/(kg·K)`: Rock heat capacity
 - `temperature_inj = 25°C`: Injection temperature
-- `rate`: Total injection rate
+- `rate = 0.1 m³/s`: Total volumetric injection rate (at reference density 1000 kg/m³)
 - `num_years = 20`: Number of years to simulate
-- `fracture_angle = 0.0`: Additional rotation angle(s) of each fracture disk
-  around the well tangent axis. At 0 the fracture plane is exactly perpendicular
-  to the injector tangent. A scalar applies the same angle to all fractures; a
-  vector of length `n_frac` sets one angle per fracture; a 2-tuple
-  `(angle_mean, angle_std)` samples from `N(angle_mean, angle_std)` independently
-  per fracture [rad]
 - `hxy_min = missing`: Minimum cell size in the x-y plane [m]. Defaults to
   `min(well_spacing / 3, fracture_radius / 4)` when `missing`.
 - `mesh_args = NamedTuple()`: Extra keyword arguments forwarded to `extruded_mesh`
 - `schedule_args = NamedTuple()`: Extra keyword arguments forwarded to
   `make_schedule` (e.g. `report_interval`)
+- `info_level = 0`: Verbosity level (0 = silent, 1 = progress messages)
 """
 function egs(
     injector_coords::Vector{<:Matrix{Float64}},
@@ -289,15 +285,19 @@ function egs(
         # Build local fracture-plane axes
         u0, v0 = fracture_plane_basis(n_hat)
 
-        # Apply additional rotation around the well-tangent axis by fracture_angle
+        # Apply additional rotation around the z axis by α.
         α = rotation_angles[fno]
-        ca, sa = cos(α), sin(α)
-        # Rotate around z axis
-        M = [ca -sa 0.0;
-             sa  ca 0.0;
-             0.0 0.0 1.0]
-        u_vec = M * u0
-        v_vec = M * v0
+        if α != 0.0
+            ca, sa = cos(α), sin(α)
+            M = [ca -sa 0.0;
+                sa  ca 0.0;
+                0.0 0.0 1.0]
+            u_vec = M * u0
+            v_vec = M * v0
+        else
+            u_vec = u0
+            v_vec = v0
+        end
 
         polygon = [Jutul.SVector{3, Float64}(
             pos[1] + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
