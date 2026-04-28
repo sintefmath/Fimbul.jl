@@ -6,8 +6,8 @@
 
 # Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul # Core reservoir simulation framework
-using HYPRE                      # High-performance linear solvers
-using GLMakie                    # 3D visualization and plotting capabilities
+using HYPRE # High-performance linear solvers
+using GLMakie # 3D visualization and plotting capabilities
 
 # Useful SI units
 meter, day, watt = si_units(:meter, :day, :watt);
@@ -24,13 +24,23 @@ GWh = si_unit(:giga) * si_unit(:watt) * si_unit(:hour);
 # placed at a lower elevation than the production wells, forcing the colder (and
 # therefore denser) water to sweep a larger volume of the fracture network.
 
+# We will investigate three different configurations:
+# 1. Uniform fractures with 100 m well spacing
+# 2. Uniform fractures with 200 m well spacing
+# 3. Random fracture angles with 200 m well spacing
+
 # ### Define shared simulation parameters
 # These parameters are common to all three runs.
+well_depth       = 2500.0meter # Vertical depth of wells [m]
+well_lateral     = 1000.0meter # Length of horizontal well sections [m]
+bend_radius      = 200.0meter  # Radius of quarter-arc bends in well trajectories [m]
 fracture_radius  = 250.0meter  # Radius of stimulated fracture disks [m]
 fracture_spacing = 125.0meter  # Spacing between fractures along the well [m]
 num_years        = 10          # Total simulation period [years]
 
 common_args = (
+    fracture_start  = well_depth - bend_radius + bend_radius*π/2 + 0.05 * well_lateral,
+    fracture_end    = well_depth - bend_radius + bend_radius*π/2 + 0.95 * well_lateral,
     rate            = 9250meter^3/day,               # Water injection rate
     temperature_inj = convert_to_si(25.0, :Celsius), # Injection temperature
     num_years       = num_years,
@@ -45,18 +55,18 @@ common_args = (
 
 # 100 m well spacing – used in Run 1
 inj, prod = Fimbul.egs_well_coordinates(
-    well_depth     = 2500.0meter,
+    well_depth     = well_depth,
     well_spacing_x = 100.0meter,
-    well_lateral   = 1000.0meter,
-    bend_radius    = 200.0meter,
+    well_lateral   = well_lateral,
+    bend_radius    = bend_radius,
 );
 
 # 200 m well spacing – used in Runs 2 and 3
 inj_200, prod_200 = Fimbul.egs_well_coordinates(
-    well_depth     = 2500.0meter,
+    well_depth     = well_depth,
     well_spacing_x = 200.0meter,
-    well_lateral   = 1000.0meter,
-    bend_radius    = 200.0meter,
+    well_lateral   = well_lateral,
+    bend_radius    = bend_radius,
 );
 
 # ## Helper functions
@@ -81,7 +91,10 @@ function plot_egs_mesh(c, inj_w, prod_w, title)
     asp = (xr, yr, zr) ./ max.(xr, yr, zr)
     fig_ = Figure(size = (800, 800))
     ax_  = Axis3(fig_[1, 1]; zreversed = true, aspect = asp,
-        perspectiveness = 0.75, title = title)
+        perspectiveness = 0.75,
+        elevation = 0.15π,
+        azimuth = 0.9π,
+        title = title)
     Jutul.plot_mesh_edges!(ax_, m_; alpha = 0.2)
     Jutul.plot_mesh!(ax_, fm_; color = :lightgray)
     plot_egs_wells!(ax_, inj_w, prod_w)
@@ -90,10 +103,10 @@ end
 
 # Set up the EGS reservoir simulator with standard convergence settings.
 # A `VariableChangeTimestepSelector` limits the maximum temperature change per
-# timestep to 10 °C, improving stability during thermal transients.
+# timestep to 10 °C, improving stability during the initial thermal transient.
 function setup_egs_simulator(c)
     sim, cfg = setup_reservoir_simulator(c;
-        info_level       = 2,
+        info_level       = 0,
         output_substates = true,
         initial_dt       = 5.0,
         relaxation       = true,
@@ -222,11 +235,6 @@ case = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing; common_args...);
 plot_egs_mesh(case, inj, prod, "Run 1 – Uniform fractures, well spacing 100 m")
 
 # ### Simulate
-# We configure the simulator to use increment-based convergence criteria.
-# Standard CNV criteria are disabled for fracture cells because the high
-# fluid/energy flux through thin, high-permeability fractures can produce
-# artificially large material-balance residuals even when the solution is
-# physically accurate.
 sim, cfg = setup_egs_simulator(case)
 results = simulate_reservoir(case; simulator = sim, config = cfg)
 
@@ -278,9 +286,6 @@ fdata2 = Fimbul.get_egs_fracture_data(states2, case2)
 plot_well_results([results.wells, results2.wells];
     names = ["Uniform 100 m", "Uniform 200 m"])
 
-# ### Fracture ΔT
-plot_fracture_dt_fig(case2, inj_200, prod_200, results2)
-
 # ### Fracture metrics – Run 2
 plot_fracture_metrics_fig(fdata2, time2, dt2, num_years)
 
@@ -291,7 +296,7 @@ using Random
 Random.seed!(20260428) # For reproducibility of random fracture anglesxs
 case3 = Fimbul.egs(inj_200, prod_200, fracture_radius, fracture_spacing;
     common_args...,
-    fracture_angle    = (0.0, deg2rad(12.5)), # N(0°, 12.5°) rotation about z-axis
+    fracture_angle = (0.0, deg2rad(12.5)), # N(0°, 12.5°) rotation about z-axis
 );
 plot_egs_mesh(case3, inj_200, prod_200, "Run 3 – Random fractures, well spacing 200 m")
 
@@ -306,9 +311,6 @@ fdata3 = Fimbul.get_egs_fracture_data(states3, case3)
 # ### Well performance – all three runs
 plot_well_results([results.wells, results2.wells, results3.wells];
     names = ["Uniform 100 m", "Uniform 200 m", "Random 200 m"], key = :temperature)
-
-# ### Fracture ΔT - Run 3
-plot_fracture_dt_fig(case3, inj_200, prod_200, results3)
 
 # ### Fracture metrics – Run 3
 plot_fracture_metrics_fig(fdata3, time3, dt3, num_years)
