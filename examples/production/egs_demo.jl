@@ -292,12 +292,9 @@ fig
 # normal distributions. Fracture tilt angles are sampled from N(0°, 5°) and
 # apertures from N(0.5 mm, 0.1 mm). All other parameters are kept identical.
 case2 = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
-    rate              = 9250meter^3/day,
-    temperature_inj   = convert_to_si(25.0, :Celsius),
-    num_years         = num_years,
+    common_args...,
     fracture_angle    = (0.0, deg2rad(12.5)),    # N(0°, 5°) tilt
     fracture_aperture = (0.5e-3, 1e-4),           # N(0.5 mm, 0.1 mm)
-    schedule_args     = (report_interval = si_unit(:year)/4,)
 );
 
 frac_domain2 = case2.model.models[:Fractures].data_domain
@@ -452,10 +449,7 @@ inj3, prod3 = Fimbul.egs_well_coordinates(
 )
 
 case3 = Fimbul.egs(inj3, prod3, fracture_radius, fracture_spacing;
-    rate              = 9250meter^3/day,
-    temperature_inj   = convert_to_si(25.0, :Celsius),
-    num_years         = num_years,
-    schedule_args     = (report_interval = si_unit(:year)/4,)
+    common_args...
 );
 plot_egs_mesh(case3, "Run 3 – Uniform fractures, well spacing 200 m")
 
