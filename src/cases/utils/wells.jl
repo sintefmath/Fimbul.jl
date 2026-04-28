@@ -18,6 +18,7 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     if top_node
         push!(well_cells, [1])
         push!(neighborship, zeros(2,0))
+        push!(sections, [1])
         wc_max = 1
     else
         wc_max = 0
