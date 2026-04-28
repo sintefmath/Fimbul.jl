@@ -44,7 +44,7 @@ function egs_well_coordinates(;
         for i in 2:length(θ_arr)-1
             traj = vcat(traj, [x y_bend[i] z_bend[i]])  # interior bend waypoints
         end
-        traj = vcat(traj, [x well_lateral wd])           # end of horizontal section
+        traj = vcat(traj, [x well_lateral + bend_radius wd])           # end of horizontal section
         return traj
     end
     injector_coords = [make_trajectory(0.0, well_depth)]
@@ -71,6 +71,12 @@ well with branches coupled at a shared top node.
 - `fracture_spacing`: Spacing between fractures along the horizontal well [m].
 
 # Keyword arguments
+- `fracture_start = missing`: Starting meters-drilled position of the first
+  fracture along the injector. When `missing`, defaults to 10 % into the
+  identified lateral section.
+- `fracture_end = missing`: Ending meters-drilled position of the last
+  fracture along the injector. When `missing`, defaults to 90 % into the
+  identified lateral section.
 - `fracture_aperture = 0.5e-3`: Physical fracture aperture [m]. A scalar applies
   the same aperture to all fractures; a vector of length `n_frac` sets one
   aperture per fracture; a 2-tuple `(aperture_mean, aperture_std)` samples from
@@ -84,13 +90,12 @@ well with branches coupled at a shared top node.
 - `temperature_inj = 25°C`: Injection temperature
 - `rate`: Total injection rate
 - `num_years = 20`: Number of years to simulate
-- `fracture_offset = 50.0`: Minimum distance along the horizontal section before
-  the first fracture [m], ensuring the well is fully horizontal before fracturing
-- `fracture_theta = 0.0`: Tilt angle(s) of the fracture around the z-axis (vertical).
-  At θ=0 the fracture normal points along y (perpendicular to the well). A scalar
-  applies the same angle to all fractures; a vector of length `n_frac` sets one angle
-  per fracture; a 2-tuple `(theta, theta_std)` samples angles from
-  `N(theta, theta_std)` independently per fracture [rad]
+- `fracture_angle = 0.0`: Additional rotation angle(s) of each fracture disk
+  around the well tangent axis. At 0 the fracture plane is exactly perpendicular
+  to the injector tangent. A scalar applies the same angle to all fractures; a
+  vector of length `n_frac` sets one angle per fracture; a 2-tuple
+  `(angle_mean, angle_std)` samples from `N(angle_mean, angle_std)` independently
+  per fracture [rad]
 - `mesh_args = NamedTuple()`: Extra keyword arguments forwarded to `extruded_mesh`
 - `schedule_args = NamedTuple()`: Extra keyword arguments forwarded to
   `make_schedule` (e.g. `report_interval`)
@@ -100,6 +105,8 @@ function egs(
     producer_coords::Vector{<:Matrix{Float64}},
     fracture_radius::Real,
     fracture_spacing::Real;
+    fracture_start = missing,
+    fracture_end = missing,
     fracture_aperture = 0.5e-3,
     fracture_porosity = 0.5,
     fracture_permeability = missing,
@@ -110,46 +117,78 @@ function egs(
     temperature_inj = convert_to_si(25, :Celsius),
     rate = 100kilogram/second/(1000kilogram/meter^3),
     num_years = 20,
-    fracture_offset = 50.0,
-    fracture_theta = 0.0,
+    fracture_angle = 0.0,
     mesh_args = NamedTuple(),
     schedule_args = NamedTuple(),
 )
     all_coords = vcat(injector_coords, producer_coords)
 
-    # ── Key depths ────────────────────────────────────────────────────────────
-    z_wells  = [maximum(traj[:, 3]) for traj in all_coords]
-    x_wells = [mean(traj[:, 1]) for traj in all_coords]
-    wd_min, wd_max = extrema(z_wells)
+    # ── Meters-drilled parameterisation of the first injector leg ────────────
+    # Use injector_coords[1] as the reference trajectory for fracture placement.
+    inj_traj = injector_coords[1]   # n_pts × 3
+    n_pts    = size(inj_traj, 1)
 
-    # Identify horizontal-section y-range (waypoints within fracture_radius of max depth)
-    y_deep = vcat([traj[traj[:, 3] .>= wd_max - fracture_radius, 2]
-                   for traj in all_coords]...)
-    isempty(y_deep) && (y_deep = vcat([traj[:, 2] for traj in all_coords]...))
-    y_horiz_min = minimum(y_deep)
-    y_horiz_max = maximum(y_deep)
+    # Cumulative arc-length (meters drilled) along the reference trajectory
+    seg_lengths = [norm(inj_traj[i+1, :] .- inj_traj[i, :]) for i in 1:n_pts-1]
+    md_nodes    = vcat(0.0, cumsum(seg_lengths))   # length n_pts
 
-    # Fracture y-positions, evenly distributed along the horizontal section.
-    # fracture_offset ensures the well is fully horizontal before the first fracture.
-    frac_y_start = y_horiz_min + fracture_offset + fracture_spacing / 2
-    frac_y_end   = y_horiz_max - fracture_spacing / 2
-    n_frac = max(1, Int(round((frac_y_end - frac_y_start) / fracture_spacing)) + 1)
-    y_fracs = collect(range(frac_y_start, frac_y_end, length = n_frac))
+    # Per-segment unit tangent vectors (pointing in direction of increasing MD)
+    tangents = [(inj_traj[i+1, :] .- inj_traj[i, :]) ./ seg_lengths[i] for i in 1:n_pts-1]
 
-    x_c    = mean(x_wells)
-    z_c    = mean(z_wells)    
+    # Identify the lateral section: segments whose tangent makes >45° with the
+    # z-axis, i.e. |cos(angle)| = |t_z| < cos(45°) = 1/√2 ≈ 0.7071
+    lateral_mask = [abs(t[3]) < (1.0 / sqrt(2.0)) for t in tangents]
+    if !any(lateral_mask)
+        # Fallback: treat deepest half of the well as "lateral"
+        lateral_mask = md_nodes[1:end-1] .>= md_nodes[end] / 2
+    end
 
-    # Depth layers: overburden | reservoir zone | buffer
+    # MD range of the lateral section (from start of first lateral segment to
+    # end of last lateral segment)
+    lat_seg_inds  = findall(lateral_mask)
+    md_lat_start  = md_nodes[lat_seg_inds[1]]
+    md_lat_end    = md_nodes[lat_seg_inds[end] + 1]
+    lat_length    = md_lat_end - md_lat_start
+
+    # fracture_start / fracture_end in absolute MD [m]
+    md_frac_start = ismissing(fracture_start) ? md_lat_start + 0.1 * lat_length : Float64(fracture_start)
+    md_frac_end   = ismissing(fracture_end)   ? md_lat_start + 0.9 * lat_length : Float64(fracture_end)
+
+    n_frac = max(1, Int(round((md_frac_end - md_frac_start) / fracture_spacing)) + 1)
+    md_fracs = collect(range(md_frac_start, md_frac_end, length = n_frac))
+
+    # Interpolate 3-D position and tangent at each fracture MD
+    function interp_at_md(md_val)
+        # Clamp to valid range
+        md_val = clamp(md_val, md_nodes[1], md_nodes[end])
+        seg = searchsortedlast(md_nodes, md_val)
+        seg = clamp(seg, 1, n_pts - 1)
+        t_local = (md_val - md_nodes[seg]) / seg_lengths[seg]
+        pos = inj_traj[seg, :] .+ t_local .* (inj_traj[seg+1, :] .- inj_traj[seg, :])
+        tan = tangents[seg]
+        return pos, tan
+    end
+
+    frac_positions = Vector{Vector{Float64}}(undef, n_frac)
+    frac_tangents  = Vector{Vector{Float64}}(undef, n_frac)
+    for (fno, md) in enumerate(md_fracs)
+        pos, tan = interp_at_md(md)
+        frac_positions[fno] = pos
+        frac_tangents[fno]  = tan
+    end
+
+    # ── Key depths (for mesh extents) ────────────────────────────────────────
+    z_wells = [maximum(traj[:, 3]) for traj in all_coords]
+    x_wells = [mean(traj[:, 1])    for traj in all_coords]
+
+    x_c = mean(x_wells)
+    z_c = mean([p[3] for p in frac_positions])
+
     depths = [0.0,
-              z_c - fracture_radius * 0.75,
-              z_c + fracture_radius * 0.75,
+              z_c - fracture_radius * 1.1,
+              z_c + fracture_radius * 1.1,
               z_c + fracture_radius * 2.0]
     hz = diff(depths) ./ [5.0, n_frac * 3.0, 5.0]
-
-    # println("Well depths: ", z_wells)
-    # println("Depth layers: ", depths)
-    # println("Layer thicknesses: ", hz)
-    # return nothing
 
     # ── 2D cell constraints (well x-y footprints) ─────────────────────────────
     cell_constraints = Matrix{Float64}[]
@@ -161,11 +200,25 @@ function egs(
     hxy_min = min(Δx_min / 3.0, fracture_radius / 4.0)
 
     # Add fracture footprint lines to enforce mesh refinement across the full
-    # fracture diameter, not just near the wellbore.
-    x_c_pre = mean(x_wells)
-    for y_f in y_fracs
-        push!(cell_constraints, [x_c_pre - fracture_radius  x_c_pre + fracture_radius;
-                                  y_f                        y_f                       ])
+    # fracture diameter. For each fracture, project the fracture normal onto
+    # the x-y plane to determine the footprint line orientation.
+    for (fno, pos) in enumerate(frac_positions)
+        tan = frac_tangents[fno]   # well tangent = fracture normal direction
+        # Project tangent onto x-y plane and rotate 90° to get in-plane direction
+        # The fracture disk in x-y is perpendicular to tan_xy
+        tan_xy_len = sqrt(tan[1]^2 + tan[2]^2)
+        if tan_xy_len < 1e-12
+            # Tangent is nearly vertical: fracture footprint is a circle in x-y
+            push!(cell_constraints, [pos[1] - fracture_radius  pos[1] + fracture_radius;
+                                     pos[2]                     pos[2]                  ])
+        else
+            # In-plane direction perpendicular to tan projected on x-y
+            dx = -tan[2] / tan_xy_len
+            dy =  tan[1] / tan_xy_len
+            push!(cell_constraints,
+                [pos[1] + dx * fracture_radius  pos[1] - dx * fracture_radius;
+                 pos[2] + dy * fracture_radius  pos[2] - dy * fracture_radius])
+        end
     end
 
     # Shift cell constraints by hxy_min/2 so well coordinates don't land on cell boundaries
@@ -183,27 +236,27 @@ function egs(
 
     # ── Add DFM fractures ────────────────────────────────────────────────────
     @info "Generating fractures and cutting mesh..."
-    # Each fracture is a disk centered on the well at the fracture y-position.
-    # fracture_theta controls rotation around the vertical z-axis: theta=0 means
-    # the fracture lies in the x-z plane (normal along y, perpendicular to well).
-    # fracture_theta may be:
+    # Each fracture is a disk perpendicular to the injector well tangent at the
+    # fracture position. fracture_angle optionally rotates the disk around the
+    # tangent axis (0 = exactly perpendicular).
+    # fracture_angle may be:
     #   - a scalar (same angle for all fractures)
     #   - a vector of length n_frac (one angle per fracture)
-    #   - a 2-tuple (theta_mean, theta_std) → sample N(theta_mean, theta_std)
+    #   - a 2-tuple (angle_mean, angle_std) → sample N(angle_mean, angle_std)
     n_poly = 16
     θ_poly = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
 
-    # Resolve per-fracture tilt angles
-    _n_frac = length(y_fracs)
-    if fracture_theta isa Tuple{<:Real, <:Real}
-        θ_mean, θ_std = fracture_theta
-        tilt_angles = θ_mean .+ θ_std .* randn(_n_frac)
-    elseif fracture_theta isa AbstractVector
-        length(fracture_theta) == _n_frac ||
-            error("fracture_theta vector must have length n_frac = $_n_frac")
-        tilt_angles = Float64.(fracture_theta)
+    # Resolve per-fracture rotation angles
+    _n_frac = length(frac_positions)
+    if fracture_angle isa Tuple{<:Real, <:Real}
+        a_mean, a_std = fracture_angle
+        rotation_angles = a_mean .+ a_std .* randn(_n_frac)
+    elseif fracture_angle isa AbstractVector
+        length(fracture_angle) == _n_frac ||
+            error("fracture_angle vector must have length n_frac = $_n_frac")
+        rotation_angles = Float64.(fracture_angle)
     else
-        tilt_angles = fill(Float64(fracture_theta), _n_frac)
+        rotation_angles = fill(Float64(fracture_angle), _n_frac)
     end
 
     # Resolve per-fracture apertures
@@ -218,19 +271,37 @@ function egs(
         aperture_per_frac = fill(Float64(fracture_aperture), _n_frac)
     end
 
+    # Helper: build an orthonormal basis for the plane perpendicular to `n_hat`.
+    # Returns (u, v) unit vectors spanning the fracture plane.
+    function fracture_plane_basis(n_hat)
+        # Pick an arbitrary vector not parallel to n_hat
+        ref = abs(n_hat[1]) < 0.9 ? [1.0, 0.0, 0.0] : [0.0, 1.0, 0.0]
+        u = ref .- dot(ref, n_hat) .* n_hat
+        u ./= norm(u)
+        v = cross(n_hat, u)
+        v ./= norm(v)
+        return u, v
+    end
+
     cuts = PolygonalSurface[]
-    # cuts = PlaneCut[]
-    for (fno, y_frac) in enumerate(y_fracs)
-        α = tilt_angles[fno]   # tilt around z-axis: 0 → disk in x-z plane, normal=[0,1,0]
-        # Disk parameterisation: local u = x-axis rotated by α around z, v = z-axis
-        u_vec = Jutul.SVector(cos(α), sin(α), 0.0)   # rotation in x-y plane
-        v_vec = Jutul.SVector(0.0, 0.0, 1.0)          # z-axis stays fixed
+    for (fno, pos) in enumerate(frac_positions)
+        # Well tangent = fracture normal (exactly perpendicular to well)
+        n_hat = frac_tangents[fno]
+
+        # Build local fracture-plane axes
+        u0, v0 = fracture_plane_basis(n_hat)
+
+        # Apply additional rotation around the well-tangent axis by fracture_angle
+        α = rotation_angles[fno]
+        ca, sa = cos(α), sin(α)
+        u_vec = ca .* u0 .+ sa .* v0
+        v_vec = -sa .* u0 .+ ca .* v0
+
         polygon = [Jutul.SVector{3, Float64}(
-            x_c + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
-            y_frac + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
-            z_c + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
+            pos[1] + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
+            pos[2] + fracture_radius * (cos(θ) * u_vec[2] + sin(θ) * v_vec[2]),
+            pos[3] + fracture_radius * (cos(θ) * u_vec[3] + sin(θ) * v_vec[3])) for θ in θ_poly]
         push!(cuts, PolygonalSurface([polygon]))
-        # push!(cuts, PlaneCut((x_c, y_frac, z_c), (0.0, cos(α), sin(α))))
     end
 
     msh, info = cut_mesh(msh, cuts; extra_out = true, min_cut_fraction = 0.0)
@@ -353,8 +424,6 @@ function egs(
 
     z = model.models[:Injector].data_domain[:cell_centroids][3, :]
     z_hat = z .- z_min
-    println(size(state0[:Injector][:Pressure]), " injector cells")
-    println(size(z_hat), " injector cell centroids")
     state0[:Injector][:Pressure] .= p(z)
     state0[:Injector][:Temperature] .= T(z)
 
@@ -374,16 +443,20 @@ function egs(
         num_years = num_years, schedule_args...)
 
     input_data = Dict{Symbol, Any}(
-        :injector_coords => injector_coords,
-        :producer_coords => producer_coords,
-        :fracture_radius => fracture_radius,
+        :injector_coords  => injector_coords,
+        :producer_coords  => producer_coords,
+        :fracture_radius  => fracture_radius,
         :fracture_spacing => fracture_spacing,
-        :fracture_offset  => fracture_offset,
-        :fracture_theta    => fracture_theta,
-        :tilt_angles       => tilt_angles,
+        :fracture_start   => md_frac_start,
+        :fracture_end     => md_frac_end,
+        :md_fracs         => md_fracs,
+        :frac_positions   => frac_positions,
+        :frac_tangents    => frac_tangents,
+        :fracture_angle   => fracture_angle,
+        :rotation_angles  => rotation_angles,
         :fracture_aperture => fracture_aperture,
         :aperture_per_frac => aperture_per_frac,
-        :y_fracs => y_fracs,
+        :y_fracs => [p[2] for p in frac_positions],
         :cut_no  => info[:cut_no],
     )
 

@@ -14,7 +14,7 @@ meter, day, watt = si_units(:meter, :day, :watt);
 
 # ## EGS setup
 # We consider an EGS system with one injection well and two production wells.
-# The wells extend 2500 m vertically before they continue 500 m horizontally.
+# The wells extend 2500 m vertically before they continue 1000 m horizontally.
 # The horizontal sections are arranged in a triangular pattern, connected by a
 # stimulated fracture network comprising eight fractures intersecting the wells
 # at a right angle. Thermal energy is produced by circulating cold water through
@@ -64,6 +64,16 @@ frac_domain = case.model.models[:Fractures].data_domain
 frac_mesh   = physical_representation(frac_domain)
 frac_geo    = tpfv_geometry(frac_mesh)
 
+# Plot wells closure (used in fracture ΔT visualizations below)
+wells_dict = get_model_wells(case.model; data_domain=true)
+function plot_egs_wells!(ax; colors = Makie.wong_colors(6)[[6,1]])
+    for (i, well) in enumerate([inj, prod])
+        for xw in well
+            lines!(ax, xw[:, 1], xw[:, 2], xw[:, 3]; color = colors[i], linewidth = 3)
+        end
+    end
+end
+
 # Shared helper: visualize mesh edges, DFM fractures and wells for any EGS case.
 function plot_egs_mesh(c, title)
     m_  = physical_representation(reservoir_model(c.model).data_domain)
@@ -75,26 +85,13 @@ function plot_egs_mesh(c, title)
     asp = (xr, yr, zr) ./ max.(xr, yr, zr)
     fig_ = Figure(size = (800, 800))
     ax_  = Axis3(fig_[1, 1]; zreversed = true, aspect = asp,
-        perspectiveness = 0.0, title = title)
+        perspectiveness = 0.75, title = title)
     Jutul.plot_mesh_edges!(ax_, m_; alpha = 0.2)
     Jutul.plot_mesh!(ax_, fm_; color = :lightgray)
-    for (i, (name, well)) in enumerate(get_model_wells(c.model; data_domain = true))
-        xy = permutedims(well[:cell_centroids][1:2, :])
-        plot_mswell_values!(ax_, c.model, name, xy;
-            geo = g_, linewidth = 3, color = [:red, :blue][i])
-    end
+    plot_egs_wells!(ax_)
     return fig_
 end
 
-# Plot wells closure (used in fracture ΔT visualizations below)
-wells_dict = get_model_wells(case.model; data_domain=true)
-function plot_egs_wells(ax; colors = [:red, :blue])
-    for (i, (name, well)) in enumerate(wells_dict)
-        xy = permutedims(well[:cell_centroids][1:2, :])
-        plot_mswell_values!(ax, case.model, name, xy;
-            geo = geo, linewidth = 3, color = colors[i])
-    end
-end
 plot_egs_mesh(case, "Run 1 – Uniform fractures, well spacing 100 m")
 
 # ## Simulate system
@@ -132,6 +129,10 @@ results = simulate_reservoir(case; simulator = sim, config = cfg)
 
 # ### Reservoir state evolution
 # First, plot the reservoir state throughout the simulation.
+x_range = diff(vcat(extrema(geo.cell_centroids[1, :])...))[1]
+y_range = diff(vcat(extrema(geo.cell_centroids[2, :])...))[1]
+z_range = diff(vcat(extrema(geo.cell_centroids[3, :])...))[1]
+aspect = (x_range, y_range, z_range)./max.(x_range, y_range, z_range)
 plot_res_args = (
     resolution = (600, 800), aspect = aspect, 
     colormap = :seaborn_icefire_gradient, key = :Temperature,
@@ -171,15 +172,15 @@ limits_f = (xlim_f, ylim_f, zlim_f)
 n_steps_f = length(ΔT_frac)
 steps = Int.(round.([0.125, 0.5, 1.0] .* n_steps_f))
 
-fig = Figure(size = (650, 800))
+fig = Figure(size = (750, 800))
 for (n, ΔT_n) in enumerate(ΔT_frac[steps])
     ax_n = Axis3(fig[n, 1];
         perspectiveness = 0.5, zreversed = true, aspect = (1, 6, 1),
-        azimuth = 1.2π, elevation = π/20, limits = limits_f,
-        title = "$(round(time_full[steps[n]], digits=1)) years", titlegap = -10)
+        azimuth = 1.2π, elevation = π/50, limits = limits_f,
+        title = "$(round(time_full[steps[n]], digits=1)) years", titlegap = -25)
     plot_cell_data!(ax_n, frac_mesh, ΔT_n; colorrange = colorrange,
         colormap = :seaborn_icefire_gradient)
-    plot_egs_wells(ax_n; colors = [:black, :black])
+    plot_egs_wells!(ax_n; colors = [:black, :black])
     hidedecorations!(ax_n)
 end
 Colorbar(fig[length(steps)+1, 1];
@@ -288,11 +289,19 @@ case2 = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
     rate              = 9250meter^3/day,
     temperature_inj   = convert_to_si(25.0, :Celsius),
     num_years         = num_years,
-    fracture_theta    = (0.0, deg2rad(5.0)),    # N(0°, 5°) tilt
+    fracture_angle    = (0.0, deg2rad(12.5)),    # N(0°, 5°) tilt
     fracture_aperture = (0.5e-3, 1e-4),           # N(0.5 mm, 0.1 mm)
     schedule_args     = (report_interval = si_unit(:year)/4,)
 );
 
+frac_domain2 = case2.model.models[:Fractures].data_domain
+frac_mesh2   = physical_representation(frac_domain2)
+frac_geo2    = tpfv_geometry(frac_mesh2)
+msh2 = physical_representation(reservoir_model(case2.model).data_domain)
+geo2 = tpfv_geometry(msh2)
+plot_egs_mesh(case2, "Run 2 – Random fractures, well spacing 100 m")
+
+##
 sim2, cfg2 = setup_reservoir_simulator(case2;
     info_level       = 2,
     output_substates = true,
@@ -310,13 +319,6 @@ results2 = simulate_reservoir(case2; simulator = sim2, config = cfg2)
 states2, dt2, _ = Jutul.expand_to_ministeps(results2.result)
 time2  = cumsum(dt2) ./ si_unit(:year)
 fdata2 = Fimbul.get_egs_fracture_data(states2, case2)
-
-frac_domain2 = case2.model.models[:Fractures].data_domain
-frac_mesh2   = physical_representation(frac_domain2)
-frac_geo2    = tpfv_geometry(frac_mesh2)
-msh2 = physical_representation(reservoir_model(case2.model).data_domain)
-geo2 = tpfv_geometry(msh2)
-plot_egs_mesh(case2, "Run 2 – Random fractures, well spacing 100 m")
 
 # ### Fracture ΔT visualization – random case
 states_full2, dt_full2, _ = Jutul.expand_to_ministeps(results2.result)
