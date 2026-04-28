@@ -26,7 +26,7 @@ GWh = si_unit(:giga) * si_unit(:watt) * si_unit(:hour);
 
 # ### Define shared simulation parameters
 # These parameters are common to all three runs.
-fracture_radius  = 200.0meter  # Radius of stimulated fracture disks [m]
+fracture_radius  = 250.0meter  # Radius of stimulated fracture disks [m]
 fracture_spacing = 125.0meter  # Spacing between fractures along the well [m]
 num_years        = 10          # Total simulation period [years]
 
@@ -34,7 +34,7 @@ common_args = (
     rate            = 9250meter^3/day,               # Water injection rate
     temperature_inj = convert_to_si(25.0, :Celsius), # Injection temperature
     num_years       = num_years,
-    hxy_min         = 25.0,
+    hxy_min         = 40.0,
     schedule_args   = (report_interval = si_unit(:year)/4,),
 )
 
@@ -93,7 +93,7 @@ end
 # timestep to 10 °C, improving stability during thermal transients.
 function setup_egs_simulator(c)
     sim, cfg = setup_reservoir_simulator(c;
-        info_level       = 0,
+        info_level       = 2,
         output_substates = true,
         initial_dt       = 5.0,
         relaxation       = true,
@@ -218,7 +218,6 @@ end
 # ## Run 1: Uniform fractures, 100 m well spacing
 # Fractures are placed perpendicular to the injector well at uniform spacing
 # along the lateral section, with uniform aperture (0.5 mm).
-
 case = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing; common_args...);
 plot_egs_mesh(case, inj, prod, "Run 1 – Uniform fractures, well spacing 100 m")
 
@@ -267,6 +266,7 @@ case2 = Fimbul.egs(inj_200, prod_200, fracture_radius, fracture_spacing;
     common_args...);
 plot_egs_mesh(case2, inj_200, prod_200, "Run 2 – Uniform fractures, well spacing 200 m")
 
+# ### Simulate
 sim2, cfg2 = setup_egs_simulator(case2)
 results2 = simulate_reservoir(case2; simulator = sim2, config = cfg2)
 
@@ -278,22 +278,24 @@ fdata2 = Fimbul.get_egs_fracture_data(states2, case2)
 plot_well_results([results.wells, results2.wells];
     names = ["Uniform 100 m", "Uniform 200 m"])
 
-# ### Fracture ΔT and metrics – Run 2
+# ### Fracture ΔT
 plot_fracture_dt_fig(case2, inj_200, prod_200, results2)
+
+# ### Fracture metrics – Run 2
 plot_fracture_metrics_fig(fdata2, time2, dt2, num_years)
 
-# ## Run 3: Random fracture angles and apertures, 200 m well spacing
-# To understand the effect of fracture orientation and aperture variability,
-# both properties are drawn from normal distributions. Fracture angles are
-# sampled from N(0°, 12.5°) – a rotation around the well-tangent axis – and
-# apertures from N(0.5 mm, 0.1 mm). All other parameters match Run 2.
+# ## Run 3: Random fracture angles, 200 m well spacing
+# To understand the effect of fracture orientation, fracture angles are now
+# sampled from N(0°, 12.5°) – a rotation around the z-axisx.
+using Random
+Random.seed!(20260428) # For reproducibility of random fracture anglesxs
 case3 = Fimbul.egs(inj_200, prod_200, fracture_radius, fracture_spacing;
     common_args...,
-    fracture_angle    = (0.0, deg2rad(12.5)),  # N(0°, 12.5°) rotation about well tangent
-    fracture_aperture = (0.5e-3, 1e-4),        # N(0.5 mm, 0.1 mm)
+    fracture_angle    = (0.0, deg2rad(12.5)), # N(0°, 12.5°) rotation about z-axis
 );
 plot_egs_mesh(case3, inj_200, prod_200, "Run 3 – Random fractures, well spacing 200 m")
 
+# ### Simulate
 sim3, cfg3 = setup_egs_simulator(case3)
 results3 = simulate_reservoir(case3; simulator = sim3, config = cfg3)
 
@@ -303,15 +305,21 @@ fdata3 = Fimbul.get_egs_fracture_data(states3, case3)
 
 # ### Well performance – all three runs
 plot_well_results([results.wells, results2.wells, results3.wells];
-    names = ["Uniform 100 m", "Uniform 200 m", "Random 200 m"])
+    names = ["Uniform 100 m", "Uniform 200 m", "Random 200 m"], key = :temperature)
 
-# ### Fracture ΔT and metrics – Run 3
+# ### Fracture ΔT - Run 3
 plot_fracture_dt_fig(case3, inj_200, prod_200, results3)
+
+# ### Fracture metrics – Run 3
 plot_fracture_metrics_fig(fdata3, time3, dt3, num_years)
 
 # ## Comparison: all three runs
 # Compare aggregate power output, per-fracture power spread, and annual energy
-# across the uniform 100 m, uniform 200 m and random 200 m configurations.
+# across the uniform 100 m, uniform 200 m and random 200 m configurations. We
+# note that increasing well spacing from 100 m to 200 m leads to a significant
+# drop in increase in power output, whereas the added fracture area due to
+# angled fractures in Run 3 only provides a marginal improvement over the
+# uniform 200 m case.
 
 power  = fracture_power(fdata,  dt)
 power2 = fracture_power(fdata2, dt2)
@@ -321,12 +329,14 @@ total_power1 = sum(power,  dims = 2)[:]
 total_power2 = sum(power2, dims = 2)[:]
 total_power3 = sum(power3, dims = 2)[:]
 
+colors = Makie.wong_colors(3)
+
 xmax_c  = round(max(maximum(time), maximum(time2), maximum(time3)))
 lim_c   = ((0, xmax_c) .+ (-0.1, 0.1) .* xmax_c, nothing)
 xtick_c = 0:xmax_c
 fs      = findfirst(time .> 1/104)   # skip initial transient (same for all runs)
 
-fig = Figure(size = (1000, 700))
+fig = Figure(size = (800, 1000))
 function make_cax(title, ylabel, rno)
     Axis(fig[rno, 1]; title = title, xlabel = "Time (years)", ylabel = ylabel,
         limits = lim_c, xticks = xtick_c)
@@ -335,12 +345,12 @@ end
 # ── Total thermal power ───────────────────────────────────────────────────────
 ax_c1 = make_cax("Total thermal power", "Power (MW)", 1)
 lines!(ax_c1, time[fs:end],  total_power1[fs:end]  ./ 1e6;
-    color = :steelblue,   linewidth = 2, label = "Uniform 100 m")
+    color = colors[1],   linewidth = 2, label = "Uniform 100 m")
 lines!(ax_c1, time2[fs:end], total_power2[fs:end]  ./ 1e6;
-    color = :forestgreen, linewidth = 2, label = "Uniform 200 m")
+    color = colors[2], linewidth = 2, label = "Uniform 200 m")
 lines!(ax_c1, time3[fs:end], total_power3[fs:end]  ./ 1e6;
-    color = :orangered,   linewidth = 2, linestyle = :dash, label = "Random 200 m")
-axislegend(ax_c1; position = :rb)
+    color = colors[3],   linewidth = 2, linestyle = :dash, label = "Random 200 m")
+axislegend(ax_c1; position = :rt)
 hidexdecorations!(ax_c1, grid = false)
 
 # ── Per-fracture power spread ─────────────────────────────────────────────────
@@ -349,14 +359,14 @@ function band_fractures!(ax, t, pwr; color = :steelblue, label = "")
     total_pwr = sum(pwr, dims = 2)[:]
     pmin = [minimum(r) for r in eachrow(pwr)]
     pmax = [maximum(r) for r in eachrow(pwr)]
-    band!(ax, t, pmin ./ 1e6, pmax ./ 1e6; color = (color, 0.3))
-    lines!(ax, t, total_pwr ./ size(pwr, 2) ./ 1e6; color = color, linewidth = 2,
+    band!(ax, t, pmin ./ 1e6, pmax ./ 1e6; color = (color, 0.05), strokecolor = color, strokewidth = 1)
+    lines!(ax, t, total_pwr ./ size(pwr, 2) ./ 1e6; color = color, linewidth = 3,
         label = label)
 end
-band_fractures!(ax_c2, time[fs:end],  power[fs:end,  :]; color = :steelblue,   label = "Uniform 100 m (mean)")
-band_fractures!(ax_c2, time2[fs:end], power2[fs:end, :]; color = :forestgreen, label = "Uniform 200 m (mean)")
-band_fractures!(ax_c2, time3[fs:end], power3[fs:end, :]; color = :orangered,   label = "Random 200 m (mean)")
-axislegend(ax_c2; position = :rb)
+band_fractures!(ax_c2, time[fs:end],  power[fs:end,  :]; color = colors[1], label = "Uniform 100 m (mean)")
+band_fractures!(ax_c2, time2[fs:end], power2[fs:end, :]; color = colors[2], label = "Uniform 200 m (mean)")
+band_fractures!(ax_c2, time3[fs:end], power3[fs:end, :]; color = colors[3], label = "Random 200 m (mean)")
+axislegend(ax_c2; position = :rt)
 hidexdecorations!(ax_c2, grid = false)
 
 # ── Annual energy ─────────────────────────────────────────────────────────────
@@ -369,10 +379,10 @@ ann1 = annual_energy(total_power1, time,  dt)
 ann2 = annual_energy(total_power2, time2, dt2)
 ann3 = annual_energy(total_power3, time3, dt3)
 years = 1:num_years
-barplot!(ax_c3, years .- 0.28, ann1; width = 0.25, color = :steelblue,   label = "Uniform 100 m")
-barplot!(ax_c3, years,         ann2; width = 0.25, color = :forestgreen, label = "Uniform 200 m")
-barplot!(ax_c3, years .+ 0.28, ann3; width = 0.25, color = :orangered,   label = "Random 200 m")
+args = (width = 0.25, strokecolor=:black, strokewidth=1)
+barplot!(ax_c3, years .- 0.28, ann1; args..., color = colors[1], label = "Uniform 100 m")
+barplot!(ax_c3, years,         ann2; args..., color = colors[2], label = "Uniform 200 m")
+barplot!(ax_c3, years .+ 0.28, ann3; args..., color = colors[3], label = "Random 200 m")
 axislegend(ax_c3; position = :rt)
 
 fig
-

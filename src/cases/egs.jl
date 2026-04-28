@@ -78,6 +78,12 @@ well with branches coupled at a shared top node.
 - `fracture_end = missing`: Ending meters-drilled position of the last
   fracture along the injector. When `missing`, defaults to 90 % into the
   identified lateral section.
+- fracture_angle = 0.0: Additional rotation angle(s) of each fracture disk around the
+  z axis. At 0 the fracture plane is exactly perpendicular to the
+  injector tangent. A scalar applies the same angle to all fractures; a vector
+  of length `n_frac` sets one angle per fracture; a 2-tuple `(angle_mean,
+  angle_std)` samples from `N(angle_mean, angle_std)` independently per fracture
+  [rad]
 - `fracture_aperture = 0.5e-3`: Physical fracture aperture [m]. A scalar applies
   the same aperture to all fractures; a vector of length `n_frac` sets one
   aperture per fracture; a 2-tuple `(aperture_mean, aperture_std)` samples from
@@ -108,12 +114,12 @@ function egs(
     producer_coords::Vector{<:Matrix{Float64}},
     fracture_radius::Real,
     fracture_spacing::Real;
+    fracture_angle = 0.0,
     fracture_start = missing,
     fracture_end = missing,
     fracture_aperture = 0.5e-3,
     fracture_porosity = 0.5,
     fracture_permeability = missing,
-    fracture_angle = 0.0,
     permeability = 1e-4 * darcy,
     porosity = 0.01,
     rock_thermal_conductivity = 2.5 * watt/(meter*Kelvin),
@@ -121,9 +127,10 @@ function egs(
     temperature_inj = convert_to_si(25, :Celsius),
     rate = 100kilogram/second/(1000kilogram/meter^3),
     num_years = 20,
-    hxy_min = missing,
+    hxy_min::Union{Missing, Float64} = missing,
     mesh_args = NamedTuple(),
     schedule_args = NamedTuple(),
+    info_level::Int = 0
 )
     all_coords = vcat(injector_coords, producer_coords)
 
@@ -195,7 +202,8 @@ function egs(
               z_c - fracture_radius * 1.1,
               z_c + fracture_radius * 1.1,
               z_c + fracture_radius * 2.0]
-    hz = diff(depths) ./ [5.0, hxy_min, 5.0]
+    hz = diff(depths) ./ 5.0
+    hz[2] = min(hxy_min, hz[2])  # Refine around fractures
 
     # ── 2D cell constraints (well x-y footprints) ─────────────────────────────
 
@@ -206,11 +214,8 @@ function egs(
         x, _ = ramer_douglas_peucker(permutedims(traj[:, 1:2]), hxy_min)  # n_points × 2
         push!(cell_constraints, x)  # 2×n_points
         # Add fracture footprint lines to enforce mesh refinement across the full
-        xf = offset_boundary(x, fracture_radius * 1.05)
+        xf = offset_boundary(x, fracture_radius * 1.1)
         push!(xf_all, xf)  # 2×(n_points*2) --- all fracture footprints together
-        # push!(cell_constraints, hcat(xf, xf[:,1]))
-        
-              # 2×(2*n_points) --- creates a box around each point in the trajecto
     end
     xf = get_convex_hull(hcat(xf_all...))
     push!(cell_constraints, hcat(xf, xf[:,1]))
@@ -218,7 +223,7 @@ function egs(
     # Shift cell constraints by hxy_min/2 so well coordinates don't land on cell boundaries
     cell_constraints = [c .+ hxy_min/2 for c in cell_constraints]
 
-    @info "Building extruded mesh ($n_frac fractures, hxy_min = $hxy_min m)..."
+    info_level > 0 && @info "Building extruded mesh ($n_frac fractures, hxy_min = $hxy_min m)"
     # ── Build extruded matrix mesh ─────────────────────────────────────────────
     msh, layers, _ = extruded_mesh(cell_constraints, depths;
         hxy_min  = hxy_min,
@@ -226,10 +231,9 @@ function egs(
         offset_rel = 1.0,
         mesh_args...
     )
-    @info "Building extruded mesh completed"
 
     # ── Add DFM fractures ────────────────────────────────────────────────────
-    @info "Generating fractures and cutting mesh..."
+    info_level > 0 && @info "Generating fractures and cutting mesh"
     # Each fracture is a disk perpendicular to the injector well tangent at the
     # fracture position. fracture_angle optionally rotates the disk around the
     # tangent axis (0 = exactly perpendicular).
@@ -288,8 +292,12 @@ function egs(
         # Apply additional rotation around the well-tangent axis by fracture_angle
         α = rotation_angles[fno]
         ca, sa = cos(α), sin(α)
-        u_vec = ca .* u0 .+ sa .* v0
-        v_vec = -sa .* u0 .+ ca .* v0
+        # Rotate around z axis
+        M = [ca -sa 0.0;
+             sa  ca 0.0;
+             0.0 0.0 1.0]
+        u_vec = M * u0
+        v_vec = M * v0
 
         polygon = [Jutul.SVector{3, Float64}(
             pos[1] + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
@@ -301,18 +309,10 @@ function egs(
     msh, info = cut_mesh(msh, cuts; extra_out = true, min_cut_fraction = 0.0)
     fracture_faces = findall(info[:face_index] .== 0)
     layers = layers[info[:cell_index]]
-    @info "Generating fractures and cutting mesh completed"
-    # Filter out fracture faces outside the fracture radius
-    # geo = tpfv_geometry(msh)
-    # frac_centroids = geo.face_centroids[:, fracture_faces]
-    # dist_to_well = sqrt.((frac_centroids[1, :] .- x_c).^2 .+ (frac_centroids[3, :] .- z_c).^2)
-    # valid_fracture_faces = dist_to_well .<= fracture_radius * 1.5
-    # fracture_faces = fracture_faces[valid_fracture_faces]
-
-    @info "Generating embedded mesh"
+    
+    info_level > 0 && @info "Generating embedded mesh"
     fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(msh, fracture_faces)
     geo = tpfv_geometry(msh)
-    @info "Generating embedded mesh completed"
 
     # Map per-fracture apertures to per-cell values using cut_no from cut_mesh.
     # Intersection junction cells (beyond n_frac_regular) get the mean aperture.
@@ -330,6 +330,9 @@ function egs(
             rock_heat_capacity        = [rock_heat_capacity],
         )
     )
+    # Enforce a minimum volume to prevent zero-volume cells after cutting.
+    # TODO: This is a hack and should really be looked into in cut_mesh
+    matrix_domain[:volumes] = max.(matrix_domain[:volumes], 1e-4)
 
     # ── Fracture domain ────────────────────────────────────────────────────────
     if ismissing(fracture_permeability)
@@ -353,7 +356,7 @@ function egs(
     end
     # TODO: This is a hack to cater for how fractures are added to wells, and
     # should be removed once this is fixed in setup_fractured_reservoir_model 
-    inj_dir_sym[1] = :y
+    inj_dir_sym[1] = inj_dir_sym[end]
     inj_cell_centers = hcat(zeros(3), geo.cell_centroids[:, inj_cells])
     well_inj = setup_well(matrix_domain, inj_cells;
         name                   = :Injector,
@@ -376,7 +379,7 @@ function egs(
     end
     # TODO: This is a hack to cater for how fractures are added to wells, and
     # should be removed once this is fixed in setup_fractured_reservoir_model
-    prod_dir_sym[1] = :y
+    prod_dir_sym[1] = prod_dir_sym[end]
     prod_cell_centers = hcat(zeros(3), geo.cell_centroids[:, prod_cells])
     well_prod = setup_well(matrix_domain, prod_cells;
         name                   = :Producer,
@@ -391,14 +394,13 @@ function egs(
     wells = [well_inj, well_prod]
 
     # ── DFM model ─────────────────────────────────────────────────────────────
-    @info "Setting up DFM model..."
+    info_level > 0 && @info "Setting up DFM model"
     model = JutulDarcy.setup_fractured_reservoir_model(matrix_domain, frac_domain, :geothermal;
         wells = wells, block_backend = true)
 
     for (well_name, well_model) in get_model_wells(model; data_domain = true)
         adjust_well_indices!(well_model, well_name, true)
     end
-    @info "Setting up DFM model completed"
 
     bc, p, T = set_dirichlet_bcs(model; pressure_surface = 100atm, output_state=false)
     z_res  = geo.cell_centroids[3, :]
@@ -447,6 +449,8 @@ function egs(
         :y_fracs => [p[2] for p in frac_positions],
         :cut_no  => info[:cut_no],
     )
+
+    info_level > 0 && @info "EGS case setup complete"
 
     return JutulCase(model, dt, forces; state0 = state0, input_data = input_data)
 end
