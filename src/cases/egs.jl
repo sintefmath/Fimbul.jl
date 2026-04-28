@@ -110,6 +110,7 @@ function egs(
     fracture_aperture = 0.5e-3,
     fracture_porosity = 0.5,
     fracture_permeability = missing,
+    fracture_angle = 0.0,
     permeability = 1e-4 * darcy,
     porosity = 0.01,
     rock_thermal_conductivity = 2.5 * watt/(meter*Kelvin),
@@ -117,7 +118,7 @@ function egs(
     temperature_inj = convert_to_si(25, :Celsius),
     rate = 100kilogram/second/(1000kilogram/meter^3),
     num_years = 20,
-    fracture_angle = 0.0,
+    hxy_min = missing,
     mesh_args = NamedTuple(),
     schedule_args = NamedTuple(),
 )
@@ -181,6 +182,9 @@ function egs(
     z_wells = [maximum(traj[:, 3]) for traj in all_coords]
     x_wells = [mean(traj[:, 1])    for traj in all_coords]
 
+    Δx_min  = length(x_wells) > 1 ? minimum(abs.(diff(sort(x_wells)))) : 2.0 * fracture_radius
+    hxy_min = ismissing(hxy_min) ? min(Δx_min / 3.0, fracture_radius / 4.0) : hxy_min
+
     x_c = mean(x_wells)
     z_c = mean([p[3] for p in frac_positions])
 
@@ -188,38 +192,25 @@ function egs(
               z_c - fracture_radius * 1.1,
               z_c + fracture_radius * 1.1,
               z_c + fracture_radius * 2.0]
-    hz = diff(depths) ./ [5.0, n_frac * 3.0, 5.0]
+    hz = diff(depths) ./ [5.0, hxy_min, 5.0]
 
     # ── 2D cell constraints (well x-y footprints) ─────────────────────────────
+
     cell_constraints = Matrix{Float64}[]
-    for traj in all_coords
-        push!(cell_constraints, traj[:, 1:2]')  # 2×n_points
+    xf_all = []
+    for (k, traj) in enumerate(all_coords)
+        # Simplify trajectory
+        x, _ = ramer_douglas_peucker(permutedims(traj[:, 1:2]), hxy_min)  # n_points × 2
+        push!(cell_constraints, x)  # 2×n_points
+        # Add fracture footprint lines to enforce mesh refinement across the full
+        xf = offset_boundary(x, fracture_radius * 1.05)
+        push!(xf_all, xf)  # 2×(n_points*2) --- all fracture footprints together
+        # push!(cell_constraints, hcat(xf, xf[:,1]))
+        
+              # 2×(2*n_points) --- creates a box around each point in the trajecto
     end
-
-    Δx_min  = length(x_wells) > 1 ? minimum(abs.(diff(sort(x_wells)))) : 2.0 * fracture_radius
-    hxy_min = min(Δx_min / 3.0, fracture_radius / 4.0)
-
-    # Add fracture footprint lines to enforce mesh refinement across the full
-    # fracture diameter. For each fracture, project the fracture normal onto
-    # the x-y plane to determine the footprint line orientation.
-    for (fno, pos) in enumerate(frac_positions)
-        tan = frac_tangents[fno]   # well tangent = fracture normal direction
-        # Project tangent onto x-y plane and rotate 90° to get in-plane direction
-        # The fracture disk in x-y is perpendicular to tan_xy
-        tan_xy_len = sqrt(tan[1]^2 + tan[2]^2)
-        if tan_xy_len < 1e-12
-            # Tangent is nearly vertical: fracture footprint is a circle in x-y
-            push!(cell_constraints, [pos[1] - fracture_radius  pos[1] + fracture_radius;
-                                     pos[2]                     pos[2]                  ])
-        else
-            # In-plane direction perpendicular to tan projected on x-y
-            dx = -tan[2] / tan_xy_len
-            dy =  tan[1] / tan_xy_len
-            push!(cell_constraints,
-                [pos[1] + dx * fracture_radius  pos[1] - dx * fracture_radius;
-                 pos[2] + dy * fracture_radius  pos[2] - dy * fracture_radius])
-        end
-    end
+    xf = get_convex_hull(hcat(xf_all...))
+    push!(cell_constraints, hcat(xf, xf[:,1]))
 
     # Shift cell constraints by hxy_min/2 so well coordinates don't land on cell boundaries
     cell_constraints = [c .+ hxy_min/2 for c in cell_constraints]
@@ -294,8 +285,12 @@ function egs(
         # Apply additional rotation around the well-tangent axis by fracture_angle
         α = rotation_angles[fno]
         ca, sa = cos(α), sin(α)
-        u_vec = ca .* u0 .+ sa .* v0
-        v_vec = -sa .* u0 .+ ca .* v0
+        # Rotate around z axis
+        M = [ca -sa 0.0;
+             sa  ca 0.0;
+             0.0 0.0 1.0]
+        u_vec = M * u0
+        v_vec = M * v0
 
         polygon = [Jutul.SVector{3, Float64}(
             pos[1] + fracture_radius * (cos(θ) * u_vec[1] + sin(θ) * v_vec[1]),
@@ -440,6 +435,7 @@ function egs(
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)
     dt, forces = make_schedule([forces], [(1, 1), (1, 1)];
+        report_interval = si_unit(:year)/4,
         num_years = num_years, schedule_args...)
 
     input_data = Dict{Symbol, Any}(

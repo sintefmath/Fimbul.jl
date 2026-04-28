@@ -47,11 +47,17 @@ inj, prod = Fimbul.egs_well_coordinates(
 # rate of 9250 m³/day (approximately 107 liters/second) at a temperature of
 # 25°C. The simulation will output results four times per year for analysis.
 num_years = 10 # Total simulation period [years]
-case = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
+
+common_args = (
     rate            = 9250meter^3/day,                   # Water injection rate
     temperature_inj = convert_to_si(25.0, :Celsius),     # Injection temperature
     num_years       = num_years,
+    mesh_args       = (hxy_min = 25.0,),
     schedule_args   = (report_interval = si_unit(:year)/4,)
+)
+
+case = Fimbul.egs(inj, prod, fracture_radius, fracture_spacing;
+    common_args...
 );
 
 # ### Inspect model
@@ -103,13 +109,13 @@ plot_egs_mesh(case, "Run 1 – Uniform fractures, well spacing 100 m")
 # we use increment-based criteria that directly monitor changes in primary
 # variables (temperature and pressure) between Newton iterations.
 sim, cfg = setup_reservoir_simulator(case;
-    info_level = 2, # 0=progress bar, 1=basic, 2=detailed
+    info_level = 0, # 0=progress bar, 1=basic, 2=detailed
     output_substates = true, # Output results at each Newton iteration
     initial_dt = 5.0, # Initial timestep [s]
     relaxation = true # Enable relaxation in Newton solver
 );
-cfg[:tolerances][:Fractures][:energy_conservation] = (CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
-cfg[:tolerances][:Fractures][:mass_conservation] = (CNV = Inf, MB = 1e-5, increment_dp_abs = 1e-2*si_unit(:bar))
+# cfg[:tolerances][:Fractures][:energy_conservation] = (CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
+# cfg[:tolerances][:Fractures][:mass_conservation] = (CNV = Inf, MB = 1e-5, increment_dp_abs = 1e-2*si_unit(:bar))
 
 # We add a specialized timestep selector to control solution quality during
 # thermal transients. These selectors monitor temperature changes and adjust
