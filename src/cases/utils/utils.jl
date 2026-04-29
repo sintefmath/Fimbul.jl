@@ -316,6 +316,7 @@ function set_dirichlet_bcs(model, subset = :all;
         pressure_surface = 1atm, 
         temperature_surface = convert_to_si(10.0, :Celsius),
         geothermal_gradient = 0.03Kelvin/meter,
+        output_state=true,
     )
 
     if subset == :all
@@ -331,14 +332,14 @@ function set_dirichlet_bcs(model, subset = :all;
     rho = reservoir_model(model).system.rho_ref[1]
     dpdz = rho*gravity_constant
     dTdz = geothermal_gradient
-    p = z -> pressure_surface .+ dpdz.*z
-    T = z -> temperature_surface .+ dTdz*z
+
+    z_bdr = geo.boundary_centroids[3, :]
+    z0 = minimum(z_bdr)
+    p = z -> pressure_surface .+ dpdz.*(z .- z0)
+    T = z -> temperature_surface .+ dTdz.*(z .- z0)
 
     # Set boundary conditions
-    z_bdr = geo.boundary_centroids[3, :]
     cells_bdr = geo.boundary_neighbors
-    z0 = minimum(z_bdr)
-
     top = isapprox.(z_bdr, minimum(z_bdr))
     bottom = isapprox.(z_bdr, maximum(z_bdr))
     sides = .!top .&& .!bottom
@@ -361,15 +362,20 @@ function set_dirichlet_bcs(model, subset = :all;
     z_hat = z_bc .- z0
     bc = flow_boundary_condition(cells_bc, rmodel.data_domain, p(z_hat), T(z_hat));
 
-    # Set initial conditions
-    z_cells = geo.cell_centroids[3, :]
-    z_hat = z_cells .- z0
-    state0 = setup_reservoir_state(model,
-        Pressure = p(z_hat),
-        Temperature = T(z_hat)
-    );
+    if output_state
+        # Set initial conditions
+        z_cells = geo.cell_centroids[3, :]
+        z_hat = z_cells .- z0
+        state0 = setup_reservoir_state(model,
+            Pressure = p(z_hat),
+            Temperature = T(z_hat)
+        );
+        out = (bc, state0, p, T)
+    else
+        out = (bc, p, T)
+    end
 
-    return bc, state0, p, T
+    return out
 
 end
 
@@ -406,5 +412,38 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
     end
 
     return sorted_cells, order
+
+end
+
+function scaled_rate(domain, wells, duration::Float64, radius=missing; mean_well_coordinate=false)
+
+    # Get all well coordinates
+    xw = hcat([w[:cell_centroids] for w in wells]...)
+    # Get reservoir cell coordinates
+    mesh = physical_representation(domain)
+    geo = tpfv_geometry(mesh)
+    xr = geo.cell_centroids
+    # Get radius if not provided
+    radius = ismissing(radius) ? Fimbul.max_distance(xw)/2 : radius
+    if mean_well_coordinate
+        xw = mean(xw, dims=2)
+    end
+    # Determine region of interest around wells
+    roi = falses(size(xr, 2))
+    for x in eachcol(xw)
+        roi = vec(sum((x .- xr).^2, dims=1) .< radius^2) .| roi
+    end
+    pv_tot = sum(pore_volume(domain)[roi])
+
+    return pv_tot/duration
+    
+end
+
+function scaled_rate(domain, wells, duration, radius=missing, year=missing; kwargs...)
+
+    year = ismissing(year) ? Dates.year(now()) : year
+    duration = diff(Fimbul.process_periods(year, duration))[1]
+    duration = duration.value*1e-3
+    return scaled_rate(domain, wells, duration, radius; kwargs...)
 
 end

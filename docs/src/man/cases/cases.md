@@ -15,6 +15,7 @@ egg_geothermal
 geothermal_doublet
 egs
 ags
+coaxial_bhe
 egg_geothermal_doublet
 ```
 

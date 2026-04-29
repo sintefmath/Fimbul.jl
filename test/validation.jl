@@ -159,17 +159,17 @@ end
     function compute_error(case, simulated, analytical)
 
         well = case.model.models[:BTES_supply].data_domain
-        sections = last.(well[:section]) |> unique |> collect
+        tags = well[:tag] |> unique |> collect
         sim_temp = simulated.result.states[end][:BTES_supply][:Temperature]
 
         ϵ = 0.0
-        for section in sections
-            cells = findall(last.(well[:section]) .== section)
+        for tag in tags
+            cells = findall(well[:tag] .== tag)
             z = well[:cell_centroids][3, cells]
             dz = well[:cell_length][cells]
             L = sum(dz)
             Tn = sim_temp[cells]
-            Ta = analytical[section].(z)
+            Ta = analytical[tag].(z)
             ϵ += sqrt(sum((Tn .- Ta).^2.0.*dz))/L
         end
 

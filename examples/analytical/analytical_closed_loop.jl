@@ -188,39 +188,39 @@ function plot_closed_loop( # Utility function to plot closed-loop simulation res
     sim_temp = convert_from_si.(
         simulated.result.states[end][:CL_supply][:Temperature], :Celsius)
     za = collect(range(0, L, step=0.1)) # Analytical depth points
-    section_handles = []
+    tag_handles = []
     solution_handles = []
-    section_names = String[]
+    tag_names = String[]
     solution_names = ["Analytical", "Fimbul"]
-    ## Plot results for each well section
-    sections = last.(well[:section]) |> unique |> collect
+    ## Plot results for each well tag
+    tags = well[:tag] |> unique |> collect
     colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4,3]]
     err_inf = -Inf
-    for (i, section) in enumerate(sections)
-        ## Section name for printing
-        name = titlecase(replace(string(section), "_" => " "))
+    for (i, tag) in enumerate(tags)
+        ## Tag name for printing
+        name = titlecase(replace(string(tag), "_" => " "))
         ## Plot analytical solution
-        Ta = convert_from_si.(analytical[section].(za), :Celsius)
+        Ta = convert_from_si.(analytical[tag].(za), :Celsius)
         la = lines!(ax, Ta, za; color=colors[i], linewidth = 8, linestyle = :dash, label=name)
         ## Plot numerical solution
-        cells = last.(well[:section]) .== section
+        cells = well[:tag] .== tag
         Tn = sim_temp[cells]
         zn = well[:cell_centroids][3, cells]
         ln = lines!(ax, Tn, zn; color=colors[i], linewidth = 2)
         ## Store handles and names for legend
-        push!(section_handles, la)
-        push!(section_names, name)
+        push!(tag_handles, la)
+        push!(tag_names, name)
         if i == 1
            push!(solution_handles, la, ln)
         end
-        ## Compute maximum error in section
-        Ta_n = convert_from_si.(analytical[section].(zn), :Celsius)
+        ## Compute maximum error for tag
+        Ta_n = convert_from_si.(analytical[tag].(zn), :Celsius)
         e_inf = maximum(abs.(Tn .- Ta_n))
         err_inf = max(err_inf, e_inf)
     end
     ## Add legend
-    Legend(fig[1, 2], [section_handles, solution_handles], [section_names, solution_names],
-        ["Sections", "Solutions"]; orientation = :vertical)
+    Legend(fig[1, 2], [tag_handles, solution_handles], [tag_names, solution_names],
+        ["Tags", "Solutions"]; orientation = :vertical)
 
     return fig, err_inf
     

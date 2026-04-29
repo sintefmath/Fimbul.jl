@@ -63,20 +63,20 @@ function geothermal_doublet(;
     # Create the mesh
     thickness = diff(depths)
     nz = [4,10,20,4]
-    domain, layers, metrics = layered_reservoir_domain(xw, depths;
+    domain, layers, metrics = layered_reservoir_domain(xw, depths,
+        (
+            permeability = permeability,
+            porosity = porosity,
+            rock_density = density,
+            rock_thermal_conductivity = thermal_conductivity,
+            rock_heat_capacity = heat_capacity
+        );
         mesh_args = (
             hxy_min = 100/3, 
             hxy_max = 750, 
             hz = thickness./nz, 
             dist_min_factor = 3.0, 
             offset_rel = 2.5
-        ),
-        layer_properties = (
-            permeability = permeability,
-            porosity = porosity,
-            rock_density = density,
-            rock_thermal_conductivity = thermal_conductivity,
-            rock_heat_capacity = heat_capacity
         ),
         component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
     )
