@@ -128,7 +128,7 @@ steps = findall([Dates.monthname(t) ∈ ["December", "April"] .&&
 steps = steps[[1, 2, end-1, end]] # Select first two and last two cycles for better visualization
 cells = .!(geo.cell_centroids[1,:] .< 0.0 .&& geo.cell_centroids[2,:] .< 0.0)
 colorrange = convert_from_si.((T_discharge, T_charge), :Celsius)
-fig = Figure(size = (900, 900))
+fig = Figure(size = (800, 900))
 for (k, step) in enumerate(steps)
     row = (k-1)÷2 + 1
     col = (k-1)%2 + 1
@@ -146,4 +146,6 @@ end
 Colorbar(fig[3, 1:2];
     colormap = :seaborn_icefire_gradient, colorrange = colorrange,
     label = "Temperature (°C)", vertical = false, flipaxis = false)
+colgap!(fig.layout, 0)
+rowgap!(fig.layout, 0)
 fig
