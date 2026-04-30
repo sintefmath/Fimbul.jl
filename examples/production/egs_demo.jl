@@ -164,6 +164,7 @@ function plot_fracture_dt_fig(c, inj_w, prod_w, results)
     Colorbar(fig_[length(steps)+1, 1];
         colormap = :seaborn_icefire_gradient, colorrange = crange,
         label = "ΔT (°C)", vertical = false, flipaxis = false)
+    rowgap!(fig_.layout, 0)
     return fig_
 end
 

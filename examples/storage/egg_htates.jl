@@ -1,6 +1,7 @@
 # # Digital twinning of a high-temperature aquifer thermal energy storage system
 #
-# This script was prepared for the [2025 DTE & AICOMAS conference](https://dte_aicomas_2025.iacm.info):
+# The first version of this script was prepared for the [2025 DTE & AICOMAS
+# conference](https://dte_aicomas_2025.iacm.info):
 #
 #   Ø. Klemetsdal, O. Andersen, S. Krogstad, O. Møyner,
 #   "Predictive Digital Twins for Underground Thermal Energy Storage using
@@ -17,7 +18,6 @@ using Jutul, JutulDarcy # Jutul and JutulDarcy modules
 using Fimbul # Fimbul module
 using HYPRE # Iterative linear solvers
 using GLMakie # Visualization
-using LBFGSB # Optimization
 
 # # Set up model
 # We use the first realization of the EGG benchmark model [egg_model](@cite), and
@@ -88,11 +88,12 @@ states_hf = results_hifi.result.states
 states_proxy = results_proxy.result.states;
 # We calibrate against the first two years. Since we have defined report steps
 # of 1/4 month, this corresponds to the first 12*4*2 steps. To see the effect of
-# more or less data used for calibration, and to exclude data from one or more
-# of the wells and WellObs, you can change num_years_cal and wells_cal below.
+# more or less data used for calibration, and to exclude/include data from one
+# or more of the wells and WellObs, you can change num_years_cal and wells_cal
+# below.
 num_years_cal = 2
 n_steps = 12*4*num_years_cal
-wells_cal = [:WellA, :WellObs, :WellB]
+wells_cal = [:WellA, :WellB]
 objective = (model, state, dt, step_no, forces) ->
     well_mismatch_thermal(model, wells_cal,
         states_hf, state, dt, step_no, forces;
@@ -109,116 +110,37 @@ obj0 = Jutul.evaluate_objective(
 println("Initial proxy mismatch: $obj0")
 
 # ## Set up optimization
-# We start by declaring the parameters to be optimized and their bounds
-parameters = setup_parameters(proxy.model)
-opt_config = optimization_config(proxy.model, parameters,
-    use_scaling = true,
-    rel_min = 1e-3,
-    rel_max = 1e3
-);
-# We will only consider a subset of all the model parameters
-wells = well_symbols(proxy.model)
-for (k, v) in opt_config
-    for (ki, vi) in v
-        if ki in [ # Volumetric properties
-            :FluidVolume, :BulkVolume
-            ]
-            vi[:active] = k == :Reservoir
-            vi[:rel_min] = 1e-2
-            vi[:rel_max] = 1e2
-        elseif ki in [ # Rock density and heat capacity
-            :RockDensity, :RockHeatCapacity
-            ]
-            vi[:active] = k == :Reservoir
-            vi[:rel_min] = 1e-3
-            vi[:rel_max] = 1e3
-        elseif ki in [ # Conductive properties
-            :Transmissibilities,
-            :RockThermalConductivities, :FluidThermalConductivities
-            ]
-            vi[:active] = k == :Reservoir
-            vi[:rel_min] = 1e-3
-            vi[:rel_max] = 1e3
-        elseif ki in [ # Well properties
-            :WellIndices, :WellIndicesThermal
-            ]
-            vi[:active] = k in wells
-            vi[:rel_min] = 1e-3
-            vi[:rel_max] = 1e1
-        else
-            vi[:active] = false
-        end
-    end
-end
+# We use `setup_reservoir_dict_optimization` to create a dict-based optimization
+# setup for the calibration period of the proxy model.
+dprm = setup_reservoir_dict_optimization(deepcopy(proxy[1:n_steps]));
+
+# ### Declare free parameters and bounds
+# We declare the subset of parameters to calibrate together with their
+# relative bounds. Parameters that are not freed here remain fixed.
+free_optimization_parameter!( # Permeability
+    dprm, [:model, :permeability]; rel_min = 1e-6, rel_max = 1e1)
+free_optimization_parameter!( # Porosity
+    dprm, [:model, :porosity]; abs_min = 0.0001, abs_max = 0.9)
+free_optimization_parameter!( # Rock density
+    dprm, [:model, :rock_density]; abs_min = 100.0, abs_max = 4000.0)
+free_optimization_parameter!( # Rock heat capacity
+    dprm, [:model, :rock_heat_capacity]; abs_min = 100.0, abs_max = 2000.0)
+free_optimization_parameter!( # Rock thermal conductivity
+    dprm, [:model, :rock_thermal_conductivity]; rel_min = 1e-6, rel_max = 1e1)
+free_optimization_parameter!( # Fluid thermal conductivity
+    dprm, [:model, :fluid_thermal_conductivity]; rel_min = 1e-6, rel_max = 1e1)
 
 # ### Calibrate proxy model
-# Setting up the calibration requires a few steps, which we conveniently
-# implement in the `calibrate_case` utility functions.
-function run_optimization(opt_setup; 
-    factr = 1e8, maxfun = 200, maxiter = 200, m = 100)
+# We run the optimization using the built-in L-BFGS optimizer.
+prm_opt = optimize_reservoir(dprm, objective;
+    simulator_arg=(output_substates=false,), gradient_scaling=false, max_it=200)
 
-    lower = opt_setup.limits.min
-    upper = opt_setup.limits.max
-    x0 = opt_setup.x0
-    n = length(x0)
-    setup = Dict(:lower => lower, :upper => upper, :x0 => copy(x0))
-
-    prt = 1
-    f! = (x) -> opt_setup.F_and_dF!(NaN, nothing, x)
-    g! = (dFdx, x) -> opt_setup.F_and_dF!(NaN, dFdx, x)
-    results, x_opt = LBFGSB.lbfgsb(f!, g!, x0, lb=lower, ub=upper,
-        iprint = prt,
-        factr = factr,
-        maxfun = maxfun,
-        maxiter = maxiter,
-        m = m
-    )
-
-    return (x_opt, results, setup)
-
-end
-
-function calibrate_case(objective, case, n_steps, opt_config; lbfgs_args = NamedTuple())
-
-    case = deepcopy(case)
-    _, cfg = setup_reservoir_simulator(case;
-        relaxation=true,
-        tol_cnv=1e-6,
-        tol_cnv_well=1e-5,
-        info_level=-1,
-    );
-    cfg[:tolerances][:Reservoir][:default] = 1e-6
-    for well in well_symbols(case.model)
-        cfg[:tolerances][well][:default] = 1e-6
-    end
-
-    case_cal = case[1:n_steps]
-    parameters = setup_parameters(case_cal.model)
-    opt_setup = setup_parameter_optimization(
-        case_cal.model, case_cal.state0, parameters, case_cal.dt, 
-        case_cal.forces, objective, opt_config);
-
-    x_opt, _, _ = run_optimization(opt_setup; lbfgs_args...);
-
-    case_cal = deepcopy(opt_setup.data[:case])
-    params = case_cal.parameters
-    data = opt_setup.data
-    params = devectorize_variables!(
-        params, case_cal.model, x_opt, data[:mapper], config = data[:config])
-
-    case_cal = JutulCase(case_cal.model, case.dt, case.forces; 
-        state0 = case.state0, parameters = case_cal.parameters)
-
-    return case_cal
-
-end;
-
-# We use the LBFGS optimization algorithm, which has a number of parameters that
-# can be set, including the maximum number of function evaluations (maxfun), and
-# the maximum number of iterations (maxiter), both we set to 200 here.
-# Increasing these numbers will likely give a better match.
-proxy_cal = calibrate_case(objective, proxy, n_steps, opt_config; 
-    lbfgs_args = (maxfun = 200, maxiter = 200, factr = 1e-6))
+# ### Reconstruct full-schedule case from calibrated parameters
+# The optimization was posed on the calibration period only. We now apply the
+# optimized parameters to the full five-year schedule for prediction.
+case_opt = dprm.setup_function(prm_opt)
+proxy_cal = JutulCase(case_opt.model, proxy.dt, proxy.forces;
+    state0 = proxy.state0, parameters = case_opt.parameters)
 
 # ### Simulate the full schedule using the calibrated proxy
 results_proxy_cal = simulate_reservoir(proxy_cal)
@@ -233,8 +155,8 @@ println("Final proxy mismatch: $obj")
 # and proxy model. The calibrated proxy does a good job of reproducing the
 # temperatures used for calibration, but the prediction for the remaining three
 # years of storage are not perfect, with the calibrated proxy model showing
-# mismatch comparable to the initial proxy model for WellA in the final year.
-# The match in the observation well is almost perfect.
+# mismatch comparable to the initial proxy model for WellA and WellB in the
+# final year.
 fig = Figure(size = (800, 1200), fontsize = 20)
 time_tot = results_hifi.wells.time/si_unit(:year)
 for (wno, well) in enumerate(well_symbols(hifi.model))

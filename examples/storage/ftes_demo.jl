@@ -94,7 +94,7 @@ z_range = diff(vcat(extrema(geo.cell_centroids[3, :])...))[1]
 aspect  = (x_range, y_range, z_range) ./ max.(x_range, y_range, z_range)
 
 states, dt, _ = Jutul.expand_to_ministeps(results.result)
-states_m = [s[:Reservoir] for s in results.result.states]
+states_m = [s[:Reservoir] for s in states]
 plot_reservoir(case.model, states_m;
     key = :Temperature,
     aspect = aspect,
@@ -104,7 +104,7 @@ plot_reservoir(case.model, states_m;
 # The fractures are the primary heat transport pathway. We also interactively
 # visualize the temperature field on the fracture mesh at the end of the
 # simulation.
-states_f = [s[:Fractures] for s in results.result.states]
+states_f = [s[:Fractures] for s in states]
 plot_reservoir(case.model.models[:Fractures], states_f;
     key = :Temperature,
     aspect = aspect,
@@ -116,7 +116,7 @@ plot_reservoir(case.model.models[:Fractures], states_f;
 plot_well_results(results.wells, field = :temperature)
 
 # ### Plot Reservoir temperature at selected time steps
-^# We visualize the temperature distribution in the reservoir after the first and
+# We visualize the temperature distribution in the reservoir after the first and
 # last charing and discharging cycles
 
 # Extract timesteps after each charing and discharging cycle
@@ -128,7 +128,7 @@ steps = findall([Dates.monthname(t) ∈ ["December", "April"] .&&
 steps = steps[[1, 2, end-1, end]] # Select first two and last two cycles for better visualization
 cells = .!(geo.cell_centroids[1,:] .< 0.0 .&& geo.cell_centroids[2,:] .< 0.0)
 colorrange = convert_from_si.((T_discharge, T_charge), :Celsius)
-fig = Figure(size = (900, 900))
+fig = Figure(size = (800, 900))
 for (k, step) in enumerate(steps)
     row = (k-1)÷2 + 1
     col = (k-1)%2 + 1
@@ -146,4 +146,6 @@ end
 Colorbar(fig[3, 1:2];
     colormap = :seaborn_icefire_gradient, colorrange = colorrange,
     label = "Temperature (°C)", vertical = false, flipaxis = false)
+colgap!(fig.layout, 0)
+rowgap!(fig.layout, 0)
 fig
