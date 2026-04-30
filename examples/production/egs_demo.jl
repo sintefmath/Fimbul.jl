@@ -5,8 +5,8 @@
 # insufficient for fluid circulation.
 
 # > [!NOTE]
-# > This example is exhibits issues with grid orientation effects, and will
-# > be updates when necessary flux discretization improvements are in place in
+# > This example exhibits issues with grid orientation effects, and will
+# > be updated when necessary flux discretization improvements are in place in
 # > JutulDarcy.
 
 # Add required modules to namespace
