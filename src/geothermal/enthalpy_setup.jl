@@ -81,6 +81,11 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables)
         PhaseViscosities      = PressureEnthalpyDependentVariable(enthalpy_tables[:mu]),
         ComponentHeatCapacity = PressureEnthalpyDependentVariable(enthalpy_tables[:c_p]),
     )
+    if haskey(enthalpy_tables, :H_phases)
+        set_secondary_variables!(model,
+            FluidEnthalpy = PressureEnthalpyDependentVariable(enthalpy_tables[:H_phases]),
+        )
+    end
     out = model.output_variables
     push!(out, :Enthalpy)
     unique!(out)
