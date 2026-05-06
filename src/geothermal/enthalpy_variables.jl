@@ -40,6 +40,19 @@ Jutul.subvariable(v::TemperatureFromEnthalpy, map) = v
     end
 end
 
+struct FluidInternalEnergyFromEnthalpy <: JutulDarcy.PhaseVariables end
+@jutul_secondary function update_internal_energy_from_enthalpy!(U, var::FluidInternalEnergyFromEnthalpy, model, Pressure, FluidEnthalpy, PhaseMassDensities, ix)
+    nph = size(PhaseMassDensities, 1)
+    for ph in 1:nph
+        for c in ix
+            H = FluidEnthalpy[ph, c]
+            p = Pressure[c]
+            rho = PhaseMassDensities[ph, c]
+            U[ph, c] = H - p./rho
+        end
+    end
+end
+
 ## (P, H)-dependent vector variable ───────────────────────────────────────────
 
 """

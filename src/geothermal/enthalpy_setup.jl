@@ -41,7 +41,6 @@ function _setup_geothermal_temperature(
     rho = JutulDarcy.PressureTemperatureDependentVariable(tables[:density])
     c_p = JutulDarcy.PressureTemperatureDependentVariable(tables[:heat_capacity_constant_pressure])
     mu  = JutulDarcy.PTViscosities(tables[:viscosity])
-
     for (k, m) in pairs(model.models)
         if k == :Reservoir || JutulDarcy.model_or_domain_is_well(m)
             set_secondary_variables!(m;
@@ -80,6 +79,7 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables)
         PhaseMassDensities    = PressureEnthalpyDependentVariable(enthalpy_tables[:rho]),
         PhaseViscosities      = PressureEnthalpyDependentVariable(enthalpy_tables[:mu]),
         ComponentHeatCapacity = PressureEnthalpyDependentVariable(enthalpy_tables[:c_p]),
+        FluidInternalEnergy   = FluidInternalEnergyFromEnthalpy(),
     )
     if haskey(enthalpy_tables, :H_phases)
         set_secondary_variables!(model,
