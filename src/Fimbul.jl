@@ -35,6 +35,9 @@ module Fimbul
     include("meshing/extruded.jl")
     include("meshing/fractured.jl")
     include("meshing/utils.jl")
+    # Geothermal: P-H formulation
+    include("geothermal/enthalpy_variables.jl")
+    include("geothermal/enthalpy_setup.jl")
     # Wells
     include("wells/closed_loop.jl")
     include("wells/closed_loop_u1.jl")
