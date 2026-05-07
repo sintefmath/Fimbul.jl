@@ -23,6 +23,8 @@ module Fimbul
     export egg_geothermal, egg_geothermal_doublet, egg_ates
     # Other utilities
     export thermal_radius_aquifer
+    # Two-phase geothermal
+    export setup_reservoir_model_geothermal_2ph
 
     # Load dependencies into namespace
     using Jutul, JutulDarcy

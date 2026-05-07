@@ -83,3 +83,36 @@ Jutul.values_per_entity(model, ::PressureEnthalpyDependentVariable{T, N}) where 
     end
     return result
 end
+
+## Saturations from (P, H) ────────────────────────────────────────────────────
+
+"""
+    SaturationsFromEnthalpy{T, N} <: VectorVariables
+
+Secondary variable that computes per-phase volume saturations from pressure and
+specific enthalpy via a `(P, H) → NTuple{N}` lookup table.  `N` is inferred at
+construction time by probing the table at a representative state.
+
+Used in the two-phase (liquid + vapour) enthalpy formulation to replace
+`Saturations` as a primary variable; the state is fully determined by (P, H).
+"""
+struct SaturationsFromEnthalpy{T, N} <: VectorVariables
+    tab::T
+    function SaturationsFromEnthalpy(tab)
+        N = length(tab(1e5, 500e3))
+        new{typeof(tab), N}(tab)
+    end
+end
+
+Jutul.subvariable(v::SaturationsFromEnthalpy, map) = v
+Jutul.values_per_entity(model, ::SaturationsFromEnthalpy{T, N}) where {T, N} = N
+
+@jutul_secondary function update_saturations_from_enthalpy!(S, var::SaturationsFromEnthalpy{T, N}, model, Pressure, Enthalpy, ix) where {T, N}
+    for c in ix
+        vals = var.tab(Pressure[c], Enthalpy[c])
+        for i in 1:N
+            S[i, c] = vals[i]
+        end
+    end
+    return S
+end

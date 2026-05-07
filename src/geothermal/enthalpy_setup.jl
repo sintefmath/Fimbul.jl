@@ -66,7 +66,10 @@ end
 
 # ── Enthalpy-formulation model modifier ──────────────────────────────────────
 
-function _apply_enthalpy_formulation!(model, enthalpy_tables)
+function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = true)
+
+    out = model.output_variables
+    push!(out, :Enthalpy)
     # Switch Temperature from primary to secondary.
     # set_secondary_variables! internally calls delete_variable!, which removes
     # Temperature from primary_variables before adding it to secondary_variables.
@@ -81,13 +84,21 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables)
         ComponentHeatCapacity = PressureEnthalpyDependentVariable(enthalpy_tables[:c_p]),
         FluidInternalEnergy   = FluidInternalEnergyFromEnthalpy(),
     )
+    # Two-phase phase-split variables: only add to the Reservoir, not to wells.
+    # Well equations (PotentialDropBalanceWell / saturation_mixed) are written
+    # for single-phase flow and index Saturations[1, :] only; adding a 2-row
+    # SaturationsFromEnthalpy to a well model causes a BoundsError at runtime.
+    if add_phase_split && haskey(enthalpy_tables, :S)
+        set_secondary_variables!(model,
+            Saturations = SaturationsFromEnthalpy(enthalpy_tables[:S]),
+        )
+        push!(out, :Saturations)
+    end
     if haskey(enthalpy_tables, :H_phases)
         set_secondary_variables!(model,
             FluidEnthalpy = PressureEnthalpyDependentVariable(enthalpy_tables[:H_phases]),
         )
     end
-    out = model.output_variables
-    push!(out, :Enthalpy)
     unique!(out)
     return model
 end
@@ -133,13 +144,87 @@ function JutulDarcy.Geothermal.setup_reservoir_model_geothermal(
         # out is either a model or (model, parameters) depending on extra_out
         model = out isa Tuple ? first(out) : out
         for (k, m) in pairs(model.models)
-            if k == :Reservoir || JutulDarcy.model_or_domain_is_well(m)
+            if k == :Reservoir
                 _apply_enthalpy_formulation!(m, enthalpy_tables)
+            elseif JutulDarcy.model_or_domain_is_well(m)
+                # Skip phase-split (Saturations) for wells: the single-phase well
+                # equations (saturation_mixed) only support 1-row Saturations.
+                _apply_enthalpy_formulation!(m, enthalpy_tables; add_phase_split = false)
             end
         end
         return out
     else
         throw(ArgumentError("Unknown formulation :$formulation — use :temperature or :enthalpy"))
+    end
+end
+
+# ── Two-phase geothermal enthalpy setup ───────────────────────────────────────
+
+"""
+    setup_reservoir_model_geothermal_2ph(reservoir; enthalpy_tables, kwarg...)
+
+Set up a two-phase (liquid + vapour) geothermal reservoir model using the
+pressure-enthalpy (P, H) formulation.
+
+The underlying system is `ImmiscibleSystem((AqueousPhase(), VaporPhase()))` with
+thermal equations.  Phase saturations, densities, viscosities and enthalpies are
+all derived from the supplied `enthalpy_tables` (built by
+`build_steam_tables_2ph()`).
+
+`enthalpy_tables` must be a `Dict` with callable entries:
+- `:T`        : `(P,H) → T [K]`
+- `:rho`      : `(P,H) → (ρ_l, ρ_v) [kg/m³]`
+- `:mu`       : `(P,H) → (μ_l, μ_v) [Pa·s]`
+- `:S`        : `(P,H) → (S_l, S_v)` (volume saturations)
+- `:H_phases` : `(P,H) → (H_l, H_v) [J/kg]`
+- `:c_p`      : `(P,H) → (cp_l, cp_v) [J/(kg·K)]`
+- `:H_pT`     : `(P,T) → H [J/kg]`  (for initialisation)
+"""
+function setup_reservoir_model_geothermal_2ph(
+        reservoir::DataDomain;
+        enthalpy_tables,
+        extra_out = false,
+        update_reservoir = true,
+        kwarg...
+    )
+    isnothing(enthalpy_tables) && throw(ArgumentError("enthalpy_tables must be provided"))
+
+    # Rough reference densities from the tables at moderate conditions
+    rhoL_ref = first(enthalpy_tables[:rho](1e6, 400e3))   # liquid at 10 bar, ~95°C
+    rhoV_ref = last(enthalpy_tables[:rho](1e6, 2700e3))   # vapour at 10 bar, ~200°C
+
+    sys = ImmiscibleSystem(
+        (AqueousPhase(), VaporPhase()),
+        reference_densities = (rhoL_ref, rhoV_ref),
+    )
+
+    # Set a nominal thermal conductivity for the reservoir
+    if update_reservoir
+        # Use liquid conductivity at ambient conditions as a stand-in
+        reservoir[:fluid_thermal_conductivity] .= 0.6   # W/(m·K), ~20 °C liquid water
+    end
+
+    model = setup_reservoir_model(reservoir, sys; thermal = true, kwarg...)
+
+    for (k, m) in pairs(model.models)
+        if k == :Reservoir
+            _apply_enthalpy_formulation!(m, enthalpy_tables)
+        elseif JutulDarcy.model_or_domain_is_well(m)
+            _apply_enthalpy_formulation!(m, enthalpy_tables; add_phase_split = false)
+        end
+    end
+
+    rmodel = reservoir_model(model)
+    outvar = rmodel.output_variables
+    push!(outvar, :PhaseMassDensities, :Saturations, :RockInternalEnergy,
+                  :FluidInternalEnergy, :TotalThermalEnergy)
+    unique!(outvar)
+
+    if extra_out
+        parameters = setup_parameters(model)
+        return (model, parameters)
+    else
+        return model
     end
 end
 
