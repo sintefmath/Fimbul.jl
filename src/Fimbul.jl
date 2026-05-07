@@ -24,6 +24,7 @@ module Fimbul
     # Other utilities
     export thermal_radius_aquifer
     # Two-phase geothermal
+    export GeothermalTwoPhaseSystem
     export setup_reservoir_model_geothermal_2ph
     export build_steam_tables_2ph
 
@@ -40,6 +41,7 @@ module Fimbul
     include("meshing/utils.jl")
     # Geothermal: P-H formulation
     include("geothermal/enthalpy_variables.jl")
+    include("geothermal/twophase_system.jl")
     include("geothermal/enthalpy_setup.jl")
     # Wells
     include("wells/closed_loop.jl")
