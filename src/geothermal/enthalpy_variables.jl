@@ -20,6 +20,12 @@ Jutul.maximum_value(h::Enthalpy) = h.max
 Jutul.absolute_increment_limit(h::Enthalpy) = h.max_abs
 Jutul.relative_increment_limit(h::Enthalpy) = h.max_rel
 
+function JutulDarcy.model_is_thermal(model::SimulationModel)
+    pvars = Jutul.get_primary_variables(model)
+    return haskey(pvars, :Temperature) || haskey(pvars, :Enthalpy)
+end
+
+
 ## Temperature from (P, H) ─────────────────────────────────────────────────────
 
 """
