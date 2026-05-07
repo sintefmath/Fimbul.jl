@@ -33,6 +33,7 @@ Use `setup_reservoir_model_geothermal_2ph` to obtain a fully configured model.
 struct GeothermalTwoPhaseSystem{T <: Tuple, F <: NTuple} <: MultiPhaseSystem
     phases  :: T
     rho_ref :: F
+    reference_phase_index::Int
 end
 
 """
@@ -46,7 +47,8 @@ function GeothermalTwoPhaseSystem(;
     )
     phases  = (AqueousPhase(), VaporPhase())
     rho_ref = tuple(Float64.(reference_densities)...)
-    return GeothermalTwoPhaseSystem(phases, rho_ref)
+    reference_phase_index = 1
+    return GeothermalTwoPhaseSystem(phases, rho_ref, reference_phase_index)
 end
 
 Base.show(io::IO, ::GeothermalTwoPhaseSystem) =
@@ -60,6 +62,7 @@ JutulDarcy.number_of_phases(sys::GeothermalTwoPhaseSystem)    = 2
 JutulDarcy.number_of_components(sys::GeothermalTwoPhaseSystem) = 1
 JutulDarcy.reference_densities(sys::GeothermalTwoPhaseSystem) = sys.rho_ref
 JutulDarcy.phase_indices(sys::GeothermalTwoPhaseSystem)       = (1, 2)
+JutulDarcy.component_names(sys::GeothermalTwoPhaseSystem)       = (:H₂O,)
 
 # ── Primary variables ─────────────────────────────────────────────────────────
 # Only Pressure is selected here.  The Enthalpy primary variable (and all
@@ -95,6 +98,20 @@ end
         V = FluidVolume[i]
         totmass[1, i] = (rho[1, i] * sat[1, i] + rho[2, i] * sat[2, i]) * V
     end
+end
+
+# ── TotalMasses allocation: 1 row (1 component), not 2 rows (2 phases) ────────
+#
+# The generic dispatch uses number_of_phases, which gives a 2-row TotalMasses.
+# But the mass_conservation ConservationLaw is sized by number_of_components = 1,
+# so WellFromFacilityFlowCT gets out[1] vs mix[1:2] → DimensionMismatch at
+# sparsity detection.  Override to keep them consistent.
+
+function JutulDarcy.degrees_of_freedom_per_entity(
+        model::SimulationModel{G, <:GeothermalTwoPhaseSystem},
+        ::TotalMasses,
+    ) where {G}
+    return 1
 end
 
 # ── Darcy face flux: 1-component water = sum of liquid and vapour fluxes ──────
@@ -205,4 +222,29 @@ Base.@propagate_inbounds function JutulDarcy.simple_well_perforation_flux!(
     end
     out[1] = q_total
     return out
+end
+
+# ── SurfaceWellConditions: phase densities and saturations from property evaluators ──
+#
+# The generic flash_wellstream_at_surface dispatches on system type to compute
+# surface densities (rhoS) and volume fractions. For GeothermalTwoPhaseSystem
+# the (P,H)-based property evaluators (PhaseMassDensities, Saturations) already
+# provide the correct per-phase values — no additional flash calculation is needed.
+# We read them directly from the well state at the top node.
+
+function JutulDarcy.flash_wellstream_at_surface(
+        var,
+        well_model,
+        system  :: GeothermalTwoPhaseSystem,
+        well_state,
+        rhoS,
+        cond    = JutulDarcy.default_surface_cond(),
+    )
+    wc  = JutulDarcy.well_top_node()
+    rho = well_state.PhaseMassDensities[:, wc]   # SVector-like, length 2
+    sat = well_state.Saturations[:, wc]           # volume fractions, length 2
+    # Guard against all-zero saturation (e.g. during AD sparsity detection)
+    s_total = sum(sat)
+    volfrac = s_total > 0 ? sat ./ s_total : sat .* 0 .+ 0.5
+    return (rho, volfrac)
 end
