@@ -164,12 +164,15 @@ end
     setup_reservoir_model_geothermal_2ph(reservoir; enthalpy_tables, kwarg...)
 
 Set up a two-phase (liquid + vapour) geothermal reservoir model using the
-pressure-enthalpy (P, H) formulation.
+pressure-enthalpy (P, H) formulation backed by `GeothermalTwoPhaseSystem`.
 
-The underlying system is `ImmiscibleSystem((AqueousPhase(), VaporPhase()))` with
-thermal equations.  Phase saturations, densities, viscosities and enthalpies are
-all derived from the supplied `enthalpy_tables` (built by
-`build_steam_tables_2ph()`).
+The system has **1 component** (pure H₂O) and **2 phases** (liquid + vapour),
+giving exactly 2 equations (1 mass + 1 energy) for 2 unknowns (P, H).
+Phase saturations, densities, viscosities and enthalpies are all derived from
+the supplied `enthalpy_tables` (built by `build_steam_tables_2ph()`).
+
+Relative permeabilities default to `BrooksCoreyRelativePermeabilities` with
+exponent = 1, residual = 0, endpoint = 1 (i.e. `kr_α = S_α`, linear).
 
 `enthalpy_tables` must be a `Dict` with callable entries:
 - `:T`        : `(P,H) → T [K]`
@@ -178,7 +181,7 @@ all derived from the supplied `enthalpy_tables` (built by
 - `:S`        : `(P,H) → (S_l, S_v)` (volume saturations)
 - `:H_phases` : `(P,H) → (H_l, H_v) [J/kg]`
 - `:c_p`      : `(P,H) → (cp_l, cp_v) [J/(kg·K)]`
-- `:H_pT`     : `(P,T) → H [J/kg]`  (for initialisation)
+- `:H_pT`     : `(P,T) → H [J/kg]`  (for T-based initialisation)
 """
 function setup_reservoir_model_geothermal_2ph(
         reservoir::DataDomain;
@@ -189,28 +192,30 @@ function setup_reservoir_model_geothermal_2ph(
     )
     isnothing(enthalpy_tables) && throw(ArgumentError("enthalpy_tables must be provided"))
 
-    # Rough reference densities from the tables at moderate conditions
-    rhoL_ref = first(enthalpy_tables[:rho](1e6, 400e3))   # liquid at 10 bar, ~95°C
-    rhoV_ref = last(enthalpy_tables[:rho](1e6, 2700e3))   # vapour at 10 bar, ~200°C
+    # Reference densities probed from the tables at representative conditions
+    rhoL_ref = first(enthalpy_tables[:rho](1e6, 400e3))   # liquid  at 10 bar, ~95 °C
+    rhoV_ref = last(enthalpy_tables[:rho](1e6, 2700e3))   # vapour  at 10 bar, ~220 °C
 
-    sys = ImmiscibleSystem(
-        (AqueousPhase(), VaporPhase()),
+    sys = GeothermalTwoPhaseSystem(
         reference_densities = (rhoL_ref, rhoV_ref),
     )
 
-    # Set a nominal thermal conductivity for the reservoir
+    # Nominal fluid thermal conductivity (liquid water at ~20 °C)
     if update_reservoir
-        # Use liquid conductivity at ambient conditions as a stand-in
-        reservoir[:fluid_thermal_conductivity] .= 0.6   # W/(m·K), ~20 °C liquid water
+        reservoir[:fluid_thermal_conductivity] .= 0.6   # W/(m·K)
     end
 
     model = setup_reservoir_model(reservoir, sys; thermal = true, kwarg...)
 
+    # Apply the (P, H) primary-variable formulation to every sub-model.
+    # add_phase_split = true is required for both reservoir and wells:
+    #   - Reservoir: 2-row SaturationsFromEnthalpy feeds RelativePermeabilities.
+    #   - Wells:     2-row SaturationsFromEnthalpy is accessed by the
+    #                GeothermalTwoPhaseSystem perforation-flux dispatch when
+    #                computing injection fluxes (multisegment path).
     for (k, m) in pairs(model.models)
-        if k == :Reservoir
-            _apply_enthalpy_formulation!(m, enthalpy_tables)
-        elseif JutulDarcy.model_or_domain_is_well(m)
-            _apply_enthalpy_formulation!(m, enthalpy_tables; add_phase_split = false)
+        if k == :Reservoir || JutulDarcy.model_or_domain_is_well(m)
+            _apply_enthalpy_formulation!(m, enthalpy_tables; add_phase_split = true)
         end
     end
 
@@ -226,6 +231,109 @@ function setup_reservoir_model_geothermal_2ph(
     else
         return model
     end
+end
+
+# ── setup_reservoir_state override for GeothermalTwoPhaseSystem ──────────────
+#
+# JutulDarcy's MultiModel setup_reservoir_state uses `model_is_thermal` to
+# decide whether to read `:Temperature` from each well's init dict.  With
+# GeothermalTwoPhaseSystem the thermal primary variable is `:Enthalpy`, not
+# `:Temperature`, so the upstream code throws a KeyError.
+#
+# This overload replicates the upstream logic but:
+#   - reads `:Enthalpy` from the well dicts, and
+#   - converts it to temperature via the system's T(P,H) table to populate
+#     the facility's `SurfaceTemperature`.
+
+function JutulDarcy.setup_reservoir_state(
+        model::MultiModel,
+        equil::Union{Missing, Vector, JutulDarcy.EquilibriumRegion} = missing;
+        kwarg...,
+    )
+    rmodel = JutulDarcy.reservoir_model(model)
+
+    # Dispatch to our specialised version for GeothermalTwoPhaseSystem
+    if rmodel.system isa GeothermalTwoPhaseSystem
+        return _setup_reservoir_state_geothermal_2ph(model, equil; kwarg...)
+    end
+
+    # Fall back to JutulDarcy's original implementation for all other systems
+    return invoke(
+        JutulDarcy.setup_reservoir_state,
+        Tuple{MultiModel, Union{Missing, Vector, JutulDarcy.EquilibriumRegion}},
+        model, equil; kwarg...,
+    )
+end
+
+function _setup_reservoir_state_geothermal_2ph(
+        model::MultiModel,
+        equil::Union{Missing, Vector, JutulDarcy.EquilibriumRegion} = missing;
+        kwarg...,
+    )
+    rmodel = JutulDarcy.reservoir_model(model)
+    pvars  = collect(keys(Jutul.get_primary_variables(rmodel)))
+
+    # Initialise the reservoir submodel (handles P, H keyword args)
+    res_state = JutulDarcy.setup_reservoir_state(rmodel, equil; kwarg...)
+
+    init = Dict{Symbol, Any}(:Reservoir => res_state)
+
+    perf_subset(v::AbstractVector, i) = v[i]
+    perf_subset(v::AbstractMatrix, i) = v[:, i]
+    perf_subset(v, i) = v
+
+    # Retrieve the T(P,H) table from the secondary variable definition
+    t_tab = rmodel.secondary_variables[:Temperature].tab
+
+    # ── Individual well models ──────────────────────────────────────────────
+    for k in keys(model.models)
+        k == :Reservoir && continue
+        W = model.models[k]
+        W.domain isa JutulDarcy.WellGroup && continue  # handled in second pass
+
+        init_w = Dict{Symbol, Any}()
+        wg = Jutul.physical_representation(W.domain)
+        if wg isa JutulDarcy.MultiSegmentWell
+            init_w[:TotalMassFlux] = 0.0
+        end
+        c = JutulDarcy.map_well_nodes_to_reservoir_cells(wg, rmodel.data_domain)
+        for pk in pvars
+            pv = res_state[pk]
+            init_w[pk] = perf_subset(pv, c)
+        end
+        init[k] = init_w
+    end
+
+    # ── Facility / WellGroup ───────────────────────────────────────────────
+    T_float = Float64
+    for (k, _) in JutulDarcy.get_model_wells(model)
+        T_float = promote_type(T_float, eltype(init[k][:Pressure]))
+    end
+
+    for (k, W) in pairs(model.models)
+        W.domain isa JutulDarcy.WellGroup || continue
+
+        init_arg = Dict{Symbol, Any}()
+        init_arg[:TotalSurfaceMassRate] = 0.0
+        init_arg[:SurfacePhaseRates]    = 0.0
+
+        own_wells = W.domain.well_symbols
+        bh   = zeros(T_float, length(own_wells))
+        temp = similar(bh)
+
+        for (i, w) in enumerate(own_wells)
+            bh[i] = init[w][:Pressure][1]
+            H_w   = init[w][:Enthalpy][1]
+            P_w   = init[w][:Pressure][1]
+            temp[i] = t_tab(P_w, H_w)   # T [K] from (P,H)
+        end
+
+        init_arg[:BottomHolePressure] = bh
+        init_arg[:SurfaceTemperature] = temp
+        init[k] = Jutul.setup_state(W; pairs(init_arg)...)
+    end
+
+    return Jutul.setup_state(model, init)
 end
 
 # ── Convergence criterion override ────────────────────────────────────────────
