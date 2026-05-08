@@ -75,7 +75,7 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = 
     # Temperature from primary_variables before adding it to secondary_variables.
     set_primary_variables!(model, Enthalpy = Enthalpy())
     set_secondary_variables!(model,
-        Temperature = PressureEnthalpyDependentVariable(enthalpy_tables[:temperature]),
+        Temperature = TemperatureFromEnthalpy(enthalpy_tables[:temperature]),
     )
     # Replace P,T-dependent fluid properties with P,H-dependent ones
     h_l = enthalpy_tables[:enthalpy_liquid]
