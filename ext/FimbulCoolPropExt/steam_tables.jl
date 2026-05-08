@@ -50,6 +50,7 @@ function Fimbul.build_steam_tables_2ph(;
 
     ρ = [PropsSI("D", "P", p_i, "H", h_j, "Water") for p_i in p, h_j in h]
     μ = [PropsSI("V", "P", p_i, "H", h_j, "Water") for p_i in p, h_j in h]
+    T = [PropsSI("T", "P", p_i, "H", h_j, "Water") for p_i in p, h_j in h]
 
     make_table_1d(data) = Jutul.get_1d_interpolator(p_sub, data; cap_endpoints = true)
     make_table_2d(data) = Jutul.get_2d_interpolator(p, h, data)
@@ -63,5 +64,6 @@ function Fimbul.build_steam_tables_2ph(;
         :viscosity_mix    => make_table_2d(μ),
         :enthalpy_liquid  => make_table_1d(h_l),
         :enthalpy_vapor   => make_table_1d(h_v),
+        :temperature      => make_table_2d(T),
     )
 end
