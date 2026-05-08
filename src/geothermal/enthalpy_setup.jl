@@ -75,30 +75,42 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = 
     # Temperature from primary_variables before adding it to secondary_variables.
     set_primary_variables!(model, Enthalpy = Enthalpy())
     set_secondary_variables!(model,
-        Temperature = TemperatureFromEnthalpy(enthalpy_tables[:T]),
+        Temperature = PressureEnthalpyDependentVariable(enthalpy_tables[:temperature]),
     )
     # Replace P,T-dependent fluid properties with P,H-dependent ones
+    h_l = enthalpy_tables[:enthalpy_liquid]
+    h_v = enthalpy_tables[:enthalpy_vapor]
     set_secondary_variables!(model,
-        PhaseMassDensities    = PressureEnthalpyDependentVariable(enthalpy_tables[:rho]),
-        PhaseViscosities      = PressureEnthalpyDependentVariable(enthalpy_tables[:mu]),
-        ComponentHeatCapacity = PressureEnthalpyDependentVariable(enthalpy_tables[:c_p]),
-        FluidInternalEnergy   = FluidInternalEnergyFromEnthalpy(),
+        PhaseMassDensities = PressureEnthalpyDependentPhaseVariable(
+            enthalpy_tables[:density_liquid],
+            enthalpy_tables[:density_vapor], 
+            enthalpy_tables[:density_mix],
+            h_l, h_v),
+        PhaseViscosities = PressureEnthalpyDependentPhaseVariable(
+            enthalpy_tables[:viscosity_liquid],
+            enthalpy_tables[:viscosity_vapor],
+            enthalpy_tables[:viscosity_mix],
+            h_l, h_v),
+        FluidEnthalpy = GeothermalLVFluidEnthalpy(h_l, h_v),
+        # ComponentHeatCapacity = PressureEnthalpyDependentPhaseVariable(
+        #     enthalpy_tables[:c_p]),
+        FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
     )
     # Two-phase phase-split variables: only add to the Reservoir, not to wells.
     # Well equations (PotentialDropBalanceWell / saturation_mixed) are written
     # for single-phase flow and index Saturations[1, :] only; adding a 2-row
     # SaturationsFromEnthalpy to a well model causes a BoundsError at runtime.
-    if add_phase_split && haskey(enthalpy_tables, :S)
+    # if add_phase_split && haskey(enthalpy_tables, :S)
         set_secondary_variables!(model,
-            Saturations = SaturationsFromEnthalpy(enthalpy_tables[:S]),
+            Saturations = GeothermalLVSaturation(h_l, h_v),
         )
         push!(out, :Saturations)
-    end
-    if haskey(enthalpy_tables, :H_phases)
-        set_secondary_variables!(model,
-            FluidEnthalpy = PressureEnthalpyDependentVariable(enthalpy_tables[:H_phases]),
-        )
-    end
+    # end
+    # if haskey(enthalpy_tables, :H_phases)
+    #     set_secondary_variables!(model,
+    #         FluidEnthalpy = PressureEnthalpyDependentVariable(enthalpy_tables[:H_phases]),
+    #     )
+    # end
     unique!(out)
     return model
 end
@@ -193,8 +205,8 @@ function setup_reservoir_model_geothermal_2ph(
     isnothing(enthalpy_tables) && throw(ArgumentError("enthalpy_tables must be provided"))
 
     # Reference densities probed from the tables at representative conditions
-    rhoL_ref = first(enthalpy_tables[:rho](1e6, 400e3))   # liquid  at 10 bar, ~95 °C
-    rhoV_ref = last(enthalpy_tables[:rho](1e6, 2700e3))   # vapour  at 10 bar, ~220 °C
+    rhoL_ref = first(enthalpy_tables[:density_liquid](1e6))   # liquid  at 10 bar, ~95 °C
+    rhoV_ref = last(enthalpy_tables[:density_vapor](1e6))   # vapour  at 10 bar, ~220 °C
 
     sys = GeothermalTwoPhaseSystem(
         reference_densities = (rhoL_ref, rhoV_ref),

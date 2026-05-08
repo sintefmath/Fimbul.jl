@@ -47,19 +47,39 @@ Jutul.subvariable(v::TemperatureFromEnthalpy, map) = v
 end
 
 struct FluidInternalEnergyFromEnthalpy <: JutulDarcy.PhaseVariables end
-@jutul_secondary function update_internal_energy_from_enthalpy!(U, var::FluidInternalEnergyFromEnthalpy, model, Pressure, FluidEnthalpy, PhaseMassDensities, ix)
-    nph = size(PhaseMassDensities, 1)
-    for ph in 1:nph
-        for c in ix
-            H = FluidEnthalpy[ph, c]
-            p = Pressure[c]
-            rho = PhaseMassDensities[ph, c]
-            U[ph, c] = H - p./rho
-        end
-    end
+@jutul_secondary function update_internal_energy_from_enthalpy!(U, var::FluidInternalEnergyFromEnthalpy, model, Pressure, ix)
+    # nph = size(PhaseMassDensities, 1)
+    # for ph in 1:nph
+    #     for c in ix
+    #         H = FluidEnthalpy[ph, c]
+    #         p = Pressure[c]
+    #         rho = PhaseMassDensities[ph, c]
+    #         U[ph, c] = H - p./rho
+    #     end
+    # end
 end
 
 ## (P, H)-dependent vector variable ───────────────────────────────────────────
+const PCRIT_WATER_CP = 22.064e6  # Critical pressure of water in Pa
+
+function water_phase(p, h, h_l, h_v)
+    # 1 -> Subcooled liquid
+    # 2 -> Superheated vapor
+    # 3 -> Two-phase
+    # 4 -> Supercritical or liquid
+    p, h, h_l, h_v = value(p), value(h), value(h_l), value(h_v)
+    if p < PCRIT_WATER_CP
+        if h <= h_l
+            return 1
+        elseif h_l < h < h_v
+            return 2
+        elseif h >= h_v
+            return 3
+        end
+    else
+        return 4
+    end
+end
 
 """
     PressureEnthalpyDependentVariable{T, N} <: VectorVariables
@@ -90,6 +110,68 @@ Jutul.values_per_entity(model, ::PressureEnthalpyDependentVariable{T, N}) where 
     return result
 end
 
+struct PressureEnthalpyDependentPhaseVariable{TLV, TM, N} <: JutulDarcy.PhaseVariables
+    tab_l::TLV
+    tab_v::TLV
+    tab_m::TM
+    h_l::TLV
+    h_v::TLV
+    
+    function PressureEnthalpyDependentPhaseVariable(tab_l, tab_v, tab_m, h_l, h_v)
+        N = length(tab_m(1e8, 125e3))
+        new{typeof(tab_l), typeof(tab_m), N}(tab_l, tab_v, tab_m, h_l, h_v)
+    end
+end
+
+@jutul_secondary function update_ph_dependent_phase!(result, var::PressureEnthalpyDependentPhaseVariable{TLV, TM, N}, model, Pressure, Enthalpy, FluidEnthalpy, ix) where {TLV, TM, N}
+    for c in ix
+        h = Enthalpy[c]
+        p = Pressure[c]
+        h_l = var.h_l(p)
+        h_v = var.h_v(p)
+        phase = water_phase(p, h, h_l, h_v)
+        if phase == 2 # Two-phase
+            # Subcooled liquid
+            x_l = var.tab_l(p)
+            x_v = var.tab_v(p)
+            result[1, c] = x_l
+            result[2, c] = x_v
+        else # Supercooled liquid/superheated vapor/supercritical
+            x = var.tab_m(p, h)
+            result[1, c] = x
+            result[2, c] = x
+        end
+    end
+    return result
+end
+
+struct GeothermalLVFluidEnthalpy{T, N} <: JutulDarcy.PhaseVariables
+    tab_l::T
+    tab_v::T
+    function GeothermalLVFluidEnthalpy(tab_l, tab_v)
+        N = 2
+        new{typeof(tab_l), N}(tab_l, tab_v) # N is fixed at 2 for liquid and vapor phases
+    end
+end
+@jutul_secondary function update_geothermal_lv_fluid_enthalpy!(H, var::GeothermalLVFluidEnthalpy, model, Pressure, Enthalpy, ix)
+    for c in ix
+        h = Enthalpy[c]
+        p = Pressure[c]
+        h_l = var.tab_l(p)
+        h_v = var.tab_v(p)
+        phase = water_phase(p, h, h_l, h_v)
+        if phase == 2 # Two-phase
+            H[1, c] = h_l
+            H[2, c] = h_v
+        else
+            # In single-phase regions, assign the available phase enthalpy to both rows for consistency
+            H[1, c] = h
+            H[2, c] = h
+        end
+    end
+    return H
+end
+
 ## Saturations from (P, H) ────────────────────────────────────────────────────
 
 """
@@ -118,6 +200,42 @@ Jutul.values_per_entity(model, ::SaturationsFromEnthalpy{T, N}) where {T, N} = N
         vals = var.tab(Pressure[c], Enthalpy[c])
         for i in 1:N
             S[i, c] = vals[i]
+        end
+    end
+    return S
+end
+
+struct GeothermalLVSaturation{TLV, N} <: JutulDarcy.PhaseVariables
+    h_l::TLV
+    h_v::TLV
+    function GeothermalLVSaturation(h_l, h_v)
+        N = 2
+        new{typeof(h_l), N}(h_l, h_v)
+    end
+end
+@jutul_secondary function update_geothermal_liquid_vapor_saturation!(S, var::GeothermalLVSaturation, model, Pressure, Enthalpy, FluidEnthalpy, PhaseMassDensities, ix)
+    for c in ix
+        h = Enthalpy[c]
+        p = Pressure[c]
+        h_l = var.h_l(p)
+        h_v = var.h_v(p)
+        phase = water_phase(p, h, h_l, h_v)
+        if phase == 1
+            S[1, c] = 1.0  # Fully liquid
+            S[2, c] = 0.0
+        elseif phase == 2 # Two-phase
+            ρ_l = PhaseMassDensities[1, c]
+            ρ_v = PhaseMassDensities[2, c]
+            x = (h - h_l) / (h_v - h_l)  # Vapor quality
+            # Convert to volume saturation
+            S_v = (x/ρ_v) / (x/ρ_v + (1 - x)/ρ_l)
+            S[1, c] = 1 - S_v  # Liquid saturation
+            S[2, c] = S_v      # Vapor saturation
+        elseif phase == 3 || phase == 4
+            S[1, c] = 0.0  # Fully vapor
+            S[2, c] = 1.0
+        else
+            error("Invalid phase detected in saturation update")
         end
     end
     return S
