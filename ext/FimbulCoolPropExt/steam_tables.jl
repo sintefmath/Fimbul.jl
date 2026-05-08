@@ -3,10 +3,10 @@ const _PCRIT_WATER_CP = 22.064e6   # critical pressure of water [Pa] (IAPWS-IF97
 function Fimbul.build_steam_tables_2ph(;
         n_pressure::Int = 100,
         n_enthalpy::Int = 100,
-        p_min::Float64  = 1_000.0,  # Pa
-        p_max::Float64  = 21.5e6,   # Pa
-        h_min::Float64  = NaN,      # J/kg
-        h_max::Float64  = NaN,      # J/kg
+        p_min::Float64  = 1e5,     # Pa  (1 bar)
+        p_max::Float64  = 100e6,   # Pa  (1000 bar)
+        h_min::Float64  = NaN,     # J/kg, auto-computed if not provided
+        h_max::Float64  = NaN,     # J/kg, auto-computed if not provided
     )
     p_min > 0     || throw(ArgumentError("p_min must be positive"))
     p_max > p_min || throw(ArgumentError("p_max must be greater than p_min"))
