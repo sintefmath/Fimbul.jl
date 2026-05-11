@@ -61,25 +61,7 @@ end
 
 ## (P, H)-dependent vector variable ───────────────────────────────────────────
 const PCRIT_WATER_CP = 22.064e6  # Critical pressure of water in Pa
-
-function water_phase(p, h, h_l, h_v)
-    # 1 -> Subcooled liquid
-    # 2 -> Superheated vapor
-    # 3 -> Two-phase
-    # 4 -> Supercritical or liquid
-    p, h, h_l, h_v = value(p), value(h), value(h_l), value(h_v)
-    if p < PCRIT_WATER_CP
-        if h <= h_l
-            return 1
-        elseif h_l < h < h_v
-            return 2
-        elseif h >= h_v
-            return 3
-        end
-    else
-        return 4
-    end
-end
+const TCRIT_WATER_CP = 647.096   # Critical temperature of water in K
 
 """
     PressureEnthalpyDependentVariable{T, N} <: VectorVariables
@@ -123,13 +105,15 @@ struct PressureEnthalpyDependentPhaseVariable{TLV, TM, N} <: JutulDarcy.PhaseVar
     end
 end
 
-@jutul_secondary function update_ph_dependent_phase!(result, var::PressureEnthalpyDependentPhaseVariable{TLV, TM, N}, model, Pressure, Enthalpy, FluidEnthalpy, ix) where {TLV, TM, N}
+@jutul_secondary function update_ph_dependent_phase!(result, var::PressureEnthalpyDependentPhaseVariable{TLV, TM, N}, model, Pressure, Enthalpy, WaterPhase, ix) where {TLV, TM, N}
     for c in ix
         h = Enthalpy[c]
         p = Pressure[c]
-        h_l = var.h_l(p)
-        h_v = var.h_v(p)
-        phase = water_phase(p, h, h_l, h_v)
+        # h_l = FluidEnthalpy[1, c]
+        # h_v = FluidEnthalpy[2, c]
+        # h_l = var.h_l(p)
+        # h_v = var.h_v(p)
+        phase = WaterPhase[c]
         if phase == 2 # Two-phase
             # Subcooled liquid
             x_l = var.tab_l(p)
@@ -153,13 +137,13 @@ struct GeothermalLVFluidEnthalpy{T, N} <: JutulDarcy.PhaseVariables
         new{typeof(tab_l), N}(tab_l, tab_v) # N is fixed at 2 for liquid and vapor phases
     end
 end
-@jutul_secondary function update_geothermal_lv_fluid_enthalpy!(H, var::GeothermalLVFluidEnthalpy, model, Pressure, Enthalpy, ix)
+@jutul_secondary function update_geothermal_lv_fluid_enthalpy!(H, var::GeothermalLVFluidEnthalpy, model, Pressure, Enthalpy, WaterPhase, ix)
     for c in ix
         h = Enthalpy[c]
         p = Pressure[c]
         h_l = var.tab_l(p)
         h_v = var.tab_v(p)
-        phase = water_phase(p, h, h_l, h_v)
+        phase = WaterPhase[c]
         if phase == 2 # Two-phase
             H[1, c] = h_l
             H[2, c] = h_v
@@ -213,13 +197,15 @@ struct GeothermalLVSaturation{TLV, N} <: JutulDarcy.PhaseVariables
         new{typeof(h_l), N}(h_l, h_v)
     end
 end
-@jutul_secondary function update_geothermal_liquid_vapor_saturation!(S, var::GeothermalLVSaturation, model, Pressure, Enthalpy, FluidEnthalpy, PhaseMassDensities, ix)
+@jutul_secondary function update_geothermal_liquid_vapor_saturation!(S, var::GeothermalLVSaturation, model, Enthalpy, FluidEnthalpy, PhaseMassDensities, WaterPhase, ix)
     for c in ix
         h = Enthalpy[c]
-        p = Pressure[c]
-        h_l = var.h_l(p)
-        h_v = var.h_v(p)
-        phase = water_phase(p, h, h_l, h_v)
+        # p = Pressure[c]
+        h_l = FluidEnthalpy[1, c]
+        h_v = FluidEnthalpy[2, c]
+        # h_l = var.h_l(p)
+        # h_v = var.h_v(p)
+        phase = WaterPhase[c]
         if phase == 1
             S[1, c] = 1.0  # Fully liquid
             S[2, c] = 0.0
@@ -231,12 +217,50 @@ end
             S_v = (x/ρ_v) / (x/ρ_v + (1 - x)/ρ_l)
             S[1, c] = 1 - S_v  # Liquid saturation
             S[2, c] = S_v      # Vapor saturation
-        elseif phase == 3 || phase == 4
+        elseif phase == 3
             S[1, c] = 0.0  # Fully vapor
             S[2, c] = 1.0
+        elseif phase == 4
+            S[1, c] = 1.0  # Supercritical: treat as vapor-like
+            S[2, c] = 0.0
         else
             error("Invalid phase detected in saturation update")
         end
     end
     return S
+end
+
+struct WaterPhase{T} <: ScalarVariable
+    h_l::T
+    h_v::T
+    
+    function WaterPhase(h_l, h_v)
+        new{typeof(h_l)}(h_l, h_v)
+    end
+end
+
+@jutul_secondary function update_water_phase!(PH, var::WaterPhase, model, Pressure, Enthalpy, Temperature, ix)
+    # 1 -> Subcooled liquid
+    # 2 -> Two-phase
+    # 3 -> Superheated vapor
+    # 4 -> Supercritical
+    for c in ix
+        h = Enthalpy[c]
+        p = Pressure[c]
+        T = Temperature[c]
+        h_l = var.h_l(p)
+        h_v = var.h_v(p)
+        supercritical = p >= PCRIT_WATER_CP && T >= TCRIT_WATER_CP  # Critical temperature of water in K
+        if !supercritical
+            if h < h_l
+                PH[c] = 1
+            elseif h_l <= h <= h_v
+                PH[c] = 2
+            elseif h > h_v
+                PH[c] = 3
+            end
+        elseif supercritical
+            PH[c] = 4
+        end
+    end
 end

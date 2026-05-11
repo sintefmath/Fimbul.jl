@@ -95,6 +95,7 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = 
         # ComponentHeatCapacity = PressureEnthalpyDependentPhaseVariable(
         #     enthalpy_tables[:c_p]),
         FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
+        WaterPhase = WaterPhase(h_l, h_v),
     )
     Jutul.delete_variable!(model, :ComponentHeatCapacity)  # remove Temperature from primary_variables
     # Two-phase phase-split variables: only add to the Reservoir, not to wells.
