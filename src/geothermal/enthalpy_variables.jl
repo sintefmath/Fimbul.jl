@@ -207,25 +207,23 @@ end
         # h_v = var.h_v(p)
         phase = WaterPhase[c]
         if phase == 1
-            S[1, c] = 1.0  # Fully liquid
-            S[2, c] = 0.0
+            S_v = 0.0
         elseif phase == 2 # Two-phase
             ρ_l = PhaseMassDensities[1, c]
             ρ_v = PhaseMassDensities[2, c]
             x = (h - h_l) / (h_v - h_l)  # Vapor quality
             # Convert to volume saturation
             S_v = (x/ρ_v) / (x/ρ_v + (1 - x)/ρ_l)
-            S[1, c] = 1 - S_v  # Liquid saturation
-            S[2, c] = S_v      # Vapor saturation
         elseif phase == 3
-            S[1, c] = 0.0  # Fully vapor
-            S[2, c] = 1.0
+            S_v = 1.0
         elseif phase == 4
-            S[1, c] = 1.0  # Supercritical: treat as vapor-like
-            S[2, c] = 0.0
+            S_v = 0.0
         else
             error("Invalid phase detected in saturation update")
         end
+        # S_v = max(0.0, min(S_v, 1.0))  # Ensure saturation is within physical bounds
+        S[1, c] = 1 - S_v  # Liquid saturation
+        S[2, c] = S_v      # Vapor saturation
     end
     return S
 end
