@@ -102,13 +102,16 @@ function benchmark_2ph_1d(;
     #
     if gravity
         g         = CartesianMesh((1, 1, nx), (cell_size, cell_size, domain_length))
-        cell_inj  = 1   # bottom cell = deep = high pressure
-        cell_prod = nx    # top    cell = shallow = low pressure
+        cell_inj  = nx   # bottom cell = deep = high pressure
+        cell_prod = 1    # top    cell = shallow = low pressure
+        p0 = collect(range(p_prod, p_inj; length = nx))
     else
         g         = CartesianMesh((nx, 1, 1), (domain_length, cell_size, cell_size))
         cell_inj  = 1    # left  cell = inlet
         cell_prod = nx   # right cell = outlet
+        p0 = collect(range(p_inj, p_prod; length = nx))
     end
+    h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
 
     domain = reservoir_domain(g;
         permeability              = 1e-15,   # m²  (≈ 10 μD)
@@ -119,8 +122,8 @@ function benchmark_2ph_1d(;
     )
 
     # ── Wells ──────────────────────────────────────────────────────────────
-    well_inj  = setup_well(domain, [cell_inj];  name = :Injector, simple_well = true)
-    well_prod = setup_well(domain, [cell_prod]; name = :Producer, simple_well = true)
+    well_inj  = setup_well(domain, [cell_inj];  name = :Injector, simple_well = false)
+    well_prod = setup_well(domain, [cell_prod]; name = :Producer, simple_well = false)
 
     # ── Model ──────────────────────────────────────────────────────────────
     model = setup_reservoir_model_geothermal_2ph(
@@ -133,6 +136,7 @@ function benchmark_2ph_1d(;
     # Add function handle for omputing enthalpy from (P, T)
     for k in keys(model.models)
         model.models[k].extra[:enthalpy] = enthalpy_tables[:enthalpy]
+        push!(model.models[k].output_variables, :WaterPhase, :PhaseViscosities)
     end
     # H_prod = 1e6
     # H_inj  = 2e6
@@ -141,19 +145,19 @@ function benchmark_2ph_1d(;
     # Uniform initial conditions at the producer-side state (low p, low T).
     # The MRST benchmark also initialises uniformly (not hydrostatic).
     state0 = setup_reservoir_state(model;
-        Pressure = p_prod,
-        Enthalpy = H_prod,
+        Pressure = p0,
+        Enthalpy = h0,
     )
 
     # ── Well controls ──────────────────────────────────────────────────────
     # Both ends are driven by fixed bottom-hole pressure (BHP), mimicking
     # the Dirichlet pressure / temperature boundary conditions in MRST.
-    rhoL_ref = first(JutulDarcy.reference_densities(reservoir_model(model).system))
-
+    # rhoL_ref = first(JutulDarcy.reference_densities(reservoir_model(model).system))
+    rho_inj = enthalpy_tables[:density_mix](p_inj, H_inj)
     ctrl_inj = InjectorControl(
         BottomHolePressureTarget(p_inj),
         [1.0],
-        density     = rhoL_ref,
+        density     = rho_inj,
         temperature = T_inj,
         enthalpy    = H_inj,
     )
@@ -162,7 +166,7 @@ function benchmark_2ph_1d(;
     forces = setup_reservoir_forces(model;
         control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod),
     )
-    # forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
+    forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
 
     # ── Timesteps ──────────────────────────────────────────────────────────
     total_time = Float64(num_years) * year
