@@ -77,42 +77,24 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = 
     set_secondary_variables!(model,
         Temperature = TemperatureFromEnthalpy(enthalpy_tables[:temperature]),
     )
-    # Replace P,T-dependent fluid properties with P,H-dependent ones
-    h_l = enthalpy_tables[:enthalpy_liquid]
-    h_v = enthalpy_tables[:enthalpy_vapor]
+    # Replace P,T-dependent fluid properties with smooth per-phase (P,H) tables
     set_secondary_variables!(model,
-        PhaseMassDensities = PressureEnthalpyDependentPhaseVariable(
-            enthalpy_tables[:density_liquid],
-            enthalpy_tables[:density_vapor], 
-            enthalpy_tables[:density_mix],
-            h_l, h_v),
-        PhaseViscosities = PressureEnthalpyDependentPhaseVariable(
-            enthalpy_tables[:viscosity_liquid],
-            enthalpy_tables[:viscosity_vapor],
-            enthalpy_tables[:viscosity_mix],
-            h_l, h_v),
-        FluidEnthalpy = GeothermalLVFluidEnthalpy(h_l, h_v),
-        # ComponentHeatCapacity = PressureEnthalpyDependentPhaseVariable(
-        #     enthalpy_tables[:c_p]),
+        PhaseMassDensities = LVPhaseDensity(
+            enthalpy_tables[:density_liquid_ph],
+            enthalpy_tables[:density_vapor_ph]),
+        PhaseViscosities = LVPhaseViscosity(
+            enthalpy_tables[:viscosity_liquid_ph],
+            enthalpy_tables[:viscosity_vapor_ph]),
+        FluidEnthalpy = LVPhaseEnthalpy(
+            enthalpy_tables[:enthalpy_liquid_ph],
+            enthalpy_tables[:enthalpy_vapor_ph]),
         FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
-        WaterPhase = WaterPhase(h_l, h_v),
     )
-    Jutul.delete_variable!(model, :ComponentHeatCapacity)  # remove Temperature from primary_variables
-    # Two-phase phase-split variables: only add to the Reservoir, not to wells.
-    # Well equations (PotentialDropBalanceWell / saturation_mixed) are written
-    # for single-phase flow and index Saturations[1, :] only; adding a 2-row
-    # SaturationsFromEnthalpy to a well model causes a BoundsError at runtime.
-    # if add_phase_split && haskey(enthalpy_tables, :S)
-        set_secondary_variables!(model,
-            Saturations = GeothermalLVSaturation(h_l, h_v),
-        )
-        push!(out, :Saturations)
-    # end
-    # if haskey(enthalpy_tables, :H_phases)
-    #     set_secondary_variables!(model,
-    #         FluidEnthalpy = PressureEnthalpyDependentVariable(enthalpy_tables[:H_phases]),
-    #     )
-    # end
+    Jutul.delete_variable!(model, :ComponentHeatCapacity)
+    set_secondary_variables!(model,
+        Saturations = LVPhaseSaturation(enthalpy_tables[:saturation_vapor_ph]),
+    )
+    push!(out, :Saturations)
     unique!(out)
     return model
 end
