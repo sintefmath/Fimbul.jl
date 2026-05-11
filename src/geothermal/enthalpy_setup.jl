@@ -8,7 +8,7 @@
 
 # ── Private helper: mirrors JutulDarcy's setup_reservoir_model_geothermal body ─
 
-function _setup_geothermal_temperature(
+function _setup_geothermal_temperature___(
         reservoir::DataDomain;
         thermal = true,
         extra_out = false,
@@ -96,6 +96,7 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = 
         #     enthalpy_tables[:c_p]),
         FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
     )
+    Jutul.delete_variable!(model, :ComponentHeatCapacity)  # remove Temperature from primary_variables
     # Two-phase phase-split variables: only add to the Reservoir, not to wells.
     # Well equations (PotentialDropBalanceWell / saturation_mixed) are written
     # for single-phase flow and index Saturations[1, :] only; adding a 2-row
@@ -364,3 +365,5 @@ function JutulDarcy.temperature_increment(model, state, update_report)
     end
     return 1.0
 end
+
+JutulDarcy.system_uses_cnv_mb(system::GeothermalTwoPhaseSystem) = true
