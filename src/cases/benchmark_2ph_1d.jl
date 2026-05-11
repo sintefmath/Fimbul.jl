@@ -86,8 +86,9 @@ function benchmark_2ph_1d(;
         T_inj  = K0 + 300;  T_prod = K0 + 150
     end
 
-    H_inj  = enthalpy_tables[:H_pT](p_inj,  T_inj)
-    H_prod = enthalpy_tables[:H_pT](p_prod, T_prod)
+    H_inj  = enthalpy_tables[:enthalpy](p_inj, T_inj)
+    H_prod = enthalpy_tables[:enthalpy](p_prod, T_prod)
+    # H_prod = enthalpy_tables[:H_pT](p_prod, T_prod)
 
     # ── Grid ──────────────────────────────────────────────────────────────
     #
@@ -126,12 +127,15 @@ function benchmark_2ph_1d(;
         domain;
         enthalpy_tables = enthalpy_tables,
         wells           = [well_inj, well_prod],
+        block_backend=false,
     )
 
     # Add function handle for omputing enthalpy from (P, T)
     for k in keys(model.models)
-        model.models[k].extra[:enthalpy_from_pT] = enthalpy_tables[:H_pT]
+        model.models[k].extra[:enthalpy] = enthalpy_tables[:enthalpy]
     end
+    # H_prod = 1e6
+    # H_inj  = 2e6
 
     # ── Initial state ──────────────────────────────────────────────────────
     # Uniform initial conditions at the producer-side state (low p, low T).
