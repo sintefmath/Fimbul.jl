@@ -3,10 +3,10 @@ const _PCRIT_WATER_CP = 22.064e6   # critical pressure of water [Pa] (IAPWS-IF97
 function Fimbul.build_steam_tables_2ph(;
         n_pressure::Int = 100,
         n_enthalpy::Int = 100,
-        p_min::Float64  = 1e5,     # Pa  (1 bar)
+        p_min::Float64  = 1e4,     # Pa  (0.1 bar)
         p_max::Float64  = 100e6,   # Pa  (1000 bar)
-        h_min::Float64  = NaN,     # J/kg, auto-computed if not provided
-        h_max::Float64  = NaN,     # J/kg, auto-computed if not provided
+        h_min::Float64  = 8e4,     # J/kg, auto-computed if not provided
+        h_max::Float64  = 5e6,     # J/kg, auto-computed if not provided
     )
     p_min > 0     || throw(ArgumentError("p_min must be positive"))
     p_max > p_min || throw(ArgumentError("p_max must be greater than p_min"))
@@ -55,7 +55,7 @@ function Fimbul.build_steam_tables_2ph(;
     T_range = collect(range(minimum(T), maximum(T), length = n_enthalpy))
     H = [PropsSI("H", "P", p_i, "T", T_j, "Water") for p_i in p, T_j in T_range]
 
-    make_table_1d(data) = Jutul.get_1d_interpolator(p_sub, data; cap_endpoints = true)
+    make_table_1d(data) = Jutul.get_1d_interpolator(p_sub, data)
     make_table_2d(data) = Jutul.get_2d_interpolator(p, h, data)
 
     # ── Per-phase 2D lookup tables (OBL approach) ───────────────────────────
