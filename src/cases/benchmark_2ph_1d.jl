@@ -136,7 +136,7 @@ function benchmark_2ph_1d(;
     # Add function handle for omputing enthalpy from (P, T)
     for k in keys(model.models)
         model.models[k].extra[:enthalpy] = enthalpy_tables[:enthalpy]
-        push!(model.models[k].output_variables, :WaterPhase, :PhaseViscosities)
+        push!(model.models[k].output_variables, :PhaseViscosities)
     end
     # H_prod = 1e6
     # H_inj  = 2e6
@@ -172,10 +172,23 @@ function benchmark_2ph_1d(;
     total_time = Float64(num_years) * year
     dt_vec     = _benchmark_rampup_timesteps(total_time, dt_target)
 
+    if benchmark_case == :a
+        plot_time = ifelse(!gravity, 250.0*year, 750.0*year)
+    elseif benchmark_case == :b
+        plot_time = ifelse(!gravity, 120.0*year, 350.0*year)
+    elseif benchmark_case == :c
+        plot_time = 1500.0*year
+    elseif benchmark_case == :d
+        plot_time = ifelse(!gravity, 200.0*year, 1000.0*year)
+    else  # :e
+        plot_time = 2000.0*year
+    end
+
     # ── Assemble case ──────────────────────────────────────────────────────
     info = Dict{Symbol, Any}(
         :description    => "1D geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
         :benchmark_case => benchmark_case,
+        :plot_time      => plot_time,
         :gravity        => gravity,
         :p_inj          => p_inj,
         :p_prod         => p_prod,
