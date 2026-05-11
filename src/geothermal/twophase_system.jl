@@ -248,3 +248,36 @@ function JutulDarcy.flash_wellstream_at_surface(
     volfrac = s_total > 0 ? sat ./ s_total : sat .* 0 .+ 0.5
     return (rho, volfrac)
 end
+
+# ── Convergence criterion for GeothermalTwoPhaseSystem ────────────────────────
+#
+# The generic multiphase convergence_criterion loops `ph = 1:number_of_phases`
+# over the residual `r`, but for GeothermalTwoPhaseSystem `r` has only 1 row
+# (nc = 1, single H₂O component). Reading r[2, c] is a silent memory read of
+# the wrong cell, producing a spurious "Vapor" mass balance residual normalised
+# by the (low) vapor density — which never converges in superheated cases (:c).
+#
+# Fix: use Val(1) and normalize by the mixture density ρ_l*S_l + ρ_v*S_v.
+
+function JutulDarcy.convergence_criterion(
+        model::SimulationModel{D, <:GeothermalTwoPhaseSystem},
+        storage, eq::ConservationLaw{:TotalMasses}, eq_s, r;
+        dt = 1.0, update_report = missing,
+    ) where D
+    M = global_map(model.domain)
+    v = x -> as_value(Jutul.active_view(x, M, for_variables = false))
+    Φ    = v(storage.state.FluidVolume)
+    ρ_ph = v(storage.state.PhaseMassDensities)
+    S_ph = v(storage.state.Saturations)
+    nc   = length(Φ)
+    ρ_mix = reshape([ρ_ph[1,c]*S_ph[1,c] + ρ_ph[2,c]*S_ph[2,c] for c in 1:nc], 1, nc)
+    cnv, mb = JutulDarcy.cnv_mb_errors(r, Φ, ρ_mix, dt, Val(1))
+    dp_abs, dp_rel = JutulDarcy.pressure_increments(model, storage.state, update_report)
+    names = (:Water,)
+    return (
+        CNV = (errors = cnv, names = names),
+        MB  = (errors = mb,  names = names),
+        increment_dp_abs = (errors = (dp_abs/1e6,), names = (raw"Δp (abs, MPa)",)),
+        increment_dp_rel = (errors = (dp_rel,),     names = (raw"Δp (rel)",)),
+    )
+end
