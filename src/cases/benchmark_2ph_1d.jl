@@ -111,7 +111,8 @@ function benchmark_2ph_1d(;
         cell_prod = nx   # right cell = outlet
         p0 = collect(range(p_inj, p_prod; length = nx))
     end
-    h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
+    h0 = maximum(enthalpy_tables[:enthalpy].(p0, T_prod))
+    # h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
 
     domain = reservoir_domain(g;
         permeability              = 1e-15,   # m²  (≈ 10 μD)
@@ -122,8 +123,10 @@ function benchmark_2ph_1d(;
     )
 
     # ── Wells ──────────────────────────────────────────────────────────────
-    well_inj  = setup_well(domain, [cell_inj];  name = :Injector, simple_well = false)
-    well_prod = setup_well(domain, [cell_prod]; name = :Producer, simple_well = false)
+    WI = 1e-8
+    WIth = 0.0
+    well_inj  = setup_well(domain, [cell_inj];  name = :Injector, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
+    well_prod = setup_well(domain, [cell_prod]; name = :Producer, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
 
     # ── Model ──────────────────────────────────────────────────────────────
     model = setup_reservoir_model_geothermal_2ph(
@@ -147,6 +150,7 @@ function benchmark_2ph_1d(;
     state0 = setup_reservoir_state(model;
         Pressure = p0,
         Enthalpy = h0,
+        Temperature = T_prod,
     )
 
     # ── Well controls ──────────────────────────────────────────────────────
@@ -154,8 +158,10 @@ function benchmark_2ph_1d(;
     # the Dirichlet pressure / temperature boundary conditions in MRST.
     # rhoL_ref = first(JutulDarcy.reference_densities(reservoir_model(model).system))
     rho_inj = enthalpy_tables[:density_mix](p_inj, H_inj)
+    rate = 1si"meter^3/day"
     ctrl_inj = InjectorControl(
         BottomHolePressureTarget(p_inj),
+        # TotalRateTarget(rate),
         [1.0],
         density     = rho_inj,
         temperature = T_inj,
