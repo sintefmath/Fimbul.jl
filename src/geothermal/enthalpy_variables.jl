@@ -9,7 +9,7 @@ superheated steam.
 """
 Base.@kwdef struct Enthalpy{T} <: ScalarVariable
     min::T = 0.0
-    max::T = 4e6
+    max::T = 1e8
     max_rel::Union{T, Nothing} = nothing
     max_abs::Union{T, Nothing} = nothing
 end
