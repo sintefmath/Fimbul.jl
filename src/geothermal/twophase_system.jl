@@ -165,16 +165,28 @@ Base.@propagate_inbounds function JutulDarcy.multisegment_well_perforation_flux!
         rhoS,
         conn,
     )
-    λ_t = sum(JutulDarcy.perforation_reservoir_mobilities(
+    λ_l, λ_v = JutulDarcy.perforation_reservoir_mobilities(
         state_res, state_well, sys, conn.reservoir, conn.well,
-    ))
+    )
+    
+    # μ = state_well[:PhaseViscosities][:, conn.well]
+    # λ_l = 1/μ[1]
+    # λ_v = 1/μ[2]
+    λ_t = λ_l + λ_v
+    # λ_t = sum(JutulDarcy.perforation_reservoir_mobilities(
+    #     state_res, state_well, sys, conn.reservoir, conn.well,
+    # ))
     q_total = zero(eltype(out))
     for ph in 1:2
         q_total += JutulDarcy.perforation_phase_mass_flux(
             λ_t, conn, state_res, state_well, ph,
         )
     end
-    out[1] = q_total
+    if q_total < 0
+        @info "enthalpy_setup.jl: multisegment_well_perforation_flux! \
+            computed total mass flux = $(value(q_total))"
+    end
+    out[] = q_total
     return out
 end
 
