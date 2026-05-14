@@ -66,7 +66,7 @@ end
 
 # ── Enthalpy-formulation model modifier ──────────────────────────────────────
 
-function _apply_enthalpy_formulation!(model, enthalpy_tables; add_phase_split = true)
+function _apply_enthalpy_formulation!(model, enthalpy_tables)
 
     out = model.output_variables
     push!(out, :Enthalpy)
@@ -145,7 +145,7 @@ function JutulDarcy.Geothermal.setup_reservoir_model_geothermal(
             elseif JutulDarcy.model_or_domain_is_well(m)
                 # Skip phase-split (Saturations) for wells: the single-phase well
                 # equations (saturation_mixed) only support 1-row Saturations.
-                _apply_enthalpy_formulation!(m, enthalpy_tables; add_phase_split = false)
+                _apply_enthalpy_formulation!(m, enthalpy_tables)
             end
         end
         return out
@@ -211,7 +211,7 @@ function setup_reservoir_model_geothermal_2ph(
     #                computing injection fluxes (multisegment path).
     for (k, m) in pairs(model.models)
         if k == :Reservoir || JutulDarcy.model_or_domain_is_well(m)
-            _apply_enthalpy_formulation!(m, enthalpy_tables; add_phase_split = true)
+            _apply_enthalpy_formulation!(m, enthalpy_tables)
         end
     end
 
