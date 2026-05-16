@@ -81,9 +81,11 @@ function benchmark_2ph_1d(;
     elseif benchmark_case == :d
         p_inj  = 20e6;  p_prod = 1e6
         T_inj  = K0 + 400;  T_prod = K0 + 150
-    else  # :e
+    elseif benchmark_case == :e
         p_inj  = 4e6;   p_prod = 1e6
         T_inj  = K0 + 300;  T_prod = K0 + 150
+    else
+        error("Invalid benchmark_case: $benchmark_case")
     end
 
     H_inj  = enthalpy_tables[:enthalpy](p_inj, T_inj)
@@ -128,28 +130,67 @@ function benchmark_2ph_1d(;
     well_inj  = setup_well(domain, [cell_inj];  name = :Injector, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
     well_prod = setup_well(domain, [cell_prod]; name = :Producer, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
 
-    # ── Model ──────────────────────────────────────────────────────────────
-    model = setup_reservoir_model_geothermal_2ph(
-        domain;
-        enthalpy_tables = enthalpy_tables,
-        wells           = [well_inj, well_prod],
-        block_backend=false,
-    )
+    # ── Model ───
+    sys = GeothermalTwoPhaseSystem(enthalpy_tables)
+    model, parameters = setup_reservoir_model(domain, sys; wells = [well_inj, well_prod], block_backend = false, extra_out=true)
+    for k in keys(model.models)
+        nc = number_of_cells(model.models[k].data_domain)
+        parameters[k][:Temperature] = fill(T_inj, nc)
+        parameters[k][:LiquidMassFractions] = permutedims(fill(1.0, nc))
+        parameters[k][:VaporMassFractions] = permutedims(fill(1.0, nc))
+    end
+    if false
+    nc = number_of_cells(model.models[:Reservoir].data_domain)
+    parameters[:Reservoir][:Temperature][nc÷2:end] .= T_prod
+    end
+    # return model, parameters
+
+    # return model
+
+    for m in values(model.models)
+        push!(m.output_variables,
+        :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities,
+        :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions)
+    end
+    # push!(model.models[:Reservoir].output_variables, :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities, :FluidEnthalpy)
+
+    # return model
+
+    # model = setup_reservoir_model_geothermal_2ph(
+    #     domain;
+    #     enthalpy_tables = enthalpy_tables,
+    #     wells           = [well_inj, well_prod],
+    #     block_backend=false,
+    # )
+    # return model
 
     # Add function handle for omputing enthalpy from (P, T)
-    for k in keys(model.models)
-        model.models[k].extra[:enthalpy] = enthalpy_tables[:enthalpy]
-        push!(model.models[k].output_variables, :PhaseViscosities)
-    end
+    # for k in keys(model.models)
+    #     model.models[k].extra[:enthalpy] = enthalpy_tables[:enthalpy]
+    #     push!(model.models[k].output_variables, :PhaseViscosities)
+    #     m = model.models[k]
+    #     if JutulDarcy.model_or_domain_is_well(m)
+    #         m.parameters[:WellIndicesThermal] = JutulDarcy.WellIndicesThermal()
+    #         set_parameters!(m,
+    #             MaterialThermalConductivities = JutulDarcy.MaterialThermalConductivities(),
+    #             MaterialHeatCapacities = JutulDarcy.MaterialHeatCapacities(),
+    #             MaterialDensities = JutulDarcy.MaterialDensities()
+    #         )
+    #         set_secondary_variables!(m,
+    #             MaterialInternalEnergy = JutulDarcy.MaterialInternalEnergy()
+    #         )
+    #     end
+    # end
+    # JutulDarcy.add_thermal_to_facility!(model.models[:Facility])
     # H_prod = 1e6
     # H_inj  = 2e6
 
     # ── Initial state ──────────────────────────────────────────────────────
     # Uniform initial conditions at the producer-side state (low p, low T).
     # The MRST benchmark also initialises uniformly (not hydrostatic).
-    state0 = setup_reservoir_state(model;
+    state0 = setup_reservoir_state(model,
         Pressure = p0,
-        Enthalpy = h0,
+        # Enthalpy = h0,
         Temperature = T_prod,
     )
 
@@ -201,7 +242,7 @@ function benchmark_2ph_1d(;
         :T_inj          => T_inj,
         :T_prod         => T_prod,
     )
-    return JutulCase(model, dt_vec, forces; state0 = state0, input_data = info)
+    return JutulCase(model, dt_vec, forces; state0 = state0, parameters=parameters, input_data = info)
 end
 
 # ── Private helper ─────────────────────────────────────────────────────────────
