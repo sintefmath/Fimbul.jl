@@ -111,7 +111,8 @@ function Fimbul.build_steam_tables_2ph(;
                     S_vap_ph[i, j] = 0.0
                 elseif h_j <= hv
                     # Two-phase: saturation values; volume saturation from lever rule
-                    x  = clamp((h_j - hl) / (hv - hl), 0.0, 1.0)
+                    x = (h_j - hl) / (hv - hl)
+                    @assert 0.0 <= x <= 1.0
                     sv = clamp((x / rv) / (x / rv + (1 - x) / rl), 0.0, 1.0)
                     ρ_liq_ph[i, j] = rl;  ρ_vap_ph[i, j] = rv
                     μ_liq_ph[i, j] = ml;  μ_vap_ph[i, j] = mv
