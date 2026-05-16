@@ -3,14 +3,14 @@ using NetworkLayout, LayeredLayouts, GraphMakie
 # using HYPRE
 
 ##
-tabs = Fimbul.build_steam_tables_2ph()
+tabs = Fimbul.build_steam_tables_2ph(n_pressure = 200, n_enthalpy = 200)
 
 ## Case a, no gravity (default)
-n_step = 200
+n_step = 999
 cases = [:c]
 results = Dict{Tuple{Symbol, Bool}, Any}()
 for c in cases
-    for gravity in (false, )
+    for gravity in (false, true)
         if c == :e && gravity
             @info "Skipping case :e with gravity (not defined)"
             continue
@@ -24,7 +24,9 @@ for c in cases
             gravity = gravity)
         sim, cfg = setup_reservoir_simulator(case;
             # tol_mb = 1e-4,
-            info_level = 2,
+            tol_cnv=1e-4,
+            tol_mb=1e-8,
+            info_level = 0,
             max_timestep = maximum(case.dt),
             # max_nonlinear_iterations = 1000,
         );
@@ -35,6 +37,7 @@ for c in cases
 end
 
 ##
+
 function plot_case!(fig, row, c, out, gravity)
 
     (case, res) = out[:case], out[:results]
@@ -51,7 +54,11 @@ function plot_case!(fig, row, c, out, gravity)
         x = x[1,:]  # x-axis for horizontal flow
     end
     
-    for (k, prop) in enumerate([:Enthalpy, :Pressure, :Temperature, :Saturations, :PhaseMassDensities, :PhaseViscosities, :FluidEnthalpy])
+    props = [:Enthalpy, :Pressure, :Temperature, :Saturations, :PhaseMassDensities,
+        :PhaseViscosities, :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions]
+
+    props = [:Enthalpy, :Pressure, :Temperature, :Saturations]
+    for (k, prop) in enumerate(props)
         ax = Axis(fig[row, k], title = string(prop))
         y = res.states[timestep][prop]
         if size(y, 1) == 2
@@ -64,7 +71,7 @@ function plot_case!(fig, row, c, out, gravity)
             elseif prop == :Pressure
                 y = convert_from_si.(y, "megapascal")
             end
-            lines!(ax, x, y)
+            lines!(ax, x, vec(y))
         end
     end
     return fig
@@ -73,7 +80,7 @@ end
 
 GLMakie.closeall()
 for ((c, gravity), out) in results
-    fig = Figure()
+    fig = Figure(size=(2000, 500))
     plot_case!(fig, 1, c, out, gravity)
     display(GLMakie.Screen(), fig)
 end
@@ -87,3 +94,10 @@ st = Jutul.evaluate_all_secondary_variables(case.model.models[:Reservoir], st)
 
 ##
 Jutul.plot_variable_graph(case.model.models[:Reservoir])
+
+##
+state = results[(:c, false)][:results].result.states[end][:Reservoir]
+h = state[:Enthalpy]
+h_ph = state[:FluidEnthalpy]
+
+lines(isapprox.(h .- h_ph[2,:], 0.0), label = "Phase 1")

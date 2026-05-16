@@ -53,15 +53,15 @@ numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 function benchmark_2ph_1d(;
     benchmark_case  :: Symbol  = :a,
     gravity         :: Bool    = false,
-    nx              :: Int     = 200,
-    domain_length   :: Float64 = 2000.0*meter,
+    nx              :: Int     = 201,
+    domain_length   :: Float64 = 2010.0*meter,
     cell_size       :: Float64 = 10.0*meter,
     dt_target       :: Float64 = 5.0*year,
-    num_years       :: Int     = 1500,
+    num_years       :: Int     = 3000,
     enthalpy_tables                = build_steam_tables_2ph(),
 )
 
-    benchmark_case in (:a, :b, :c, :d, :e) ||
+    benchmark_case in (:a, :b, :c, :d, :e, :test) ||
         throw(ArgumentError("benchmark_case must be one of :a, :b, :c, :d, :e"))
     (benchmark_case == :e && gravity) &&
         throw(ArgumentError("Case :e is only defined without gravity (gravity = false)"))
@@ -84,7 +84,10 @@ function benchmark_2ph_1d(;
     elseif benchmark_case == :e
         p_inj  = 4e6;   p_prod = 1e6
         T_inj  = K0 + 300;  T_prod = K0 + 150
-    else
+    elseif benchmark_case == :test
+        p_inj  = 1e6;  p_prod = 1e5
+        T_inj  = K0 + 100;  T_prod = K0 + 100
+     else
         error("Invalid benchmark_case: $benchmark_case")
     end
 
@@ -113,7 +116,7 @@ function benchmark_2ph_1d(;
         cell_prod = nx   # right cell = outlet
         p0 = collect(range(p_inj, p_prod; length = nx))
     end
-    h0 = maximum(enthalpy_tables[:enthalpy].(p0, T_prod))
+    h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
     # h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
 
     domain = reservoir_domain(g;
@@ -126,16 +129,19 @@ function benchmark_2ph_1d(;
 
     # ── Wells ──────────────────────────────────────────────────────────────
     WI = 1e-8
-    WIth = 0.0
+    WIth = 100
     well_inj  = setup_well(domain, [cell_inj];  name = :Injector, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
     well_prod = setup_well(domain, [cell_prod]; name = :Producer, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
 
     # ── Model ───
     sys = GeothermalTwoPhaseSystem(enthalpy_tables)
-    model, parameters = setup_reservoir_model(domain, sys; wells = [well_inj, well_prod], block_backend = false, extra_out=true)
+    model, parameters = setup_reservoir_model(domain, sys; wells = [well_inj, well_prod], block_backend = true, extra_out=true, thermal=true)
+    kr = BrooksCoreyRelativePermeabilities(sys, 1.0, [0.3, 0.0], 1.0)
+    model = replace_variables!(model, RelativePermeabilities = kr)
+    # return model
     for k in keys(model.models)
         nc = number_of_cells(model.models[k].data_domain)
-        parameters[k][:Temperature] = fill(T_inj, nc)
+        # parameters[k][:Temperature] = fill(T_inj, nc)
         parameters[k][:LiquidMassFractions] = permutedims(fill(1.0, nc))
         parameters[k][:VaporMassFractions] = permutedims(fill(1.0, nc))
     end
@@ -152,6 +158,7 @@ function benchmark_2ph_1d(;
         :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities,
         :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions)
     end
+    # JutulDarcy.add_thermal_to_model!(model)
     # push!(model.models[:Reservoir].output_variables, :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities, :FluidEnthalpy)
 
     # return model
@@ -190,7 +197,7 @@ function benchmark_2ph_1d(;
     # The MRST benchmark also initialises uniformly (not hydrostatic).
     state0 = setup_reservoir_state(model,
         Pressure = p0,
-        # Enthalpy = h0,
+        Enthalpy = h0,
         Temperature = T_prod,
     )
 
@@ -213,7 +220,7 @@ function benchmark_2ph_1d(;
     forces = setup_reservoir_forces(model;
         control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod),
     )
-    forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
+    # forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
 
     # ── Timesteps ──────────────────────────────────────────────────────────
     total_time = Float64(num_years) * year
