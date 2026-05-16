@@ -64,6 +64,79 @@
 #     end
 # end
 
+function JutulDarcy.add_thermal_to_model!(model::SimulationModel{D, S, F, C}) where {D, S<:GeothermalTwoPhaseSystem, F, C}
+
+    invoke(JutulDarcy.add_thermal_to_model!, Tuple{SimulationModel}, model)
+    Jutul.delete_variable!(model, :Temperature)
+
+    pvt = model.system.pvt_tables
+
+    set_secondary_variables!(model,
+        Temperature = TemperatureFromEnthalpy(pvt[:temperature]),
+        FluidEnthalpy = LVPhaseEnthalpy(pvt[:enthalpy_liquid_ph], pvt[:enthalpy_vapor_ph]),
+        FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
+    )
+    set_primary_variables!(model, Enthalpy = Enthalpy())
+    model.extra[:enthalpy] = pvt[:enthalpy]
+    return model
+    # set_primary_variables!(model, Temperature = Temperature())
+    # set_parameters!(model,
+    #     RockHeatCapacity = RockHeatCapacity(),
+    #     RockDensity = RockDensity(),
+    #     BulkVolume = BulkVolume(),
+    #     ComponentHeatCapacity = ComponentHeatCapacity(),
+    # )
+    # set_secondary_variables!(model,
+    #     FluidInternalEnergy = FluidInternalEnergy(),
+    #     FluidEnthalpy = FluidEnthalpy(),
+    #     TotalThermalEnergy = TotalThermalEnergy(),
+    # )
+    # is_reservoir = !model_or_domain_is_well(model)
+    # if is_reservoir
+    #     set_parameters!(model,
+    #         RockThermalConductivities = RockThermalConductivities(),
+    #         FluidThermalConductivities = FluidThermalConductivities()
+    #     )
+    #     set_secondary_variables!(model,
+    #         RockInternalEnergy = RockInternalEnergy()
+    #     )
+    # else
+    #     if model_or_domain_is_well(model)
+    #         w = physical_representation(model.domain)
+
+    #         set_parameters!(model,
+    #             WellIndicesThermal = WellIndicesThermal(),
+    #         )
+    #         if w isa MultiSegmentWell
+    #             set_parameters!(model,
+    #                 MaterialThermalConductivities = MaterialThermalConductivities(),
+    #                 MaterialHeatCapacities = MaterialHeatCapacities(),
+    #                 MaterialDensities = MaterialDensities()
+    #             )
+    #             set_secondary_variables!(model,
+    #                 MaterialInternalEnergy = MaterialInternalEnergy()
+    #             )
+
+    #         else
+    #             w::SimpleWell
+    #             set_secondary_variables!(model,
+    #                 RockInternalEnergy = RockInternalEnergy()
+    #             )
+    #         end
+    #     end
+    # end
+    # disc = model.domain.discretizations.heat_flow
+    # model.equations[:energy_conservation] = ConservationLaw(disc, :TotalThermalEnergy, 1)
+
+    # out = model.output_variables
+    # push!(out, :TotalThermalEnergy)
+    # push!(out, :FluidEnthalpy)
+    # push!(out, :Temperature)
+
+    # unique!(out)
+    # return model
+end
+
 # ── Enthalpy-formulation model modifier ──────────────────────────────────────
 
 function _apply_enthalpy_formulation!(model, enthalpy_tables)
