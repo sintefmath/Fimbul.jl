@@ -181,12 +181,19 @@ struct LVPhaseEnthalpy{TL, TV} <: JutulDarcy.PhaseVariables
     tab_vap::TV
 end
 
-@jutul_secondary function update_lv_phase_enthalpy!(H_out, var::LVPhaseEnthalpy, model, Pressure, Enthalpy, ix)
+@jutul_secondary function update_lv_phase_enthalpy!(H_out, var::LVPhaseEnthalpy, model, Pressure, Enthalpy, Saturations, ix)
     for c in ix
         p = Pressure[c]
         h = Enthalpy[c]
-        H_out[1, c] = var.tab_liq(p, h)
-        H_out[2, c] = var.tab_vap(p, h)
+        S_l = Saturations[1, c]
+        ϵ = 1e-6
+        if ϵ < S_l < 1 - ϵ
+            H_out[1, c] = var.tab_liq(p, h)
+            H_out[2, c] = var.tab_vap(p, h)
+        else
+            H_out[1, c] = h
+            H_out[2, c] = h
+        end
     end
     return H_out
 end
