@@ -8,61 +8,61 @@
 
 # ── Private helper: mirrors JutulDarcy's setup_reservoir_model_geothermal body ─
 
-function _setup_geothermal_temperature___(
-        reservoir::DataDomain;
-        thermal = true,
-        extra_out = false,
-        parameters = Dict{Symbol, Any}(),
-        salt_mole_fractions = Float64[],
-        salt_names = String[],
-        table_arg = NamedTuple(),
-        single_phase = true,
-        update_reservoir = true,
-        table_cache = Dict(),
-        kwarg...
-    )
-    thermal || throw(ArgumentError("Cannot setup geothermal reservoir model with thermal = false"))
-    tables = JutulDarcy.Geothermal.geothermal_setup_tables(
-        table_cache, salt_names, salt_mole_fractions, table_arg
-    )
+# function _setup_geothermal_temperature___(
+#         reservoir::DataDomain;
+#         thermal = true,
+#         extra_out = false,
+#         parameters = Dict{Symbol, Any}(),
+#         salt_mole_fractions = Float64[],
+#         salt_names = String[],
+#         table_arg = NamedTuple(),
+#         single_phase = true,
+#         update_reservoir = true,
+#         table_cache = Dict(),
+#         kwarg...
+#     )
+#     thermal || throw(ArgumentError("Cannot setup geothermal reservoir model with thermal = false"))
+#     tables = JutulDarcy.Geothermal.geothermal_setup_tables(
+#         table_cache, salt_names, salt_mole_fractions, table_arg
+#     )
 
-    rhoWS = first(JutulDarcy.reference_densities(:co2brine))
-    if single_phase
-        sys = SinglePhaseSystem(AqueousPhase(), reference_density = rhoWS)
-    else
-        error("Multiphase geothermal is not implemented")
-    end
-    cond_water = tables[:phase_conductivity](1*si_unit(:atm), 273.15 + 20.0)
-    if update_reservoir
-        reservoir[:fluid_thermal_conductivity] .= cond_water
-    end
-    model = setup_reservoir_model(reservoir, sys; thermal = true, extra_out = false, kwarg...)
+#     rhoWS = first(JutulDarcy.reference_densities(:co2brine))
+#     if single_phase
+#         sys = SinglePhaseSystem(AqueousPhase(), reference_density = rhoWS)
+#     else
+#         error("Multiphase geothermal is not implemented")
+#     end
+#     cond_water = tables[:phase_conductivity](1*si_unit(:atm), 273.15 + 20.0)
+#     if update_reservoir
+#         reservoir[:fluid_thermal_conductivity] .= cond_water
+#     end
+#     model = setup_reservoir_model(reservoir, sys; thermal = true, extra_out = false, kwarg...)
 
-    rho = JutulDarcy.PressureTemperatureDependentVariable(tables[:density])
-    c_p = JutulDarcy.PressureTemperatureDependentVariable(tables[:heat_capacity_constant_pressure])
-    mu  = JutulDarcy.PTViscosities(tables[:viscosity])
-    for (k, m) in pairs(model.models)
-        if k == :Reservoir || JutulDarcy.model_or_domain_is_well(m)
-            set_secondary_variables!(m;
-                PhaseMassDensities   = rho,
-                PhaseViscosities     = mu,
-                ComponentHeatCapacity = c_p,
-            )
-        end
-    end
+#     rho = JutulDarcy.PressureTemperatureDependentVariable(tables[:density])
+#     c_p = JutulDarcy.PressureTemperatureDependentVariable(tables[:heat_capacity_constant_pressure])
+#     mu  = JutulDarcy.PTViscosities(tables[:viscosity])
+#     for (k, m) in pairs(model.models)
+#         if k == :Reservoir || JutulDarcy.model_or_domain_is_well(m)
+#             set_secondary_variables!(m;
+#                 PhaseMassDensities   = rho,
+#                 PhaseViscosities     = mu,
+#                 ComponentHeatCapacity = c_p,
+#             )
+#         end
+#     end
 
-    rmodel = reservoir_model(model)
-    outvar = rmodel.output_variables
-    push!(outvar, :PhaseMassDensities, :RockInternalEnergy, :FluidInternalEnergy, :TotalThermalEnergy)
-    unique!(outvar)
+#     rmodel = reservoir_model(model)
+#     outvar = rmodel.output_variables
+#     push!(outvar, :PhaseMassDensities, :RockInternalEnergy, :FluidInternalEnergy, :TotalThermalEnergy)
+#     unique!(outvar)
 
-    if extra_out
-        parameters = setup_parameters(model, parameters)
-        return (model, parameters)
-    else
-        return model
-    end
-end
+#     if extra_out
+#         parameters = setup_parameters(model, parameters)
+#         return (model, parameters)
+#     else
+#         return model
+#     end
+# end
 
 # ── Enthalpy-formulation model modifier ──────────────────────────────────────
 
@@ -89,6 +89,7 @@ function _apply_enthalpy_formulation!(model, enthalpy_tables)
             enthalpy_tables[:enthalpy_liquid_ph],
             enthalpy_tables[:enthalpy_vapor_ph]),
         FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
+        # TotalThermalEnergy = LVTotalThermalEnergy()
     )
     Jutul.delete_variable!(model, :ComponentHeatCapacity)
     set_secondary_variables!(model,
@@ -241,25 +242,25 @@ end
 #   - converts it to temperature via the system's T(P,H) table to populate
 #     the facility's `SurfaceTemperature`.
 
-function JutulDarcy.setup_reservoir_state(
-        model::MultiModel,
-        equil::Union{Missing, Vector, JutulDarcy.EquilibriumRegion} = missing;
-        kwarg...,
-    )
-    rmodel = JutulDarcy.reservoir_model(model)
+# function JutulDarcy.setup_reservoir_state___(
+#         model::MultiModel,
+#         equil::Union{Missing, Vector, JutulDarcy.EquilibriumRegion} = missing;
+#         kwarg...,
+#     )
+#     rmodel = JutulDarcy.reservoir_model(model)
 
-    # Dispatch to our specialised version for GeothermalTwoPhaseSystem
-    if rmodel.system isa GeothermalTwoPhaseSystem
-        return _setup_reservoir_state_geothermal_2ph(model, equil; kwarg...)
-    end
+#     # Dispatch to our specialised version for GeothermalTwoPhaseSystem
+#     if rmodel.system isa GeothermalTwoPhaseSystem
+#         return _setup_reservoir_state_geothermal_2ph(model, equil; kwarg...)
+#     end
 
-    # Fall back to JutulDarcy's original implementation for all other systems
-    return invoke(
-        JutulDarcy.setup_reservoir_state,
-        Tuple{MultiModel, Union{Missing, Vector, JutulDarcy.EquilibriumRegion}},
-        model, equil; kwarg...,
-    )
-end
+#     # Fall back to JutulDarcy's original implementation for all other systems
+#     return invoke(
+#         JutulDarcy.setup_reservoir_state,
+#         Tuple{MultiModel, Union{Missing, Vector, JutulDarcy.EquilibriumRegion}},
+#         model, equil; kwarg...,
+#     )
+# end
 
 function _setup_reservoir_state_geothermal_2ph(
         model::MultiModel,

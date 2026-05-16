@@ -211,3 +211,49 @@ end
     end
     return S
 end
+
+struct EnthalpyFromPT{T} <: ScalarVariable
+    tab::T
+end
+
+@jutul_secondary function update_enthalpy_from_pt!(H, var::EnthalpyFromPT, model, Pressure, Temperature, ix)
+    for c in ix
+        p = Pressure[c]
+        T = Temperature[c]
+        H[c] = var.tab(p, T)
+    end
+    return H
+end
+
+
+# struct LVTotalThermalEnergy <: ScalarVariable end
+
+# @jutul_secondary function update_lv_total_thermal_energy!(E_total, var::LVTotalThermalEnergy, model,
+#     Pressure, Enthalpy, TotalMasses, Saturations, PhaseMassDensities, RockDensity, RockInternalEnergy, BulkVolume, FluidVolume, ix)
+#     U_r = RockInternalEnergy
+#     ρ_r = RockDensity
+#     M_f = TotalMasses
+#     V_f = FluidVolume
+#     V = BulkVolume
+#     h = Enthalpy
+#     ρ_f = PhaseMassDensities
+#     S = Saturations
+#     println("Updating total thermal energy for $(length(ix)) cells...")
+#     for i in ix
+#         ρ_fm = ρ_f[1, i]*S[1, i] + ρ_f[2, i]*S[2, i]
+#         V_r = V[i] - V_f[i]
+#         E_r = ρ_r[i] * U_r[i] * V_r
+#         p = Pressure[i]
+#         E_f = M_f[i] * (h[i] - p/ρ_fm)
+#         E_total[i] = E_r + E_f
+#     end
+#     return E_total
+# end
+
+
+# const MSWellDomain = DiscretizedDomain{<:MultiSegmentWell}
+# const MSWellFlowModel = SimulationModel{<:MSWellDomain, <:MultiPhaseSystem}
+# @jutul_secondary function update_lv_total_thermal_energy!(E_total, te::LVTotalThermalEnergy, model::MSWellFlowModel,
+#     Pressure, Enthalpy, TotalMasses, Saturations, PhaseMassDensities, MaterialDensities, MaterialInternalEnergy, BulkVolume, FluidVolume, ix)
+#     update_lv_total_thermal_energy!(E_total, te::LVTotalThermalEnergy, nothing, Pressure, Enthalpy, TotalMasses, Saturations, PhaseMassDensities, MaterialDensities, MaterialInternalEnergy, BulkVolume, FluidVolume, ix)
+# end

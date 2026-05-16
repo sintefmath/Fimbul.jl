@@ -30,10 +30,11 @@ obtained via Steam-Tables look-ups from `build_steam_tables_2ph`.
 
 Use `setup_reservoir_model_geothermal_2ph` to obtain a fully configured model.
 """
-struct GeothermalTwoPhaseSystem{T <: Tuple, F <: NTuple} <: MultiPhaseSystem
+struct GeothermalTwoPhaseSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.CompositionalSystem
     phases  :: T
     rho_ref :: F
     reference_phase_index::Int
+    pvt_tables::Dict
 end
 
 """
@@ -42,13 +43,13 @@ end
 Construct a `GeothermalTwoPhaseSystem` for a `(AqueousPhase, VaporPhase)` pair.
 `reference_densities` should be `(ρ_liquid_ref, ρ_vapour_ref)` in kg/m³.
 """
-function GeothermalTwoPhaseSystem(;
+function GeothermalTwoPhaseSystem(pvt_tables::Dict;
         reference_densities :: NTuple{2, <:Real} = (1000.0, 1.0),
     )
     phases  = (AqueousPhase(), VaporPhase())
     rho_ref = tuple(Float64.(reference_densities)...)
     reference_phase_index = 1
-    return GeothermalTwoPhaseSystem(phases, rho_ref, reference_phase_index)
+    return GeothermalTwoPhaseSystem(phases, rho_ref, reference_phase_index, pvt_tables)
 end
 
 Base.show(io::IO, ::GeothermalTwoPhaseSystem) =
@@ -73,6 +74,66 @@ function JutulDarcy.select_primary_variables!(
         S, ::GeothermalTwoPhaseSystem, model::SimulationModel,
     )
     S[:Pressure] = Pressure()
+    # S[:Enthalpy] = Enthalpy()
+end
+
+function Jutul.select_secondary_variables!(S, system::GeothermalTwoPhaseSystem, model)
+    JutulDarcy.select_default_darcy_secondary_variables!(S, model.domain, system, model.formulation)
+    set_secondary_variables!(model,
+        PhaseViscosities = LVPhaseViscosity(system.pvt_tables[:viscosity_liquid_ph], system.pvt_tables[:viscosity_vapor_ph]),
+        PhaseMassDensities = LVPhaseDensity(system.pvt_tables[:density_liquid_ph], system.pvt_tables[:density_vapor_ph]),
+        FluidEnthalpy = LVPhaseEnthalpy(system.pvt_tables[:enthalpy_liquid_ph], system.pvt_tables[:enthalpy_vapor_ph]),
+        Saturations = LVPhaseSaturation(system.pvt_tables[:saturation_vapor_ph]),
+        Enthalpy = EnthalpyFromPT(system.pvt_tables[:enthalpy]),
+    )
+end
+
+function JutulDarcy.select_parameters!(prm, system::GeothermalTwoPhaseSystem, model)
+    JutulDarcy.select_default_darcy_parameters!(prm, model.domain, system, model.formulation)
+    prm[:LiquidMassFractions] = JutulDarcy.PhaseMassFractions(:liquid)
+    prm[:VaporMassFractions] = JutulDarcy.PhaseMassFractions(:vapor)
+    prm[:Temperature] = JutulDarcy.Temperature()
+end
+
+function JutulDarcy.set_reservoir_variable_defaults!(
+    model::SimulationModel{O, S, F, C};
+        p_min,
+        p_max,
+        dp_max_abs,
+        dp_max_rel,
+        ds_max,
+        dz_max,
+        dr_max,
+        dT_max_rel = nothing,
+        dT_max_abs = nothing,
+        T_min = convert_to_si(0.0, :Celsius),
+        flash_reuse_guess = false,
+        flash_stability_bypass = flash_reuse_guess
+    ) where {O, S<:GeothermalTwoPhaseSystem, F, C}
+    # Replace various variables - if they are available
+    # replace_variables!(model, OverallMoleFractions = OverallMoleFractions(dz_max = dz_max), throw = false)
+    pvt = model.system.pvt_tables
+    # Jutul.delete!(model.parameters, :Temperature)
+
+    # replace_variables!(model, Saturations = SaturationsFromEnthalpy(pvt[:saturation_vapor_ph]), throw = false)
+    # replace_variables!(model, Temperature = TemperatureFromEnthalpy(pvt[:temperature]), throw = false)
+    
+    p_def = Pressure(
+        max_abs = dp_max_abs,
+        max_rel = dp_max_rel,
+        minimum = p_min,
+        maximum = p_max
+    )
+    replace_variables!(model, Pressure = p_def, throw = false)
+    return model
+end
+
+function Jutul.select_equations!(eqs, sys::GeothermalTwoPhaseSystem, model::SimulationModel)
+    nc = JutulDarcy.number_of_components(sys)
+    mdisc = model.domain.discretizations.mass_flow
+    eqs[:mass_conservation] = ConservationLaw(mdisc, :TotalMasses, nc)
+    # hdisc = model.domain.discretizations.heat_flow
+    # eqs[:energy_conservation] = ConservationLaw(hdisc, :TotalThermalEnergy, nc)
 end
 
 # ── Total masses: 1 water component = liquid mass + vapour mass ───────────────
@@ -119,16 +180,16 @@ end
 # The generic component_mass_fluxes! (for ImmiscibleSystem) copies phase_fluxes[ph]
 # into q[ph].  For GeothermalTwoPhaseSystem we sum both phase fluxes into q[1].
 
-@inline function component_mass_fluxes!(
-        q, face, state,
-        model    :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
-        flux_type, kgrad, upw,
-    )
-    phase_fluxes = JutulDarcy.darcy_phase_mass_fluxes(
-        face, state, model, flux_type, kgrad, upw,
-    )
-    return setindex(q, phase_fluxes[1] + phase_fluxes[2], 1)
-end
+# @inline function component_mass_fluxes!(
+#         q, face, state,
+#         model    :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
+#         flux_type, kgrad, upw,
+#     )
+#     phase_fluxes = JutulDarcy.darcy_phase_mass_fluxes(
+#         face, state, model, flux_type, kgrad, upw,
+#     )
+#     return setindex(q, phase_fluxes[1] + phase_fluxes[2], 1)
+# end
 
 # ── Boundary-condition mass flux: sum phases into single component ────────────
 #
@@ -136,17 +197,13 @@ end
 # For ImmiscibleSystem apply_flow_bc! does acc[ph] += q[ph].
 # For GeothermalTwoPhaseSystem, acc has 1 row so we sum all phases.
 
-function JutulDarcy.apply_flow_bc!(
-        acc, q,
-        bc, model :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
-        state, time,
-    )
-    q_total = zero(eltype(q))
-    for i in eachindex(q)
-        q_total += q[i]
-    end
-    acc[1] += q_total
-end
+# function JutulDarcy.apply_flow_bc!(
+#         acc, q,
+#         bc, model :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
+#         state, time,
+#     )
+#     error()
+# end
 
 # ── Multi-segment well perforation flux ───────────────────────────────────────
 #
@@ -157,38 +214,37 @@ end
 # _apply_enthalpy_formulation! to be called with add_phase_split = true for
 # well models (done in Phase 3 / setup_reservoir_model_geothermal_2ph).
 
-Base.@propagate_inbounds function JutulDarcy.multisegment_well_perforation_flux!(
-        out,
-        sys       :: GeothermalTwoPhaseSystem,
-        state_res,
-        state_well,
-        rhoS,
-        conn,
-    )
-    λ_l, λ_v = JutulDarcy.perforation_reservoir_mobilities(
-        state_res, state_well, sys, conn.reservoir, conn.well,
-    )
+# Base.@propagate_inbounds function JutulDarcy.multisegment_well_perforation_flux!(
+#         out,
+#         sys       :: GeothermalTwoPhaseSystem,
+#         state_res,
+#         state_well,
+#         rhoS,
+#         conn,
+#     )
+#     λ_l, λ_v = JutulDarcy.perforation_reservoir_mobilities(
+#         state_res, state_well, sys, conn.reservoir, conn.well,
+#     )
     
-    # μ = state_well[:PhaseViscosities][:, conn.well]
-    # λ_l = 1/μ[1]
-    # λ_v = 1/μ[2]
-    λ_t = λ_l + λ_v
-    # λ_t = sum(JutulDarcy.perforation_reservoir_mobilities(
-    #     state_res, state_well, sys, conn.reservoir, conn.well,
-    # ))
-    q_total = zero(eltype(out))
-    for ph in 1:2
-        q_total += JutulDarcy.perforation_phase_mass_flux(
-            λ_t, conn, state_res, state_well, ph,
-        )
-    end
-    if q_total < 0
-        @info "enthalpy_setup.jl: multisegment_well_perforation_flux! \
-            computed total mass flux = $(value(q_total))"
-    end
-    out[] = q_total
-    return out
-end
+#     # μ = state_well[:PhaseViscosities][:, conn.well]
+#     # λ_l = 1/μ[1]
+#     # λ_v = 1/μ[2]
+#     λ_t = λ_l + λ_v
+#     # λ_t = sum(JutulDarcy.perforation_reservoir_mobilities(
+#     #     state_res, state_well, sys, conn.reservoir, conn.well,
+#     # ))
+#     q_total = zero(eltype(out))
+#     for ph in 1:2
+#         q_total += JutulDarcy.perforation_phase_mass_flux(
+#             λ_t, conn, state_res, state_well, ph,
+#         )
+#     end
+#     if q_total < 0
+#         @info "multisegment_well_perforation_flux!: computed total mass flux = $(value(q_total))"
+#     end
+#     out[] = q_total
+#     return out
+# end
 
 # ── Simple-well perforation flux ─────────────────────────────────────────────
 #
@@ -199,42 +255,43 @@ end
 # Injection direction is determined from the liquid phase (phase 1) potential.
 # For production both phase fluxes are accumulated.
 
-Base.@propagate_inbounds function JutulDarcy.simple_well_perforation_flux!(
-        out,
-        sys       :: GeothermalTwoPhaseSystem,
-        state_res,
-        state_well,
-        rhoS,
-        conn,
-    )
-    rc  = conn.reservoir
-    ρ   = state_res.PhaseMassDensities
-    mob = state_res.PhaseMobilities
+# Base.@propagate_inbounds function JutulDarcy.simple_well_perforation_flux!(
+#         out,
+#         sys       :: GeothermalTwoPhaseSystem,
+#         state_res,
+#         state_well,
+#         rhoS,
+#         conn,
+#     )
+#     error()
+#     rc  = conn.reservoir
+#     ρ   = state_res.PhaseMassDensities
+#     mob = state_res.PhaseMobilities
 
-    # Total mass mobility in the reservoir cell
-    ρλ_t = ρ[1, rc] * mob[1, rc] + ρ[2, rc] * mob[2, rc]
+#     # Total mass mobility in the reservoir cell
+#     ρλ_t = ρ[1, rc] * mob[1, rc] + ρ[2, rc] * mob[2, rc]
 
-    # Use liquid phase (1) to determine flow direction
-    ψ₁ = JutulDarcy.perforation_phase_potential_difference(
-        conn, state_res, state_well, 1,
-    )
+#     # Use liquid phase (1) to determine flow direction
+#     ψ₁ = JutulDarcy.perforation_phase_potential_difference(
+#         conn, state_res, state_well, 1,
+#     )
 
-    q_total = zero(eltype(out))
-    if ψ₁ < 0
-        # Injection: single-component water is injected; use liquid-phase
-        # pressure drive and total reservoir mass mobility.
-        q_total = ψ₁ * ρλ_t
-    else
-        # Production: accumulate Darcy flux from each phase independently.
-        ψ₂ = JutulDarcy.perforation_phase_potential_difference(
-            conn, state_res, state_well, 2,
-        )
-        q_total = mob[1, rc] * ρ[1, rc] * ψ₁ +
-                  mob[2, rc] * ρ[2, rc] * ψ₂
-    end
-    out[1] = q_total
-    return out
-end
+#     q_total = zero(eltype(out))
+#     if ψ₁ < 0
+#         # Injection: single-component water is injected; use liquid-phase
+#         # pressure drive and total reservoir mass mobility.
+#         q_total = ψ₁ * ρλ_t
+#     else
+#         # Production: accumulate Darcy flux from each phase independently.
+#         ψ₂ = JutulDarcy.perforation_phase_potential_difference(
+#             conn, state_res, state_well, 2,
+#         )
+#         q_total = mob[1, rc] * ρ[1, rc] * ψ₁ +
+#                   mob[2, rc] * ρ[2, rc] * ψ₂
+#     end
+#     out[1] = q_total
+#     return out
+# end
 
 # ── SurfaceWellConditions: phase densities and saturations from property evaluators ──
 #
