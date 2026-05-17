@@ -197,13 +197,13 @@ end
 # For ImmiscibleSystem apply_flow_bc! does acc[ph] += q[ph].
 # For GeothermalTwoPhaseSystem, acc has 1 row so we sum all phases.
 
-# function JutulDarcy.apply_flow_bc!(
-#         acc, q,
-#         bc, model :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
-#         state, time,
-#     )
-#     error()
-# end
+function JutulDarcy.apply_flow_bc!(
+        acc, q,
+        bc, model :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
+        state, time,
+    )
+    acc[] += sum(q)
+end
 
 # ── Multi-segment well perforation flux ───────────────────────────────────────
 #
