@@ -201,6 +201,9 @@ function benchmark_2ph_1d(;
         Temperature = T_prod,
     )
 
+    bc = flow_boundary_condition([cell_inj, cell_prod], domain, [p_inj, p_prod], [T_inj, T_prod])
+
+
     # ── Well controls ──────────────────────────────────────────────────────
     # Both ends are driven by fixed bottom-hole pressure (BHP), mimicking
     # the Dirichlet pressure / temperature boundary conditions in MRST.
@@ -218,9 +221,10 @@ function benchmark_2ph_1d(;
     ctrl_prod = ProducerControl(BottomHolePressureTarget(p_prod))
 
     forces = setup_reservoir_forces(model;
-        control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod),
+        # control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod
+        bc = bc
     )
-    # forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
+    forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
 
     # ── Timesteps ──────────────────────────────────────────────────────────
     total_time = Float64(num_years) * year
