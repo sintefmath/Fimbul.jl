@@ -30,7 +30,7 @@ obtained via Steam-Tables look-ups from `build_steam_tables_2ph`.
 
 Use `setup_reservoir_model_geothermal_2ph` to obtain a fully configured model.
 """
-struct GeothermalTwoPhaseSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.CompositionalSystem
+struct GeothermalTwoPhaseSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.AbstractCompositionalSystemLV
     phases  :: T
     rho_ref :: F
     reference_phase_index::Int
