@@ -90,53 +90,15 @@ Jutul.values_per_entity(model, ::PressureEnthalpyDependentVariable{T, N}) where 
     return result
 end
 
-
-
-
-
-## Saturations from (P, H) ────────────────────────────────────────────────────
-
-"""
-    SaturationsFromEnthalpy{T, N} <: VectorVariables
-
-Secondary variable that computes per-phase volume saturations from pressure and
-specific enthalpy via a `(P, H) → NTuple{N}` lookup table.  `N` is inferred at
-construction time by probing the table at a representative state.
-
-Used in the two-phase (liquid + vapour) enthalpy formulation to replace
-`Saturations` as a primary variable; the state is fully determined by (P, H).
-"""
-struct SaturationsFromEnthalpy{T, N} <: VectorVariables
-    tab::T
-    function SaturationsFromEnthalpy(tab)
-        N = length(tab(1e5, 500e3))
-        new{typeof(tab), N}(tab)
-    end
-end
-
-Jutul.subvariable(v::SaturationsFromEnthalpy, map) = v
-Jutul.values_per_entity(model, ::SaturationsFromEnthalpy{T, N}) where {T, N} = N
-
-@jutul_secondary function update_saturations_from_enthalpy!(S, var::SaturationsFromEnthalpy{T, N}, model, Pressure, Enthalpy, ix) where {T, N}
-    for c in ix
-        vals = var.tab(Pressure[c], Enthalpy[c])
-        for i in 1:N
-            S[i, c] = vals[i]
-        end
-    end
-    return S
-end
-
 ## Smooth per-phase 2D-table variables (OBL approach) ────────────────────────
 # All four types read from pre-built (P, H) → scalar tables, one per phase.
 # No branching on phase state → fully AD-compatible Jacobians.
-
 struct PHDependentPhaseVariableH2O{TL, TV} <: JutulDarcy.PhaseVariables
     tab_liq::TL
     tab_vap::TV
 end
 
-@jutul_secondary function update_pressure_enthalpy_dependent_phase_variable!(result, var::PHDependentPhaseVariableH2O, model, Pressure, Enthalpy, ix)
+@jutul_secondary function update_pressure_enthalpy_dependent_phase_variable_h2o!(result, var::PHDependentPhaseVariableH2O, model, Pressure, Enthalpy, ix)
     for c in ix
         p = Pressure[c]
         h = Enthalpy[c]
@@ -146,51 +108,6 @@ end
     return result
 end
 
-# """
-#     LVPhaseDensity{TL, TV} <: PhaseVariables
-
-# Per-phase mass density [kg/m³] from smooth 2D (P,H) lookup tables.
-# """
-# struct LVPhaseDensity{TL, TV} <: JutulDarcy.PhaseVariables
-#     tab_liq::TL
-#     tab_vap::TV
-# end
-
-# @jutul_secondary function update_lv_phase_density!(result, var::LVPhaseDensity, model, Pressure, Enthalpy, ix)
-#     for c in ix
-#         p = Pressure[c]
-#         h = Enthalpy[c]
-#         result[1, c] = var.tab_liq(p, h)
-#         result[2, c] = var.tab_vap(p, h)
-#     end
-#     return result
-# end
-
-# """
-#     LVPhaseViscosity{TL, TV} <: PhaseVariables
-
-# Per-phase dynamic viscosity [Pa·s] from smooth 2D (P,H) lookup tables.
-# """
-# struct LVPhaseViscosity{TL, TV} <: JutulDarcy.PhaseVariables
-#     tab_liq::TL
-#     tab_vap::TV
-# end
-
-# @jutul_secondary function update_lv_phase_viscosity!(result, var::LVPhaseViscosity, model, Pressure, Enthalpy, ix)
-#     for c in ix
-#         p = Pressure[c]
-#         h = Enthalpy[c]
-#         result[1, c] = var.tab_liq(p, h)
-#         result[2, c] = var.tab_vap(p, h)
-#     end
-#     return result
-# end
-
-"""
-    LVPhaseEnthalpy{TL, TV} <: PhaseVariables
-
-Per-phase specific enthalpy [J/kg] from smooth 2D (P,H) lookup tables.
-"""
 struct PhaseEnthalpyH2O{TL, TV} <: JutulDarcy.PhaseVariables
     tab_liq::TL
     tab_vap::TV
@@ -228,27 +145,6 @@ end
     return S
 end
 
-# """
-#     LVPhaseSaturation{TV} <: PhaseVariables
-
-# Per-phase volume saturation [-] from a smooth 2D (P,H) → S_vapor lookup table.
-# Liquid saturation is `1 - S_vapor`.
-# """
-# struct LVPhaseSaturation{TV} <: JutulDarcy.PhaseVariables
-#     tab_vap::TV
-# end
-
-# @jutul_secondary function update_lv_phase_saturation!(S, var::LVPhaseSaturation, model, Pressure, Enthalpy, ix)
-#     for c in ix
-#         p = Pressure[c]
-#         h = Enthalpy[c]
-#         S_v = var.tab_vap(p, h)
-#         S[1, c] = 1 - S_v
-#         S[2, c] = S_v
-#     end
-#     return S
-# end
-
 struct EnthalpyFromPT{T} <: ScalarVariable
     tab::T
 end
@@ -261,36 +157,3 @@ end
     end
     return H
 end
-
-
-# struct LVTotalThermalEnergy <: ScalarVariable end
-
-# @jutul_secondary function update_lv_total_thermal_energy!(E_total, var::LVTotalThermalEnergy, model,
-#     Pressure, Enthalpy, TotalMasses, Saturations, PhaseMassDensities, RockDensity, RockInternalEnergy, BulkVolume, FluidVolume, ix)
-#     U_r = RockInternalEnergy
-#     ρ_r = RockDensity
-#     M_f = TotalMasses
-#     V_f = FluidVolume
-#     V = BulkVolume
-#     h = Enthalpy
-#     ρ_f = PhaseMassDensities
-#     S = Saturations
-#     println("Updating total thermal energy for $(length(ix)) cells...")
-#     for i in ix
-#         ρ_fm = ρ_f[1, i]*S[1, i] + ρ_f[2, i]*S[2, i]
-#         V_r = V[i] - V_f[i]
-#         E_r = ρ_r[i] * U_r[i] * V_r
-#         p = Pressure[i]
-#         E_f = M_f[i] * (h[i] - p/ρ_fm)
-#         E_total[i] = E_r + E_f
-#     end
-#     return E_total
-# end
-
-
-# const MSWellDomain = DiscretizedDomain{<:MultiSegmentWell}
-# const MSWellFlowModel = SimulationModel{<:MSWellDomain, <:MultiPhaseSystem}
-# @jutul_secondary function update_lv_total_thermal_energy!(E_total, te::LVTotalThermalEnergy, model::MSWellFlowModel,
-#     Pressure, Enthalpy, TotalMasses, Saturations, PhaseMassDensities, MaterialDensities, MaterialInternalEnergy, BulkVolume, FluidVolume, ix)
-#     update_lv_total_thermal_energy!(E_total, te::LVTotalThermalEnergy, nothing, Pressure, Enthalpy, TotalMasses, Saturations, PhaseMassDensities, MaterialDensities, MaterialInternalEnergy, BulkVolume, FluidVolume, ix)
-# end

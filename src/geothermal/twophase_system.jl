@@ -176,28 +176,6 @@ function JutulDarcy.degrees_of_freedom_per_entity(
     return 1
 end
 
-# ── Darcy face flux: 1-component water = sum of liquid and vapour fluxes ──────
-#
-# The generic component_mass_fluxes! (for ImmiscibleSystem) copies phase_fluxes[ph]
-# into q[ph].  For GeothermalTwoPhaseSystem we sum both phase fluxes into q[1].
-
-# @inline function component_mass_fluxes!(
-#         q, face, state,
-#         model    :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
-#         flux_type, kgrad, upw,
-#     )
-#     phase_fluxes = JutulDarcy.darcy_phase_mass_fluxes(
-#         face, state, model, flux_type, kgrad, upw,
-#     )
-#     return setindex(q, phase_fluxes[1] + phase_fluxes[2], 1)
-# end
-
-# ── Boundary-condition mass flux: sum phases into single component ────────────
-#
-# compute_bc_mass_fluxes returns a nph-length vector q (one entry per phase).
-# For ImmiscibleSystem apply_flow_bc! does acc[ph] += q[ph].
-# For GeothermalTwoPhaseSystem, acc has 1 row so we sum all phases.
-
 function JutulDarcy.apply_flow_bc!(
         acc, q,
         bc, model :: SimulationModel{<:Any, <:GeothermalTwoPhaseSystem},
