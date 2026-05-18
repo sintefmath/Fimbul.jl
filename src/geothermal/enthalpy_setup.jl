@@ -73,7 +73,7 @@ function JutulDarcy.add_thermal_to_model!(model::SimulationModel{D, S, F, C}) wh
 
     set_secondary_variables!(model,
         Temperature = TemperatureFromEnthalpy(pvt[:temperature]),
-        FluidEnthalpy = LVPhaseEnthalpy(pvt[:enthalpy_liquid_ph], pvt[:enthalpy_vapor_ph]),
+        FluidEnthalpy = PhaseEnthalpyH2O(pvt[:enthalpy_liquid_ph], pvt[:enthalpy_vapor_ph]),
         FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
     )
     set_primary_variables!(model, Enthalpy = Enthalpy())

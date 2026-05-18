@@ -80,10 +80,11 @@ end
 function Jutul.select_secondary_variables!(S, system::GeothermalTwoPhaseSystem, model)
     JutulDarcy.select_default_darcy_secondary_variables!(S, model.domain, system, model.formulation)
     set_secondary_variables!(model,
-        PhaseViscosities = LVPhaseViscosity(system.pvt_tables[:viscosity_liquid_ph], system.pvt_tables[:viscosity_vapor_ph]),
-        PhaseMassDensities = LVPhaseDensity(system.pvt_tables[:density_liquid_ph], system.pvt_tables[:density_vapor_ph]),
-        FluidEnthalpy = LVPhaseEnthalpy(system.pvt_tables[:enthalpy_liquid_ph], system.pvt_tables[:enthalpy_vapor_ph]),
-        Saturations = LVPhaseSaturation(system.pvt_tables[:saturation_vapor_ph]),
+        PhaseViscosities = PHDependentPhaseVariableH2O(system.pvt_tables[:viscosity_liquid_ph], system.pvt_tables[:viscosity_vapor_ph]),
+        PhaseMassDensities = PHDependentPhaseVariableH2O(system.pvt_tables[:density_liquid_ph], system.pvt_tables[:density_vapor_ph]),
+        FluidEnthalpy = PHDependentPhaseVariableH2O(system.pvt_tables[:enthalpy_liquid_ph], system.pvt_tables[:enthalpy_vapor_ph]),
+        Saturations = SaturationH2O(system.pvt_tables[:saturation_vapor_ph]),
+        # Saturations = SaturationH2O(),
         Enthalpy = EnthalpyFromPT(system.pvt_tables[:enthalpy]),
     )
 end
