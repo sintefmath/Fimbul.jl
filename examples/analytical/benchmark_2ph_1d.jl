@@ -3,11 +3,11 @@ using NetworkLayout, LayeredLayouts, GraphMakie
 # using HYPRE
 
 ##
-tabs = Fimbul.build_steam_tables_2ph(n_pressure = 200, n_enthalpy = 200)
+tabs = Fimbul.build_steam_tables_2ph(n_pressure = 100, n_enthalpy = 100)
 
 ## Case a, no gravity (default)
 n_step = 999
-cases = [:c]
+cases = [:a, :b, :c, :d, :e]
 results = Dict{Tuple{Symbol, Bool}, Any}()
 for c in cases
     for gravity in (false, true)
@@ -24,9 +24,9 @@ for c in cases
             gravity = gravity)
         sim, cfg = setup_reservoir_simulator(case;
             # tol_mb = 1e-4,
-            tol_cnv=1e-4,
-            tol_mb=1e-8,
-            info_level = 0,
+            tol_cnv=1e-3,
+            tol_mb=1e-7,
+            info_level = 2,
             max_timestep = maximum(case.dt),
             # max_nonlinear_iterations = 1000,
         );
@@ -57,7 +57,7 @@ function plot_case!(fig, row, c, out, gravity)
     props = [:Enthalpy, :Pressure, :Temperature, :Saturations, :PhaseMassDensities,
         :PhaseViscosities, :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions]
 
-    props = [:Enthalpy, :Pressure, :Temperature, :Saturations]
+    props = [:Enthalpy, :Pressure, :Temperature, :Saturations, :PhaseMassDensities]
     for (k, prop) in enumerate(props)
         ax = Axis(fig[row, k], title = string(prop))
         y = res.states[timestep][prop]
