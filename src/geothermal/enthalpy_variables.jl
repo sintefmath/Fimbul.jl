@@ -25,7 +25,6 @@ function JutulDarcy.model_is_thermal(model::SimulationModel)
     return haskey(pvars, :Temperature) || haskey(pvars, :Enthalpy)
 end
 
-
 ## Temperature from (P, H) ─────────────────────────────────────────────────────
 
 """

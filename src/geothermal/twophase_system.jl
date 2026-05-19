@@ -84,7 +84,6 @@ function Jutul.select_secondary_variables!(S, system::GeothermalTwoPhaseSystem, 
         PhaseMassDensities = PHDependentPhaseVariableH2O(system.pvt_tables[:density_liquid_ph], system.pvt_tables[:density_vapor_ph]),
         FluidEnthalpy = PHDependentPhaseVariableH2O(system.pvt_tables[:enthalpy_liquid_ph], system.pvt_tables[:enthalpy_vapor_ph]),
         Saturations = SaturationH2O(system.pvt_tables[:saturation_vapor_ph]),
-        # Saturations = SaturationH2O(),
         Enthalpy = EnthalpyFromPT(system.pvt_tables[:enthalpy]),
     )
 end
@@ -183,6 +182,75 @@ function JutulDarcy.apply_flow_bc!(
     )
     acc[] += sum(q)
 end
+
+# @jutul_secondary function update_total_thermal_energy!(
+#         E_total, te::TotalThermalEnergyH2O,
+#         model::SimulationModel{<: Any, <: GeothermalTwoPhaseSystem, <: Any, <: Any},
+#         Pressure, Enthalpy, Saturations, PhaseMassDensities, TotalMasses,
+#         RockDensity, RockInternalEnergy, BulkVolume, FluidVolume, ix
+#     )
+#     # U_f = FluidInternalEnergy
+#     # U_r = RockInternalEnergy
+#     # ρ_f = PhaseMassDensities
+#     # S = Saturations
+#     # V = BulkVolume
+#     println("update_total_thermal_energy! with ix = $ix")
+#     for i in ix
+#         E_i = compute_total_thermal_energy(
+#             RockInternalEnergy[i], RockDensity[i], Saturations[:, i], BulkVolume[i], FluidVolume[i],
+#             TotalMasses[1, i], Pressure[i], Enthalpy[i], PhaseMassDensities[:, i]
+#         )
+#         # V_f = FluidVolume[i]
+#         # E_i = RockDensity[i]*U_r[i]*(V[i] - V_f)
+#         # M = TotalMasses[1, i]
+#         # p = Pressure[i]
+#         # h = Enthalpy[i]
+#         # ρ_l = ρ_f[1, i]
+#         # ρ_v = ρ_f[2, i]
+#         # ρ_mix = ρ_l*S[1, i] + ρ_v*S[2, i]
+#         # E_i += M * (h - p/ρ_mix)
+#         # # for ph in axes(U_f, 1)
+#         # #     E_i += ρ_f[ph, i]*S[ph, i]*U_f[ph, i]*V_f
+#         # # end
+#         E_total[i] = E_i
+#     end
+# end
+
+# const MSWellFlowModelGeothermal = SimulationModel{<:JutulDarcy.MSWellDomain, <:GeothermalTwoPhaseSystem}
+# @jutul_secondary function update_total_thermal_energy!(E_total, te::TotalThermalEnergyH2O, model::MSWellFlowModelGeothermal,
+#     Pressure, Enthalpy, Saturations, PhaseMassDensities, TotalMasses,
+#     MaterialDensities, MaterialInternalEnergy, BulkVolume, FluidVolume, ix)
+
+#     for i in ix
+#         E_i = compute_total_thermal_energy(
+#             MaterialInternalEnergy[i], MaterialDensities[i], Saturations[:, i], BulkVolume[i], FluidVolume[i],
+#             TotalMasses[1, i], Pressure[i], Enthalpy[i], PhaseMassDensities[:, i]
+#         )
+#         # V_f = FluidVolume[i]
+#         # E_i = RockDensity[i]*U_r[i]*(V[i] - V_f)
+#         # M = TotalMasses[1, i]
+#         # p = Pressure[i]
+#         # h = Enthalpy[i]
+#         # ρ_l = ρ_f[1, i]
+#         # ρ_v = ρ_f[2, i]
+#         # ρ_mix = ρ_l*S[1, i] + ρ_v*S[2, i]
+#         # E_i += M * (h - p/ρ_mix)
+#         # # for ph in axes(U_f, 1)
+#         # #     E_i += ρ_f[ph, i]*S[ph, i]*U_f[ph, i]*V_f
+#         # # end
+#         E_total[i] = E_i
+#     end
+#     # update_total_thermal_energy!(E_total, te::TotalThermalEnergyH2O, nothing,
+#     # Pressure, Enthalpy, Saturations, PhaseMassDensities, TotalMasses,
+#     # MaterialDensities, MaterialInternalEnergy, BulkVolume, FluidVolume, ix)
+# end
+
+# function compute_total_thermal_energy(U_r, ρ_r, S, V, V_f, M_f, p, h, ρ_f)
+
+#     ρ_mix = ρ_f[1]*S[1] + ρ_f[2]*S[2]
+#     return ρ_r*U_r*(V - V_f) + M_f * (h - p/ρ_mix)
+
+# end
 
 # ── Multi-segment well perforation flux ───────────────────────────────────────
 #
@@ -328,4 +396,16 @@ function JutulDarcy.convergence_criterion(
         increment_dp_abs = (errors = (dp_abs/1e6,), names = (raw"Δp (abs, MPa)",)),
         increment_dp_rel = (errors = (dp_rel,),     names = (raw"Δp (rel)",)),
     )
+end
+
+function JutulDarcy.temperature_increment(model::SimulationModel{D, <:GeothermalTwoPhaseSystem}, state, update_report) where D
+    return 0.0
+end
+
+# function JutulDarcy.temperature_increment(model::SimulationModel{D, <:GeothermalTwoPhaseSystem}, state, update_report) where D
+#     return 0.0
+# end
+
+function JutulDarcy.temperature_increment(model::SimulationModel{D, <:GeothermalTwoPhaseSystem}, state, update_report::Missing) where D
+    return 1.0
 end
