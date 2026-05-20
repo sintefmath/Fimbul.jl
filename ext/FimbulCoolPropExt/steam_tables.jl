@@ -140,6 +140,8 @@ function Fimbul.build_steam_tables_2ph(;
         :enthalpy_vapor      => make_table_1d(h_v),
         :temperature         => make_table_2d(T),
         :enthalpy            => Jutul.get_2d_interpolator(p, T_range, H),
+        :enthalpy_liquid_sat => make_table_1d(h_l),
+        :enthalpy_vapor_sat  => make_table_1d(h_v),
         # Per-phase 2D tables (OBL)
         :density_liquid_ph   => make_table_2d(ρ_liq_ph),
         :density_vapor_ph    => make_table_2d(ρ_vap_ph),
