@@ -171,7 +171,6 @@ function JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
     invoke(JutulDarcy.set_default_cnv_mb_inner!, Tuple{Dict, SimulationModel}, tol, model; kwargs...)
     if haskey(model.equations, :energy_conservation)
         etol = tol[:energy_conservation]
-        println(typeof(etol))
         tol[:energy_conservation] = merge(etol, (
             increment_dh_abs = inc_tol_dh_abs,
             increment_dh_rel = inc_tol_dh_rel,

@@ -26,7 +26,7 @@ end
     TemperatureFromEnthalpy{T} <: ScalarVariable
 
 Secondary variable that computes temperature [K] from pressure and specific
-enthalpy via a `(P, H).
+enthalpy via a `(P, H)` lookup table.
 """
 struct TemperatureFromEnthalpy{T} <: ScalarVariable
     tab::T
