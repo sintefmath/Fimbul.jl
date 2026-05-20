@@ -158,6 +158,13 @@ function JutulDarcy.flash_wellstream_at_surface(
 end
 
 # Set enthalpy increment tolerances for energy conservation convergence criterion
+"""
+    JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
+        inc_tol_dh_rel = Inf, inc_tol_dh_abs = Inf, kwargs...)
+
+Extend the default convergence-tolerance dictionary for an `H2OSystem` model
+with enthalpy-increment tolerances for the thermal energy equation.
+"""
 function JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
     inc_tol_dh_rel = Inf, inc_tol_dh_abs = Inf, kwargs...
     )
@@ -173,6 +180,15 @@ function JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
 end
 
 # Mass balance convergence criterion
+"""
+    JutulDarcy.convergence_criterion(model::GeothermalModel, storage,
+        eq::ConservationLaw{:TotalMasses}, eq_s, r; dt = 1.0,
+        update_report = missing)
+
+Compute mass-balance convergence metrics for an `H2OSystem` model.
+
+The residual is normalized using the mixture density `ρ_l S_l + ρ_v S_v`
+"""
 function JutulDarcy.convergence_criterion(
     model::GeothermalModel, storage,
     eq::ConservationLaw{:TotalMasses}, eq_s, r;
@@ -197,6 +213,14 @@ function JutulDarcy.convergence_criterion(
 end
 
 # Thermal energy balance convergence criterion
+"""
+    Jutul.convergence_criterion(model::GeothermalModel, storage,
+        eq::ConservationLaw{:TotalThermalEnergy}, eq_s, r; dt = 1.0,
+        update_report = missing)
+
+Compute convergence metrics for the thermal energy equation in an `H2OSystem`
+model, including absolute and relative enthalpy increments.
+"""
 function Jutul.convergence_criterion(
     model::GeothermalModel, storage,
     eq::ConservationLaw{:TotalThermalEnergy}, eq_s, r;
