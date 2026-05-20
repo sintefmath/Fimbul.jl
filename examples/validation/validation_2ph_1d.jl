@@ -244,14 +244,24 @@ fig_properties
 # along the 1D column both with and without gravity.
 
 # ### Case a
+# Case `:a` spans 50 to 25 MPa and 350 to 150 °C. The pressure stays high
+# enough that the fluid remains in the compressed-liquid region throughout the
+# column, so the solution is single-phase liquid with smooth pressure and
+# temperature variations.
 fig_case_a = plot_case_profiles(:a, all_results)
 fig_case_a
 
 # ### Case b
+# Case `:b` spans 40 to 20 MPa and 450 to 300 °C. These conditions are hotter
+# than case `:a`, but the pressure is still high enough to avoid flashing, so
+# the response remains single-phase while showing stronger thermal contrasts.
 fig_case_b = plot_case_profiles(:b, all_results)
 fig_case_b
 
 # ### Case c
+# Case `:c` spans 15 to 1 MPa and 500 to 350 °C. Here the fluid is much hotter
+# and less compressed, placing it in the vapor-dominated single-phase region,
+# so the profiles represent hot steam rather than liquid water.
 fig_case_c = plot_case_profiles(:c, all_results)
 fig_case_c
 
@@ -273,10 +283,17 @@ fig_single_phase_diagram
 # no-gravity paths in pressure-enthalpy space.
 
 # ### Case d
+# Case `:d` spans 20 to 1 MPa and 400 to 150 °C. The inlet starts as hot,
+# pressurized water, but the strong pressure and temperature drop drives the
+# state path across the saturation envelope, producing a genuine two-phase
+# liquid-vapor transition along the column.
 fig_case_d = plot_case_profiles(:d, all_results)
 fig_case_d
 
 # ### Case e
+# Case `:e` spans 4 to 1 MPa and 300 to 150 °C. Because the pressures are low,
+# boiling is easier to trigger than in case `:d`, so the system develops a broad
+# two-phase region with more pronounced vapor formation.
 fig_case_e = plot_case_profiles(:e, all_results)
 fig_case_e
 
