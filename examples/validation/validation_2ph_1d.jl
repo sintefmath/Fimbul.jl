@@ -1,6 +1,7 @@
 # # 1D two-phase geothermal benchmark
-# This example reproduces the 1D geothermal benchmark cases from Weis et al.
-# (2014) using the pressure-enthalpy formulation in Fimbul.
+# This example reproduces the 1D geothermal benchmark cases from
+# [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation in
+# Fimbul.
 
 using Jutul, JutulDarcy, Fimbul, CoolProp, GLMakie
 
