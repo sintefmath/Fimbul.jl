@@ -29,7 +29,6 @@ module Fimbul
     export thermal_radius_aquifer
     # Two-phase geothermal
     export H2OSystem
-    export setup_reservoir_model_geothermal_2ph
     export build_steam_tables_2ph
 
     # Load dependencies into namespace
