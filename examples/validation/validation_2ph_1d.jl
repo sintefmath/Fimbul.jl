@@ -4,8 +4,8 @@
 
 using Jutul, JutulDarcy, Fimbul, CoolProp, GLMakie
 
-to_celsius(T) = convert_from_si(T, :Celsius)
-to_megapascal(p) = convert_from_si(p, "megapascal")
+to_celsius(T) = convert_from_si.(T, :Celsius)
+to_megapascal(p) = convert_from_si.(p, "megapascal")
 to_kj_per_kg(h) = h ./ 1e3
 
 const TABLE_PRESSURE_LIMITS = (1e5, 50e6)
@@ -23,6 +23,7 @@ const PROFILE_SPECS = (
     (name = :Pressure, label = "Pressure [MPa]", transform = to_megapascal),
     (name = :Enthalpy, label = "Enthalpy [kJ/kg]", transform = to_kj_per_kg),
     (name = :Temperature, label = "Temperature [C]", transform = to_celsius),
+    (name = :Saturation, label = "Liquid saturation [-]", transform = x -> vec(x[1,:])),
 )
 
 # ## Governing equations for two-phase flow
@@ -174,16 +175,18 @@ function plot_case_profiles(case_symbol, results)
         x_label = gravity ? "Depth [m]" : "Distance [m]"
         gravity_label = gravity ? "with gravity" : "without gravity"
 
-        Label(fig[row, 0], gravity_label, rotation = π/2)
-
         for (col, spec) in enumerate(PROFILE_SPECS)
+            println(spec.name)
+            if spec.name == :Saturation && case_symbol ∉ TWO_PHASE_CASES
+                continue
+            end
             ax = Axis(
                 fig[row, col];
-                title = String(spec.name),
+                title = "$(spec.title) ($(gravity_label))",
                 xlabel = x_label,
                 ylabel = spec.label,
             )
-            y = ordered_values(spec.transform.(state[spec.name]), gravity)
+            y = ordered_values(spec.transform(state[spec.name]), gravity)
             lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3)
         end
     end
