@@ -11,12 +11,9 @@ temperature in K, density in kg/m^3, and viscosity in Pa*s.
 Returned keys:
 - `:temperature`: `(P, H) -> T`
 - `:enthalpy`: `(P, T) -> H`
-- `:density_mix`, `:viscosity_mix`: `(P, H) -> value`
-- `:density_liquid`, `:density_vapor`: `P -> value` saturation-line tables
-- `:viscosity_liquid`, `:viscosity_vapor`: `P -> value` saturation-line tables
-- `:enthalpy_liquid`, `:enthalpy_vapor`: `P -> value` saturation-line tables
-- `:enthalpy_liquid_sat`, `:enthalpy_vapor_sat`: aliases for the saturation
-  enthalpy tables above
+- `:density_mix`: `(P, H) -> value`
+- `:enthalpy_liquid_sat`, `:enthalpy_vapor_sat`: `P -> value` saturation-line
+    enthalpy tables
 - `:density_liquid_ph`, `:density_vapor_ph`: `(P, H) -> value` per-phase tables
 - `:viscosity_liquid_ph`, `:viscosity_vapor_ph`: `(P, H) -> value` per-phase tables
 - `:enthalpy_liquid_ph`, `:enthalpy_vapor_ph`: `(P, H) -> value` per-phase tables
@@ -150,30 +147,16 @@ function Fimbul.build_steam_tables_2ph(;
         end
     end
 
-    density_liquid = make_table_1d(ρ_l)
-    density_vapor = make_table_1d(ρ_v)
     density_mix = make_table_2d(ρ)
-    viscosity_liquid = make_table_1d(μ_l)
-    viscosity_vapor = make_table_1d(μ_v)
-    viscosity_mix = make_table_2d(μ)
-    enthalpy_liquid = h_l_itp
-    enthalpy_vapor = h_v_itp
     temperature = make_table_2d(T)
     enthalpy = Jutul.get_2d_interpolator(p, T_range, H)
 
     return Dict{Symbol, Any}(
-        :density_liquid      => density_liquid,
-        :density_vapor       => density_vapor,
         :density_mix         => density_mix,
-        :viscosity_liquid    => viscosity_liquid,
-        :viscosity_vapor     => viscosity_vapor,
-        :viscosity_mix       => viscosity_mix,
-        :enthalpy_liquid     => enthalpy_liquid,
-        :enthalpy_vapor      => enthalpy_vapor,
         :temperature         => temperature,
         :enthalpy            => enthalpy,
-        :enthalpy_liquid_sat => enthalpy_liquid,
-        :enthalpy_vapor_sat  => enthalpy_vapor,
+        :enthalpy_liquid_sat => h_l_itp,
+        :enthalpy_vapor_sat  => h_v_itp,
         :density_liquid_ph   => make_table_2d(ρ_liq_ph),
         :density_vapor_ph    => make_table_2d(ρ_vap_ph),
         :viscosity_liquid_ph => make_table_2d(μ_liq_ph),
