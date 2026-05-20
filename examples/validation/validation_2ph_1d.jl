@@ -3,7 +3,7 @@ using NetworkLayout, LayeredLayouts, GraphMakie
 # using HYPRE
 
 ##
-n = 500
+n = 100
 tabs = Fimbul.build_steam_tables_2ph(n_pressure = n, n_enthalpy = n)
 
 ## Case a, no gravity (default)
@@ -45,66 +45,6 @@ function plotting_timestep(case, res)
     return isnothing(timestep) ? length(res.states) : timestep
 end
 
-function temperature_lookup_table(tabs)
-    if haskey(tabs, :temperature)
-        return tabs[:temperature]
-    elseif haskey(tabs, :T)
-        return tabs[:T]
-    else
-        error("Steam tables do not provide a temperature lookup table.")
-    end
-end
-
-function plot_reservoir_state_phase_diagram!(ax, out, tabs;
-    n_pressure = 150, n_enthalpy = 150, p_min = 1e5, p_max = 50e6, h_min = 500e3, h_max = 3500e3)
-    case, res = out[:case], out[:results]
-    timestep = plotting_timestep(case, res)
-    state = res.states[timestep]
-
-    pressure = vec(state[:Pressure])
-    enthalpy = vec(state[:Enthalpy])
-    temperature = temperature_lookup_table(tabs)
-
-    p_min, p_max = extrema(pressure)
-    h_min, h_max = extrema(enthalpy)
-    # p_max = ifelse(ismissing(p_max), p_max_data, p_max)
-    # h_max = ifelse(ismissing(h_max), h_max_data, h_max)
-    p_pad = max(0.05 * (p_max - p_min), 1e5)
-    h_pad = max(0.05 * (h_max - h_min), 1e5)
-
-    p_grid = range(max(p_min - p_pad, 0.0), p_max + p_pad; length = n_pressure)
-    h_grid = range(max(h_min - h_pad, 0.0), h_max + h_pad; length = n_enthalpy)
-    T_grid = [temperature(p, h) - 273.15 for h in h_grid, p in p_grid]
-
-    p_sat = collect(range(max(p_min - p_pad, 0.0), min(p_max + p_pad, 22.064e6); length = n_pressure))
-    p_crit = 22.064e6
-    h_crit = 2085e3
-    h_l_sat = tabs[:enthalpy_liquid_sat].(p_sat)
-    push!(h_l_sat, h_crit)
-    h_v_sat = tabs[:enthalpy_vapor_sat].(p_sat)
-    push!(h_v_sat, h_crit)
-    push!(p_sat, p_crit)
-
-    # ax = Axis(fig[pos],
-    #     title = "Reservoir state in P-H space",
-    #     xlabel = "Enthalpy [kJ/kg]",
-    #     ylabel = "Pressure [MPa]")
-
-    levels = 20
-    cmap = cgrad(:seaborn_icefire_gradient, levels, categorical = true, alpha=1.0)
-    # α = 0.8
-    # cmap = [c*α + 1.0*(1-α) for c in cmap]
-    # cmap = [c.*0.1 + ]
-    contourf!(ax, h_grid ./ 1e3, p_grid ./ 1e6, T_grid; levels = levels, colormap = cmap)
-    # contour!(ax, h_grid ./ 1e3, p_grid ./ 1e6, T_grid; levels = levels-1, color = (:white, 0.6), linewidth = 0.75)
-    lines!(ax, h_l_sat ./ 1e3, p_sat ./ 1e6, color = :white, linewidth = 1, linestyle = :solid)
-    lines!(ax, h_v_sat ./ 1e3, p_sat ./ 1e6, color = :white, linewidth = 1, linestyle = :solid)
-    lines!(ax, enthalpy ./ 1e3, pressure ./ 1e6, color = :black, linewidth = 2)
-    # scatter!(ax, enthalpy ./ 1e3, pressure ./ 1e6, color = :black)
-    # Colorbar(fig[pos[1], pos[2] + 1], ax.plots[1], label = "Temperature [C]")
-    return ax
-end
-
 timestep = plotting_timestep(results[(:d, false)][:case], results[(:d, false)][:results])
 state = results[(:d, false)][:results].states[timestep]
 pressure = vec(state[:Pressure])
@@ -121,10 +61,10 @@ p_max = 50e6
 h_min = 500e3
 h_max = 3000e3
 
-ax = Axis(fig[1, 1],
-# limits = ((h_min, h_max)./1e3, (p_min, p_max)./1e6)
+(fig, ax) = plot_reservoir_state_phase_diagram(results[(:d, false)], tabs;
+    pressure_limits = (p_min, p_max),
+    enthalpy_limits = (h_min, h_max),
 )
-plot_reservoir_state_phase_diagram!(ax, results[(:d, false)], tabs)#; p_min=p_min, p_max=p_max, h_min=h_min, h_max=h_max)
 # T_grid = [temperature(p, h) - 273.15 for h in h_grid, p in p_grid]
 fig
 
