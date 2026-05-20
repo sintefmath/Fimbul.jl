@@ -15,7 +15,7 @@ const TWO_PHASE_CASES = (:d, :e)
 const CASE_COLORS = Dict(
     :a => :blue,
     :b => :red,
-    :c => :green,
+    :c => :lightgreen,
     :d => :cyan,
     :e => :magenta,
 )
@@ -45,7 +45,7 @@ const PROFILE_SPECS = (
 # saturation.
 
 # Shared setup used throughout the example.
-table_resolution = 500
+table_resolution = 100
 nx = 100
 cell_size = 10.0
 
@@ -123,28 +123,25 @@ function plot_property_maps(tables)
             title = "Temperature",
             label = "Temperature [°C]",
             transform = nothing,
-            colormap = :seaborn_icefire_gradient,
         ),
         (
             variable = :density_mix,
             title = "Density",
             label = "Density [kg/m³]",
             transform = nothing,
-            colormap = :haline,
         ),
         (
             variable = :saturation_vapor_ph,
             title = "Vapor saturation",
             label = "Vapor saturation [-]",
             transform = nothing,
-            colormap = :viridis,
         ),
     )
 
     fig = Figure(size = (1200, 500))
     for (i, spec) in enumerate(specs)
         ax = Axis(fig[2, i])
-        _, hcf, hcl = Fimbul.plot_phase_diagram_contours!(
+        handles = Fimbul.plot_phase_diagram_contours!(
             ax,
             tables;
             variable = spec.variable,
@@ -155,7 +152,7 @@ function plot_property_maps(tables)
             value_transform = spec.transform,
             contourf_kwargs = (; colormap = :seaborn_icefire_gradient),
         )
-        Colorbar(fig[1, i], hcf, vertical = false, flipaxis = true, label = spec.label, labelsize = 20)
+        Colorbar(fig[1, i], handles.filled, vertical = false, flipaxis = true, label = spec.label, labelsize = 20)
         if i > 1
             hideydecorations!(ax, ticks = false)
         end
@@ -171,7 +168,6 @@ function plot_case_profiles(case_symbol, results)
         out = results[(case_symbol, vertical)]
         x = reservoir_coordinate(out)
         state = out.results.states[plotting_timestep(out)]
-        x_label = vertical ? "Depth [m]" : "Distance [m]"
 
         row = 2*(k-1)
         vertical_label = vertical ? "vertical" : "horizontal"
@@ -180,7 +176,6 @@ function plot_case_profiles(case_symbol, results)
                 continue
             end
             values = spec.transform(state[spec.name])
-            title = "$(x_label) ($(vertical_label))"
             if vertical
                 ax = Axis(
                     fig[row+1, col];
@@ -205,9 +200,10 @@ function plot_case_profiles(case_symbol, results)
 end
 
 function plot_case_family_diagram(case_symbols, results, tables; title)
-    fig = Figure(size = (700, 600))
+    fig = Figure(size = (700, 640))
+    Label(fig[0, 1:2], title; fontsize = 22)
     ax = Axis(fig[1, 1])
-    _, hcf, hcl = Fimbul.plot_phase_diagram_contours!(
+    handles = Fimbul.plot_phase_diagram_contours!(
         ax,
         tables;
         variable = :temperature,
@@ -229,17 +225,16 @@ function plot_case_family_diagram(case_symbols, results, tables; title)
 
     # Legend(fig[1, 2], framevisible = false)
     axislegend(ax; position = :rt)
-    Colorbar(fig[1, 2], hcf, label = "Temperature [°C]")
+    Colorbar(fig[1, 2], handles.filled, label = "Temperature [°C]")
     return fig
 end
 ##
 all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
 
 # ## H2O properties in pressure-enthalpy space
-# We first inspect the steam tables directly. The figure below shows four key
-# properties in $(p, h)$-space: temperature, density, a saturation-weighted
-# effective viscosity, and vapor saturation. The two-phase envelope is drawn on
-# each subplot.
+# We first inspect the steam tables directly. The figure below shows three key
+# properties in $(p, h)$-space: temperature, density, and vapor saturation. The
+# two-phase envelope is drawn on each subplot.
 fig_properties = plot_property_maps(tables)
 fig_properties
 
@@ -285,9 +280,9 @@ fig_case_d
 fig_case_e = plot_case_profiles(:e, all_results)
 fig_case_e
 
-# ### Solution paths in pressure-enthalpy space
+# ### Visualize all solution paths in pressure-enthalpy space
 fig_two_phase_diagram = plot_case_family_diagram(
-    TWO_PHASE_CASES,
+    vcat(SINGLE_PHASE_CASES..., TWO_PHASE_CASES...),
     all_results,
     tables;
     title = "Two-phase cases without gravity",
