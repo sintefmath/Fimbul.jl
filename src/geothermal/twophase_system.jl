@@ -11,6 +11,9 @@
 ## viscosities and enthalpies are derived from (P, H) look-up tables supplied
 ## by `build_steam_tables_2ph`.
 
+const WATER_CRITICAL_PRESSURE = 22.064e6
+const WATER_CRITICAL_ENTHALPY = 2085e3
+
 # ── Struct ────────────────────────────────────────────────────────────────────
 
 """
