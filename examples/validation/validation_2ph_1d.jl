@@ -266,18 +266,6 @@ fig_case_b
 fig_case_c = plot_case_profiles(:c, all_results)
 fig_case_c
 
-# ###
-# The three single-phase cases without gravity can also be compared directly in
-# pressure-enthalpy space. Here their state paths are overlaid on temperature
-# contours.
-fig_single_phase_diagram = plot_case_family_diagram(
-    SINGLE_PHASE_CASES,
-    all_results,
-    tables;
-    title = "Single-phase cases without gravity",
-)
-fig_single_phase_diagram
-
 # ## Two-phase benchmark cases
 # Cases `:d` and `:e` traverse the two-phase region. As above, we first inspect
 # the 1D pressure, enthalpy, and temperature profiles, and then compare the
@@ -298,7 +286,9 @@ fig_case_d
 fig_case_e = plot_case_profiles(:e, all_results)
 fig_case_e
 
-# ### Visualize all solution paths in pressure-enthalpy space
+# ## Phase diagram comparison
+# We compare the cases directly in pressure-enthalpy space, overlaying the state
+# paths on temperature contours.
 fig_two_phase_diagram = plot_case_family_diagram(
     vcat(SINGLE_PHASE_CASES..., TWO_PHASE_CASES...),
     all_results,
