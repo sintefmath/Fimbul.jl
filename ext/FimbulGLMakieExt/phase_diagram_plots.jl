@@ -151,12 +151,12 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
 
     if filled
         contourf_defaults = (; levels = levels, colormap = cgrad(:seaborn_icefire_gradient, levels, categorical = true, alpha = 1.0))
-        contourf!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contourf_defaults..., contourf_kwargs...)
+        hcf = contourf!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contourf_defaults..., contourf_kwargs...)
     end
 
     if lines
         contour_defaults = (; levels = max(levels - 1, 1), color = (:white, 0.6), linewidth = 0.75)
-        contour!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contour_defaults..., contour_kwargs...)
+        hcl = contour!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contour_defaults..., contour_kwargs...)
     end
 
     if include_envelope
@@ -174,7 +174,7 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
     end
 
     phase_diagram_axis!(ax)
-    return ax
+    return ax, hcf, hcl
 end
 
 function Fimbul.plot_phase_diagram_contours(tables;
