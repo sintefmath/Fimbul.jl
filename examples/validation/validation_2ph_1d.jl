@@ -57,13 +57,6 @@ tables = Fimbul.build_steam_tables_2ph(
 ##
 available_gravity_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
 
-function trim_case_to_plot_time(case)
-    plot_time = get(case.input_data, :plot_time, sum(case.dt))
-    cumulative_time = cumsum(case.dt)
-    nstep = something(findfirst(t -> t >= plot_time, cumulative_time), length(case.dt))
-    return case[1:nstep]
-end
-
 function simulate_benchmark_case(case_symbol, tables; gravity = false, nx = 100, cell_size = 10.0)
     case = benchmark_2ph_1d(
         benchmark_case = case_symbol,
@@ -72,7 +65,6 @@ function simulate_benchmark_case(case_symbol, tables; gravity = false, nx = 100,
         enthalpy_tables = tables,
         gravity = gravity,
     )
-    case = trim_case_to_plot_time(case)
     simulator, config = setup_reservoir_simulator(
         case;
         tol_cnv = 1e-3,
@@ -136,7 +128,7 @@ function plot_property_maps(tables)
         (
             variable = :density_mix,
             title = "Density",
-            label = "Density [kg/m^3]",
+            label = "Density [kg/m³]",
             transform = nothing,
             colormap = :haline,
         ),
@@ -149,9 +141,9 @@ function plot_property_maps(tables)
         ),
     )
 
-    fig = Figure(size = (1800, 700), fontsize = 18)
+    fig = Figure(size = (1200, 500))
     for (i, spec) in enumerate(specs)
-        ax = Axis(fig[1, i]; title = spec.title)
+        ax = Axis(fig[2, i])
         _, hcf, hcl = Fimbul.plot_phase_diagram_contours!(
             ax,
             tables;
@@ -163,7 +155,7 @@ function plot_property_maps(tables)
             value_transform = spec.transform,
             contourf_kwargs = (; colormap = :seaborn_icefire_gradient),
         )
-        Colorbar(fig[2, i], hcf, vertical = false, flipaxis = false, label = spec.label)
+        Colorbar(fig[1, i], hcf, vertical = false, flipaxis = true, label = spec.label, labelsize = 20)
         if i > 1
             hideydecorations!(ax, ticks = false)
         end
@@ -173,7 +165,7 @@ end
 
 function plot_case_profiles(case_symbol, results)
     gravity_modes = available_gravity_modes(case_symbol)
-    fig = Figure(size = (1200, 350 * length(gravity_modes)), fontsize = 18)
+    fig = Figure(size = (1200, 350 * length(gravity_modes)))
 
     for (row, gravity) in enumerate(gravity_modes)
         out = results[(case_symbol, gravity)]
@@ -182,10 +174,12 @@ function plot_case_profiles(case_symbol, results)
         x_label = gravity ? "Depth [m]" : "Distance [m]"
         gravity_label = gravity ? "with gravity" : "without gravity"
 
+        Label(fig[row, 0], gravity_label, rotation = π/2)
+
         for (col, spec) in enumerate(PROFILE_SPECS)
             ax = Axis(
                 fig[row, col];
-                title = "$(String(spec.name)) ($(gravity_label))",
+                title = String(spec.name),
                 xlabel = x_label,
                 ylabel = spec.label,
             )
@@ -197,8 +191,8 @@ function plot_case_profiles(case_symbol, results)
 end
 
 function plot_case_family_diagram(case_symbols, results, tables; title)
-    fig = Figure(size = (700, 600), fontsize = 18)
-    ax = Axis(fig[1, 1]; title = title)
+    fig = Figure(size = (700, 600))
+    ax = Axis(fig[1, 1])
     _, hcf, hcl = Fimbul.plot_phase_diagram_contours!(
         ax,
         tables;
@@ -220,8 +214,8 @@ function plot_case_family_diagram(case_symbols, results, tables; title)
     end
 
     # Legend(fig[1, 2], framevisible = false)
-    axislegend(ax; position = :rt, framevisible = false)
-    Colorbar(fig[1, 2], hcf, label = "Temperature [C]")
+    axislegend(ax; position = :rt)
+    Colorbar(fig[1, 2], hcf, label = "Temperature [°C]")
     return fig
 end
 ##
@@ -277,6 +271,7 @@ fig_case_d
 fig_case_e = plot_case_profiles(:e, all_results)
 fig_case_e
 
+# ### Solution paths in pressure-enthalpy space
 fig_two_phase_diagram = plot_case_family_diagram(
     TWO_PHASE_CASES,
     all_results,
