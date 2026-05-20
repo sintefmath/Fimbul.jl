@@ -15,15 +15,14 @@ const TWO_PHASE_CASES = (:d, :e)
 const CASE_COLORS = Dict(
     :a => :blue,
     :b => :red,
-    :c => :yellow,
+    :c => :green,
     :d => :cyan,
     :e => :magenta,
 )
 const PROFILE_SPECS = (
     (name = :Pressure, label = "Pressure [MPa]", transform = to_megapascal),
-    (name = :Enthalpy, label = "Enthalpy [kJ/kg]", transform = to_kj_per_kg),
-    (name = :Temperature, label = "Temperature [C]", transform = to_celsius),
-    (name = :Saturation, label = "Liquid saturation [-]", transform = x -> vec(x[1,:])),
+    (name = :Temperature, label = "Temperature [°C]", transform = to_celsius),
+    (name = :Saturations, label = "Liquid saturation [-]", transform = x -> vec(x[1,:])),
 )
 
 # ## Governing equations for two-phase flow
@@ -56,15 +55,15 @@ tables = Fimbul.build_steam_tables_2ph(
 )
 
 ##
-available_gravity_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
+available_vertical_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
 
-function simulate_benchmark_case(case_symbol, tables; gravity = false, nx = 100, cell_size = 10.0)
+function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100, cell_size = 10.0)
     case = benchmark_2ph_1d(
         benchmark_case = case_symbol,
         nx = nx,
         cell_size = cell_size,
         enthalpy_tables = tables,
-        gravity = gravity,
+        vertical = vertical,
     )
     simulator, config = setup_reservoir_simulator(
         case;
@@ -80,12 +79,12 @@ end
 function simulate_case_family(case_symbols, tables; nx = 100, cell_size = 10.0)
     outputs = Dict{Tuple{Symbol, Bool}, Any}()
     for case_symbol in case_symbols
-        for gravity in available_gravity_modes(case_symbol)
-            @info "Simulating case $(case_symbol) with gravity = $(gravity)"
-            outputs[(case_symbol, gravity)] = simulate_benchmark_case(
+        for vertical in available_vertical_modes(case_symbol)
+            @info "Simulating case $(case_symbol) with vertical = $(vertical)"
+            outputs[(case_symbol, vertical)] = simulate_benchmark_case(
                 case_symbol,
                 tables;
-                gravity = gravity,
+                vertical = vertical,
                 nx = nx,
                 cell_size = cell_size,
             )
@@ -105,16 +104,16 @@ end
 function reservoir_coordinate(out)
     domain = out.case.model.models[:Reservoir].data_domain
     centroids = tpfv_geometry(physical_representation(domain)).cell_centroids
-    if out.case.input_data[:gravity]
+    if out.case.input_data[:vertical]
         return vec(centroids[3, :])
     else
         return vec(centroids[1, :])
     end
 end
 
-function ordered_values(values, gravity)
+function ordered_values(values, vertical)
     values = vec(values)
-    return gravity ? reverse(values) : values
+    return vertical ? reverse(values) : values
 end
 
 function plot_property_maps(tables)
@@ -122,7 +121,7 @@ function plot_property_maps(tables)
         (
             variable = :temperature,
             title = "Temperature",
-            label = "Temperature [C]",
+            label = "Temperature [°C]",
             transform = nothing,
             colormap = :seaborn_icefire_gradient,
         ),
@@ -165,30 +164,42 @@ function plot_property_maps(tables)
 end
 
 function plot_case_profiles(case_symbol, results)
-    gravity_modes = available_gravity_modes(case_symbol)
-    fig = Figure(size = (1200, 350 * length(gravity_modes)))
+    vertical_modes = available_vertical_modes(case_symbol)
+    fig = Figure(size = (800 + 400*(case_symbol ∈ TWO_PHASE_CASES), 400 * length(vertical_modes)))
 
-    for (row, gravity) in enumerate(gravity_modes)
-        out = results[(case_symbol, gravity)]
+    for (k, vertical) in enumerate(vertical_modes)
+        out = results[(case_symbol, vertical)]
         x = reservoir_coordinate(out)
         state = out.results.states[plotting_timestep(out)]
-        x_label = gravity ? "Depth [m]" : "Distance [m]"
-        gravity_label = gravity ? "with gravity" : "without gravity"
+        x_label = vertical ? "Depth [m]" : "Distance [m]"
 
+        row = 2*(k-1)
+        vertical_label = vertical ? "vertical" : "horizontal"
         for (col, spec) in enumerate(PROFILE_SPECS)
-            println(spec.name)
-            if spec.name == :Saturation && case_symbol ∉ TWO_PHASE_CASES
+            if spec.name == :Saturations && case_symbol ∉ TWO_PHASE_CASES
                 continue
             end
-            ax = Axis(
-                fig[row, col];
-                title = "$(spec.title) ($(gravity_label))",
-                xlabel = x_label,
-                ylabel = spec.label,
-            )
-            y = ordered_values(spec.transform(state[spec.name]), gravity)
-            lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3)
+            values = spec.transform(state[spec.name])
+            title = "$(x_label) ($(vertical_label))"
+            if vertical
+                ax = Axis(
+                    fig[row+1, col];
+                    xlabel = spec.label,
+                    ylabel = "Depth [m]",
+                    yreversed = true,
+                )
+                lines!(ax, values, x, color = CASE_COLORS[case_symbol], linewidth = 3)
+            else
+                ax = Axis(
+                    fig[row+1, col];
+                    xlabel = "Distance [m]",
+                    ylabel = spec.label,
+                )
+                y = ordered_values(values, vertical)
+                lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3)
+            end
         end
+        fig[row, :] = Label(fig, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
     end
     return fig
 end
