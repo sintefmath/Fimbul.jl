@@ -1,4 +1,4 @@
-function JutulDarcy.add_thermal_to_model!(model::SimulationModel{D, S, F, C}) where {D, S<:GeothermalTwoPhaseSystem, F, C}
+function JutulDarcy.add_thermal_to_model!(model::GeothermalModel)
 
     invoke(JutulDarcy.add_thermal_to_model!, Tuple{SimulationModel}, model)
     Jutul.delete_variable!(model, :Temperature)
@@ -16,4 +16,4 @@ function JutulDarcy.add_thermal_to_model!(model::SimulationModel{D, S, F, C}) wh
 
 end
 
-JutulDarcy.system_uses_cnv_mb(system::GeothermalTwoPhaseSystem) = true
+JutulDarcy.system_uses_cnv_mb(system::H2OSystem) = true

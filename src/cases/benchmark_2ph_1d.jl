@@ -3,7 +3,7 @@
 
 1D two-phase geothermal benchmark cases from Weis et al. (2014), translated
 from the MRST `benchmark_1d_geothermal` test suite and implemented using
-`GeothermalTwoPhaseSystem` with IAPWS-IF97 steam tables.
+`H2OSystem` with IAPWS-IF97 steam tables.
 
 Five cases (`:a`–`:e`) cover different initial pressure/temperature conditions
 and pressure gradients. Each case is a 1D column with Dirichlet-like
@@ -127,7 +127,7 @@ function benchmark_2ph_1d(;
     )
 
     # ── Model ─────────────────────────────────────────────────────────────
-    sys = GeothermalTwoPhaseSystem(enthalpy_tables)
+    sys = H2OSystem(enthalpy_tables)
     model, parameters = setup_reservoir_model(domain, sys; block_backend = true, extra_out = true, thermal = true)
     kr = BrooksCoreyRelativePermeabilities(sys, 1.0, [0.3, 0.0], 1.0)
     model = replace_variables!(model, RelativePermeabilities = kr)
