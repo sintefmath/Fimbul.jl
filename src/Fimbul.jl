@@ -44,9 +44,9 @@ module Fimbul
     include("meshing/fractured.jl")
     include("meshing/utils.jl")
     # H2O P-H formulation
-    include("pvt/enthalpy_variables.jl")
+    include("pvt/h2o_variables.jl")
     include("pvt/h2o_system.jl")
-    include("pvt/enthalpy_setup.jl")
+    include("pvt/h2o_setup.jl")
     # Wells
     include("wells/closed_loop.jl")
     include("wells/closed_loop_u1.jl")
