@@ -1,5 +1,5 @@
 """
-    benchmark_1d_geothermal(; <keyword arguments>)
+    benchmark_2ph_1d(; <keyword arguments>)
 
 1D two-phase geothermal benchmark cases from Weis et al. (2014), translated
 from the MRST `benchmark_1d_geothermal` test suite and implemented using
@@ -7,10 +7,10 @@ from the MRST `benchmark_1d_geothermal` test suite and implemented using
 
 Five cases (`:a`–`:e`) cover different initial pressure/temperature conditions
 and pressure gradients. Each case is a 1D column with Dirichlet-like
-pressure/enthalpy conditions at both ends, imposed via BHP-controlled simple
-injector and producer wells.
+pressure/enthalpy conditions at both ends, imposed through flow boundary
+conditions.
 
-| Case | p_inj [MPa] | p_prod [MPa] | T_inj [°C] | T_prod [°C] | gravity? |
+| Case | p_inj [MPa] | p_prod [MPa] | T_inj [°C] | T_prod [°C] | vertical? |
 |:----:|:-----------:|:------------:|:----------:|:-----------:|:--------:|
 | :a   | 50          | 25           | 350        | 150         | optional |
 | :b   | 40          | 20           | 450        | 300         | optional |
@@ -18,24 +18,25 @@ injector and producer wells.
 | :d   | 20          | 1            | 400        | 150         | optional |
 | :e   | 4           | 1            | 300        | 150         | no       |
 
+Case `:test` is also accepted as a lightweight internal sanity-check case.
+
 ## Grid orientation
 
-- `gravity = false`: flow in x, grid `(nx, 1, 1)`. Injector at cell 1 (left),
+- `vertical = false`: flow in x, grid `(nx, 1, 1)`. Injector at cell 1 (left),
   producer at cell nx (right).
-- `gravity = true`:  flow in z, grid `(1, 1, nx)`. Injector at cell nx
+- `vertical = true`:  flow in z, grid `(1, 1, nx)`. Injector at cell nx
   (bottom = deep = high pressure), producer at cell 1 (top = shallow).
 
 ## Keyword arguments
 
-- `benchmark_case = :a`: Case selector, one of `:a`, `:b`, `:c`, `:d`, `:e`.
-- `gravity = false`: Enable gravity-driven flow (not available for case `:e`).
-- `nx = 200`: Number of cells along the flow direction (default matches MRST
-  with `length = 2000 m` and `dx = 10 m`).
-- `domain_length = 2000.0*meter`: Length of the 1D domain [m].
+- `benchmark_case = :a`: Case selector. Benchmark cases are `:a`, `:b`, `:c`,
+    `:d`, `:e`; `:test` is a lightweight internal case.
+- `vertical = false`: Enable vertical flow (not available for case `:e`).
+- `nx = 201`: Number of cells along the flow direction.
+- `domain_length = 2010.0*meter`: Length of the 1D domain [m].
 - `cell_size = 10.0*meter`: Cell width in the two inactive directions [m].
 - `dt_target = 5*year`: Target timestep size [s] after ramp-up.
-- `num_years = 1500`: Total simulation duration [years] (matches MRST default;
-  the "interesting" observation times per case are a/b/d: shorter, c/e: 1500 yr).
+- `num_years = 3000`: Total simulation duration [years].
 - `enthalpy_tables = build_steam_tables_2ph()`: Pre-built (P,H) steam tables;
   pass your own to avoid rebuilding when calling the function multiple times.
 
@@ -52,7 +53,7 @@ numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 """
 function benchmark_2ph_1d(;
     benchmark_case  :: Symbol  = :a,
-    gravity         :: Bool    = false,
+    vertical        :: Bool    = false,
     nx              :: Int     = 201,
     domain_length   :: Float64 = 2010.0*meter,
     cell_size       :: Float64 = 10.0*meter,
@@ -63,8 +64,8 @@ function benchmark_2ph_1d(;
 
     benchmark_case in (:a, :b, :c, :d, :e, :test) ||
         throw(ArgumentError("benchmark_case must be one of :a, :b, :c, :d, :e"))
-    (benchmark_case == :e && gravity) &&
-        throw(ArgumentError("Case :e is only defined without gravity (gravity = false)"))
+    (benchmark_case == :e && vertical) &&
+        throw(ArgumentError("Case :e is only defined without vertical flow (vertical = false)"))
 
     # ── Case parameters ────────────────────────────────────────────────────
     K0 = 273.15  # 0 °C in Kelvin
@@ -93,19 +94,18 @@ function benchmark_2ph_1d(;
 
     H_inj  = enthalpy_tables[:enthalpy](p_inj, T_inj)
     H_prod = enthalpy_tables[:enthalpy](p_prod, T_prod)
-    # H_prod = enthalpy_tables[:H_pT](p_prod, T_prod)
 
     # ── Grid ──────────────────────────────────────────────────────────────
     #
-    # No gravity: horizontal 1D flow in x  →  (nx, 1, 1)
+    # Horizontal 1D flow in x  →  (nx, 1, 1)
     #   cell 1  = left  (inlet  / high p, high T)
     #   cell nx = right (outlet / low  p, low  T)
     #
-    # With gravity: vertical 1D flow in z  →  (1, 1, nx)
+    # Vertical 1D flow in z  →  (1, 1, nx)
     #   cell 1  = top    (shallow / low  p, low  T)  ← producer
     #   cell nx = bottom (deep    / high p, high T)  ← injector
     #
-    if gravity
+    if vertical
         g         = CartesianMesh((1, 1, nx), (cell_size, cell_size, domain_length))
         cell_inj  = nx   # bottom cell = deep = high pressure
         cell_prod = 1    # top    cell = shallow = low pressure
@@ -117,7 +117,6 @@ function benchmark_2ph_1d(;
         p0 = collect(range(p_inj, p_prod; length = nx))
     end
     h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
-    # h0 = enthalpy_tables[:enthalpy].(p0, T_prod)
 
     domain = reservoir_domain(g;
         permeability              = 1e-15,   # m²  (≈ 10 μD)
@@ -127,70 +126,24 @@ function benchmark_2ph_1d(;
         rock_thermal_conductivity = 2.0,     # W/(m·K)
     )
 
-    # ── Wells ──────────────────────────────────────────────────────────────
-    WI = 1e-8
-    WIth = 100
-    well_inj  = setup_well(domain, [cell_inj];  name = :Injector, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
-    well_prod = setup_well(domain, [cell_prod]; name = :Producer, WI = WI, WIth = WIth, simple_well = false, use_top_node = true)
-
-    # ── Model ───
+    # ── Model ─────────────────────────────────────────────────────────────
     sys = GeothermalTwoPhaseSystem(enthalpy_tables)
-    model, parameters = setup_reservoir_model(domain, sys; wells = [well_inj, well_prod], block_backend = true, extra_out=true, thermal=true)
+    model, parameters = setup_reservoir_model(domain, sys; block_backend = true, extra_out = true, thermal = true)
     kr = BrooksCoreyRelativePermeabilities(sys, 1.0, [0.3, 0.0], 1.0)
     model = replace_variables!(model, RelativePermeabilities = kr)
-    # return model
+
     for k in keys(model.models)
         nc = number_of_cells(model.models[k].data_domain)
-        # parameters[k][:Temperature] = fill(T_inj, nc)
         parameters[k][:LiquidMassFractions] = permutedims(fill(1.0, nc))
         parameters[k][:VaporMassFractions] = permutedims(fill(1.0, nc))
     end
-    if false
-    nc = number_of_cells(model.models[:Reservoir].data_domain)
-    parameters[:Reservoir][:Temperature][nc÷2:end] .= T_prod
-    end
-    # return model, parameters
-
-    # return model
 
     for m in values(model.models)
         push!(m.output_variables,
-        :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities,
-        :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions)
+            :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities,
+            :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions,
+        )
     end
-    # JutulDarcy.add_thermal_to_model!(model)
-    # push!(model.models[:Reservoir].output_variables, :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities, :FluidEnthalpy)
-
-    # return model
-
-    # model = setup_reservoir_model_geothermal_2ph(
-    #     domain;
-    #     enthalpy_tables = enthalpy_tables,
-    #     wells           = [well_inj, well_prod],
-    #     block_backend=false,
-    # )
-    # return model
-
-    # Add function handle for omputing enthalpy from (P, T)
-    # for k in keys(model.models)
-    #     model.models[k].extra[:enthalpy] = enthalpy_tables[:enthalpy]
-    #     push!(model.models[k].output_variables, :PhaseViscosities)
-    #     m = model.models[k]
-    #     if JutulDarcy.model_or_domain_is_well(m)
-    #         m.parameters[:WellIndicesThermal] = JutulDarcy.WellIndicesThermal()
-    #         set_parameters!(m,
-    #             MaterialThermalConductivities = JutulDarcy.MaterialThermalConductivities(),
-    #             MaterialHeatCapacities = JutulDarcy.MaterialHeatCapacities(),
-    #             MaterialDensities = JutulDarcy.MaterialDensities()
-    #         )
-    #         set_secondary_variables!(m,
-    #             MaterialInternalEnergy = JutulDarcy.MaterialInternalEnergy()
-    #         )
-    #     end
-    # end
-    # JutulDarcy.add_thermal_to_facility!(model.models[:Facility])
-    # H_prod = 1e6
-    # H_inj  = 2e6
 
     # ── Initial state ──────────────────────────────────────────────────────
     # Uniform initial conditions at the producer-side state (low p, low T).
@@ -201,42 +154,24 @@ function benchmark_2ph_1d(;
         Temperature = T_prod,
     )
 
-    bc = flow_boundary_condition([cell_inj, cell_prod], domain, [p_inj, p_prod], [T_inj, T_prod]; enthalpy=[H_inj, H_prod])
-
-    # ── Well controls ──────────────────────────────────────────────────────
-    # Both ends are driven by fixed bottom-hole pressure (BHP), mimicking
-    # the Dirichlet pressure / temperature boundary conditions in MRST.
-    # rhoL_ref = first(JutulDarcy.reference_densities(reservoir_model(model).system))
-    rho_inj = enthalpy_tables[:density_mix](p_inj, H_inj)
-    rate = 1si"meter^3/day"
-    ctrl_inj = InjectorControl(
-        BottomHolePressureTarget(p_inj),
-        # TotalRateTarget(rate),
-        [1.0],
-        density     = rho_inj,
-        temperature = T_inj,
-        enthalpy    = H_inj,
+    bc = flow_boundary_condition(
+        [cell_inj, cell_prod], domain, [p_inj, p_prod], [T_inj, T_prod];
+        enthalpy = [H_inj, H_prod],
     )
-    ctrl_prod = ProducerControl(BottomHolePressureTarget(p_prod))
-
-    forces = setup_reservoir_forces(model;
-        # control = Dict(:Injector => ctrl_inj, :Producer => ctrl_prod
-        bc = bc
-    )
-    # forces = with_property_evaluators(model, forces)  # add (P,H)-dependent properties
+    forces = setup_reservoir_forces(model; bc = bc)
 
     # ── Timesteps ──────────────────────────────────────────────────────────
     total_time = Float64(num_years) * year
     dt_vec     = _benchmark_rampup_timesteps(total_time, dt_target)
 
     if benchmark_case == :a
-        plot_time = ifelse(!gravity, 250.0*year, 750.0*year)
+        plot_time = ifelse(!vertical, 250.0*year, 750.0*year)
     elseif benchmark_case == :b
-        plot_time = ifelse(!gravity, 120.0*year, 350.0*year)
+        plot_time = ifelse(!vertical, 120.0*year, 350.0*year)
     elseif benchmark_case == :c
         plot_time = 1500.0*year
     elseif benchmark_case == :d
-        plot_time = ifelse(!gravity, 200.0*year, 1000.0*year)
+        plot_time = ifelse(!vertical, 200.0*year, 1000.0*year)
     else  # :e
         plot_time = 2000.0*year
     end
@@ -246,7 +181,7 @@ function benchmark_2ph_1d(;
         :description    => "1D geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
         :benchmark_case => benchmark_case,
         :plot_time      => plot_time,
-        :gravity        => gravity,
+        :vertical       => vertical,
         :p_inj          => p_inj,
         :p_prod         => p_prod,
         :T_inj          => T_inj,
