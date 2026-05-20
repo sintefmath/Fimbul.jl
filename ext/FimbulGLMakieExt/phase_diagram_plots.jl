@@ -90,18 +90,16 @@ function phase_diagram_envelope(tables, pressure_limits; n_pressure = 150)
         return nothing
     end
     p_min = max(first(pressure_limits), 0.0)
-    p_max = min(last(pressure_limits), WATER_CRITICAL_PRESSURE)
+    p_max = min(last(pressure_limits), Fimbul.WATER_CRITICAL_PRESSURE)
     p_max < p_min && return nothing
 
     p_sat = collect(range(p_min, p_max; length = n_pressure))
     h_l_sat = tables[:enthalpy_liquid_sat].(p_sat)
     h_v_sat = tables[:enthalpy_vapor_sat].(p_sat)
 
-    # if p_sat[end] < WATER_CRITICAL_PRESSURE
-    push!(p_sat, WATER_CRITICAL_PRESSURE)
-    push!(h_l_sat, WATER_CRITICAL_ENTHALPY)
-    push!(h_v_sat, WATER_CRITICAL_ENTHALPY)
-    # end
+    push!(p_sat, Fimbul.WATER_CRITICAL_PRESSURE)
+    push!(h_l_sat, Fimbul.WATER_CRITICAL_ENTHALPY)
+    push!(h_v_sat, Fimbul.WATER_CRITICAL_ENTHALPY)
 
     return h_l_sat, h_v_sat, p_sat
 end
