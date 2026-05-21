@@ -27,8 +27,9 @@ function Fimbul.build_steam_tables_2ph(;
         n_enthalpy::Int = 100,
         p_min::Float64  = 1e4,
         p_max::Float64  = 100e6,
-        h_min::Float64  = 8e4,
+        h_min::Float64  = 1e3,
         h_max::Float64  = 5e6,
+        info_level::Int = 0
     )
     p_min > 0     || throw(ArgumentError("p_min must be positive"))
     p_max > p_min || throw(ArgumentError("p_max must be greater than p_min"))
@@ -64,13 +65,11 @@ function Fimbul.build_steam_tables_2ph(;
     h_min < h_max || throw(ArgumentError("h_min must be less than h_max"))
 
     h = collect(range(h_min, h_max; length = n_enthalpy))
-
-    ρ = [PropsSI("D", "P", p_i, "H", h_j, "Water") for p_i in p, h_j in h]
-    μ = [PropsSI("V", "P", p_i, "H", h_j, "Water") for p_i in p, h_j in h]
-    T = [PropsSI("T", "P", p_i, "H", h_j, "Water") for p_i in p, h_j in h]
-
+    ρ = sample_property("D", "P", p, "H", h, info_level)
+    μ = sample_property("V", "P", p, "H", h, info_level)
+    T = sample_property("T", "P", p, "H", h, info_level)
     T_range = collect(range(minimum(T), maximum(T), length = n_enthalpy))
-    H = [PropsSI("H", "P", p_i, "T", T_j, "Water") for p_i in p, T_j in T_range]
+    H = sample_property("H", "P", p, "T", T_range, info_level)
 
     make_table_1d(data) = Jutul.get_1d_interpolator(p_sat, data)
     make_table_2d(data) = Jutul.get_2d_interpolator(p, h, data)
@@ -165,4 +164,39 @@ function Fimbul.build_steam_tables_2ph(;
         :enthalpy_vapor_ph   => make_table_2d(H_vap_ph),
         :saturation_vapor_ph => make_table_2d(S_vap_ph),
     )
+end
+
+function sample_property(property, x_name, x, y_name, y, info_level::Int = 0)
+
+    v = zeros(Float64, length(x), length(y))
+    for (i, xi) in enumerate(x)
+        for (j, yj) in enumerate(y)
+            v_ij = NaN
+            try
+                v_ij = PropsSI(property, x_name, xi, y_name, yj, "Water")
+            catch e
+                info_level > 0 && @warn "PropsSI error for $property \
+                $x_name = $xi, $y_name = $yj: $(e.msg). \
+                Setting property to NaN." exception = e
+            end
+            v[i, j] = v_ij
+        end
+    end
+    # Replace NaNs with nearest valid value in the same column
+    for j in 1:length(y)
+        column = view(v, :, j)
+        @assert !all(isnan, column) "$property: All values are NaN at \
+        $y_name = $(y[j]). This cannot generate table."
+        for i in 1:length(x)
+            if isnan(column[i])
+                # Find nearest non-NaN value in the same column
+                valid_indices = findall(!isnan, column)
+                nearest_index = valid_indices[argmin(abs.(valid_indices .- i))]
+                column[i] = column[nearest_index]
+            end
+        end
+    end
+
+    return v
+
 end
