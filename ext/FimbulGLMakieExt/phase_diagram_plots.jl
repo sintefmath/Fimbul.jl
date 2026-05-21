@@ -4,6 +4,9 @@ const DEFAULT_PHASE_ENTHALPY_LIMITS = (500e3, 3500e3)
 _plot_value(container, key::Symbol) = container[key]
 _plot_value(container::NamedTuple, key::Symbol) = getproperty(container, key)
 
+_has_plot_key(container, key::Symbol) = haskey(container, key)
+_has_plot_key(container::NamedTuple, key::Symbol) = hasproperty(container, key)
+
 function plotting_timestep(case, res; time = nothing)
     plot_time = isnothing(time) ? get(case.input_data, :plot_time, last(res.time)) : time
     timestep = findfirst(t -> t >= plot_time, res.time)
@@ -67,12 +70,48 @@ function resolve_phase_diagram_limits(table; pressure_limits = nothing, enthalpy
     return pressure_limits, enthalpy_limits
 end
 
-function reservoir_state_ph(out; timestep = nothing, time = nothing)
-    case = _plot_value(out, :case)
-    res = _plot_value(out, :results)
+function phase_diagram_model(model::Fimbul.GeothermalModel)
+    return model
+end
+
+function phase_diagram_model(case::Jutul.JutulCase)
+    return phase_diagram_model(case.model)
+end
+
+function phase_diagram_model(model)
+    if hasproperty(model, :models)
+        models = getproperty(model, :models)
+        if haskey(models, :Reservoir)
+            return phase_diagram_model(models[:Reservoir])
+        end
+    end
+    error("Phase-diagram plotting requires a geothermal reservoir model or case.")
+end
+
+phase_diagram_tables(model) = phase_diagram_model(model).system.pvt_tables
+
+function phase_diagram_state(state)
+    if _has_plot_key(state, :Pressure) && _has_plot_key(state, :Enthalpy)
+        return state
+    elseif _has_plot_key(state, :Reservoir)
+        return _plot_value(state, :Reservoir)
+    end
+    error("Phase-diagram plotting requires a state with :Pressure and :Enthalpy, or a container with a :Reservoir state.")
+end
+
+function reservoir_state_at(case, res; timestep = nothing, time = nothing)
     timestep = isnothing(timestep) ? plotting_timestep(case, res; time = time) : timestep
-    state = res.states[timestep]
+    return phase_diagram_state(res.states[timestep])
+end
+
+function reservoir_state_ph(state)
+    state = phase_diagram_state(state)
     return vec(state[:Pressure]), vec(state[:Enthalpy])
+end
+
+function reservoir_state_ph(case, res; timestep = nothing, time = nothing)
+    state = reservoir_state_at(case, res; timestep = timestep, time = time)
+    return reservoir_state_ph(state)
 end
 
 function evaluate_phase_diagram_grid(table, p_grid, h_grid, transform)
@@ -211,12 +250,19 @@ function Fimbul.plot_reservoir_state_ph!(ax, pressure::AbstractVector, enthalpy:
     return (axis = ax, plot = h)
 end
 
-function Fimbul.plot_reservoir_state_ph!(ax, out;
+function Fimbul.plot_reservoir_state_ph!(ax, state;
     timestep = nothing,
     time = nothing,
     kwargs...)
-    pressure, enthalpy = reservoir_state_ph(out; timestep = timestep, time = time)
+    pressure, enthalpy = reservoir_state_ph(state)
     return Fimbul.plot_reservoir_state_ph!(ax, pressure, enthalpy; kwargs...)
+end
+
+function Fimbul.plot_reservoir_state_ph!(ax, model, state;
+    timestep = nothing,
+    time = nothing,
+    kwargs...)
+    return Fimbul.plot_reservoir_state_ph!(ax, state; kwargs...)
 end
 
 function Fimbul.plot_reservoir_state_ph(pressure::AbstractVector, enthalpy::AbstractVector;
@@ -228,16 +274,25 @@ function Fimbul.plot_reservoir_state_ph(pressure::AbstractVector, enthalpy::Abst
     return fig, handles
 end
 
-function Fimbul.plot_reservoir_state_ph(out;
+function Fimbul.plot_reservoir_state_ph(state;
     figure_kwargs = (;),
     axis_kwargs = (;),
     kwargs...)
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
-    handles = Fimbul.plot_reservoir_state_ph!(ax, out; kwargs...)
+    handles = Fimbul.plot_reservoir_state_ph!(ax, state; kwargs...)
     return fig, handles
 end
 
-function Fimbul.plot_reservoir_state_phase_diagram!(ax, out, tables;
+function Fimbul.plot_reservoir_state_ph(model, state;
+    figure_kwargs = (;),
+    axis_kwargs = (;),
+    kwargs...)
+    fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
+    handles = Fimbul.plot_reservoir_state_ph!(ax, model, state; kwargs...)
+    return fig, handles
+end
+
+function Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state;
     timestep = nothing,
     time = nothing,
     pressure_limits = nothing,
@@ -245,8 +300,8 @@ function Fimbul.plot_reservoir_state_phase_diagram!(ax, out, tables;
     contour_kwargs = (;),
     state_kwargs = (;),
     kwargs...)
-
-    pressure, enthalpy = reservoir_state_ph(out; timestep = timestep, time = time)
+    tables = phase_diagram_tables(model)
+    pressure, enthalpy = reservoir_state_ph(state)
     if isnothing(pressure_limits)
         pressure_limits = padded_limits(pressure)
     end
@@ -268,11 +323,11 @@ function Fimbul.plot_reservoir_state_phase_diagram!(ax, out, tables;
     )
 end
 
-function Fimbul.plot_reservoir_state_phase_diagram(out, tables;
+function Fimbul.plot_reservoir_state_phase_diagram(model, state;
     figure_kwargs = (;),
     axis_kwargs = (;),
     kwargs...)
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
-    handles = Fimbul.plot_reservoir_state_phase_diagram!(ax, out, tables; kwargs...)
+    handles = Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state; kwargs...)
     return fig, handles
 end
