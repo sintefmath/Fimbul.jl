@@ -22,6 +22,9 @@ function JutulDarcy.add_thermal_to_model!(model::GeothermalModel)
     )
     set_primary_variables!(model, Enthalpy = Enthalpy())
     model.extra[:enthalpy] = pvt[:enthalpy]
+
+    unique!(push!(model.output_variables, :Enthalpy))
+
     return model
 
 end
