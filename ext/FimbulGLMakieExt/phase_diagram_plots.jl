@@ -195,12 +195,20 @@ function Fimbul.plot_phase_diagram_contours(tables;
 end
 
 function Fimbul.plot_reservoir_state_ph!(ax, pressure::AbstractVector, enthalpy::AbstractVector;
-    line_kwargs = (;),
+    type = :line,
+    plot_kwargs = (;),
     kwargs...)
-    defaults = (; color = :blue, linewidth = 2)
-    hline = lines!(ax, enthalpy ./ 1e3, pressure ./ 1e6; defaults..., line_kwargs..., kwargs...)
+    if type == :scatter
+        defaults = (; color = :blue, markersize = 8)
+        h = scatter!(ax, enthalpy ./ 1e3, pressure ./ 1e6; defaults..., plot_kwargs..., kwargs...)
+    elseif type == :line
+        defaults = (; color = :blue, linewidth = 2)
+        h = lines!(ax, enthalpy ./ 1e3, pressure ./ 1e6; defaults..., plot_kwargs..., kwargs...)
+    else
+        error("Unknown plot type: $(repr(type)). Supported types are :line and :scatter.")
+    end
     phase_diagram_axis!(ax)
-    return (axis = ax, line = hline)
+    return (axis = ax, plot = h)
 end
 
 function Fimbul.plot_reservoir_state_ph!(ax, out;
@@ -256,7 +264,7 @@ function Fimbul.plot_reservoir_state_phase_diagram!(ax, out, tables;
     return (
         axis = ax,
         contours = contour_handles,
-        state = state_handles.line,
+        state = state_handles.plot,
     )
 end
 
