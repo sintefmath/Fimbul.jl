@@ -71,8 +71,8 @@ function Fimbul.build_steam_tables_2ph(;
     T_range = collect(range(minimum(T), maximum(T), length = n_enthalpy))
     H = sample_property("H", "P", p, "T", T_range, info_level)
 
-    make_table_1d(data) = Jutul.get_1d_interpolator(p_sat, data)
-    make_table_2d(data) = Jutul.get_2d_interpolator(p, h, data)
+    make_table_1d(data) = Jutul.get_1d_interpolator(p_sat, data; cap_endpoints = true)
+    # make_table_2d(data) = Jutul.get_2d_interpolator(p, h, data; cap_endpoints = false)
 
     h_l_itp = make_table_1d(h_l)
     h_v_itp = make_table_1d(h_v)
@@ -146,23 +146,19 @@ function Fimbul.build_steam_tables_2ph(;
         end
     end
 
-    density_mix = make_table_2d(ρ)
-    temperature = make_table_2d(T)
-    enthalpy = Jutul.get_2d_interpolator(p, T_range, H)
-
     return Dict{Symbol, Any}(
-        :density_mix         => density_mix,
-        :temperature         => temperature,
-        :enthalpy            => enthalpy,
+        :density_mix         => make_table_2d(p, h, ρ),
+        :temperature         => make_table_2d(p, h, T),
+        :enthalpy            => make_table_2d(p, T_range, H),
         :enthalpy_liquid_sat => h_l_itp,
         :enthalpy_vapor_sat  => h_v_itp,
-        :density_liquid_ph   => make_table_2d(ρ_liq_ph),
-        :density_vapor_ph    => make_table_2d(ρ_vap_ph),
-        :viscosity_liquid_ph => make_table_2d(μ_liq_ph),
-        :viscosity_vapor_ph  => make_table_2d(μ_vap_ph),
-        :enthalpy_liquid_ph  => make_table_2d(H_liq_ph),
-        :enthalpy_vapor_ph   => make_table_2d(H_vap_ph),
-        :saturation_vapor_ph => make_table_2d(S_vap_ph),
+        :density_liquid_ph   => make_table_2d(p, h, ρ_liq_ph),
+        :density_vapor_ph    => make_table_2d(p, h, ρ_vap_ph),
+        :viscosity_liquid_ph => make_table_2d(p, h, μ_liq_ph),
+        :viscosity_vapor_ph  => make_table_2d(p, h, μ_vap_ph),
+        :enthalpy_liquid_ph  => make_table_2d(p, h, H_liq_ph),
+        :enthalpy_vapor_ph   => make_table_2d(p, h, H_vap_ph),
+        :saturation_vapor_ph => make_table_2d(p, h, S_vap_ph),
     )
 end
 
@@ -196,7 +192,42 @@ function sample_property(property, x_name, x, y_name, y, info_level::Int = 0)
             end
         end
     end
-
     return v
 
 end
+
+function make_table_2d(x, y, v)
+    # x, y, v = pad_table(x, y, v)
+    return Jutul.get_2d_interpolator(x, y, v; cap_endpoints = true)
+end
+
+function pad_table(x, y, v, ϵ_xy = 1.0, ϵ_v=1e-3)
+
+    x_min, x_max = minimum(x), maximum(x)
+    y_min, y_max = minimum(y), maximum(y)
+
+    Δx = x_max - x_min
+    Δy = y_max - y_min
+    x_padded = vcat(x_min - Δx * ϵ_xy, x, x_max + Δx * ϵ_xy)
+    y_padded = vcat(y_min - Δy * ϵ_xy, y, y_max + Δy * ϵ_xy)
+
+    v_padded = zeros(size(v) .+ 2)
+    v_padded[2:end-1, 2:end-1] .= v
+    v_padded[1, :] .= v_padded[2, :].* (1 - ϵ_v)
+    v_padded[end, :] .= v_padded[end-1, :].* (1 + ϵ_v)
+    v_padded[:, 1] .= v_padded[:, 2].* (1 - ϵ_v)
+    v_padded[:, end] .= v_padded[:, end-1].* (1 + ϵ_v)
+
+    return x_padded, y_padded, v_padded
+
+end
+
+    # ϵ = 1e-6
+    #  = vcat(p[1]*0.9, p, p[end]*1.1)
+    # h = vcat(h[1]*0.9, h, h[end]*1.1)
+    # v_top = v[1,:].*(1-ϵ)
+    # v_bottom = v[end,:].*(1+ϵ)
+    # v = vcat(v_top', v, v_bottom')
+    # v_left = v[:,1].*(1-ϵ)
+    # v_right = v[:,end].*(1+ϵ)
+    # v = hcat(v_left, v, v_right)
