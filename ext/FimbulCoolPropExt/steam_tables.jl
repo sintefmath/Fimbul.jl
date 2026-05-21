@@ -31,49 +31,38 @@ function Fimbul.build_steam_tables_2ph(;
         h_max::Float64  = 5e6,
         info_level::Int = 0
     )
+    # Check input validity
     p_min > 0     || throw(ArgumentError("p_min must be positive"))
     p_max > p_min || throw(ArgumentError("p_max must be greater than p_min"))
+    h_min < h_max || throw(ArgumentError("h_min must be less than h_max"))
 
-    p = collect(range(p_min, p_max; length = n_pressure))
+    # Saturation pressures relies on temperature, so we use this to sample the saturation envelope
+    T_min = PropsSI("T", "P", p_min, "H", h_min, "Water")
+    T_sat_max = PropsSI("T", "P", Fimbul.WATER_CRITICAL_PRESSURE, "H", Fimbul.WATER_CRITICAL_ENTHALPY, "Water")
+    # Sample saturation and temperature pressures naively from min to max
     p_sat = collect(range(p_min, min(p_max, Fimbul.WATER_CRITICAL_PRESSURE * 0.999); length = n_pressure))
-
+    T_sat = collect(range(T_min, T_sat_max; length = n_enthalpy))
+    # Identify missing saturation pressures and temperatures along the line
+    p_l_missing = sample_property("P", "T", T_sat, "Q", [0.0], info_level)
+    p_v_missing = sample_property("P", "T", T_sat, "Q", [1.0], info_level)
+    T_l_missing = sample_property("T", "P", p_sat, "Q", [0.0], info_level)
+    T_v_missing = sample_property("T", "P", p_sat, "Q", [1.0], info_level)
+    # Add missing saturation pressures and temperatures to the sampling points
+    p_sat = sort(unique(vcat(p_sat, p_l_missing, p_v_missing)))
+    T_sat = sort(unique(vcat(T_sat, T_l_missing, T_v_missing)))
+    # Sample saturation enthalpies at the saturation pressures
+    h_sat = sample_property("H", "P", p_sat, "Q", 0.0, info_level)
+    # Sample saturation properties at the saturation pressures
+    info_level > 0 && @info "Building saturation tables with \
+    $n_pressure pressure points ($minimum(p_sat), $maximum(p_sat)) Pa"
     h_l = [PropsSI("H", "P", p_i, "Q", 0.0, "Water") for p_i in p_sat]
     h_v = [PropsSI("H", "P", p_i, "Q", 1.0, "Water") for p_i in p_sat]
     ρ_l = [PropsSI("D", "P", p_i, "Q", 0.0, "Water") for p_i in p_sat]
     ρ_v = [PropsSI("D", "P", p_i, "Q", 1.0, "Water") for p_i in p_sat]
     μ_l = [PropsSI("V", "P", p_i, "Q", 0.0, "Water") for p_i in p_sat]
     μ_v = [PropsSI("V", "P", p_i, "Q", 1.0, "Water") for p_i in p_sat]
-
-    h_l_subcritical = filter(!isnan, h_l)
-    h_v_subcritical = filter(!isnan, h_v)
-
-    if isnan(h_min)
-        if isempty(h_l_subcritical)
-            h_min = PropsSI("H", "P", Fimbul.WATER_CRITICAL_PRESSURE, "Q", 0.0, "Water")
-        else
-            h_min = minimum(h_l_subcritical)
-        end
-    end
-    if isnan(h_max)
-        if isempty(h_v_subcritical)
-            h_max = PropsSI("H", "P", Fimbul.WATER_CRITICAL_PRESSURE, "Q", 1.0, "Water") + 200e3
-        else
-            h_max = maximum(h_v_subcritical) + 200e3
-        end
-    end
-
-    h_min < h_max || throw(ArgumentError("h_min must be less than h_max"))
-
-    h = collect(range(h_min, h_max; length = n_enthalpy))
-    ρ = sample_property("D", "P", p, "H", h, info_level)
-    μ = sample_property("V", "P", p, "H", h, info_level)
-    T = sample_property("T", "P", p, "H", h, info_level)
-    T_range = collect(range(minimum(T), maximum(T), length = n_enthalpy))
-    H = sample_property("H", "P", p, "T", T_range, info_level)
-
+    # Make 1D tables for saturation properties
     make_table_1d(data) = Jutul.get_1d_interpolator(p_sat, data; cap_endpoints = true)
-    # make_table_2d(data) = Jutul.get_2d_interpolator(p, h, data; cap_endpoints = false)
-
     h_l_itp = make_table_1d(h_l)
     h_v_itp = make_table_1d(h_v)
     ρ_l_itp = make_table_1d(ρ_l)
@@ -81,23 +70,50 @@ function Fimbul.build_steam_tables_2ph(;
     μ_l_itp = make_table_1d(μ_l)
     μ_v_itp = make_table_1d(μ_v)
 
-    ρ_liq_ph = similar(ρ)
-    ρ_vap_ph = similar(ρ)
-    μ_liq_ph = similar(μ)
-    μ_vap_ph = similar(μ)
-    H_liq_ph = similar(ρ)
-    H_vap_ph = similar(ρ)
-    S_vap_ph = similar(ρ)
+    # Complete the grid with single-phase points if the max pressure and enthalpy exceed the critical point
+    if p_max > Fimbul.WATER_CRITICAL_PRESSURE
+        p_sc = collect(range(Fimbul.WATER_CRITICAL_PRESSURE, p_max; length = n_pressure))
+        p = sort(unique(vcat(p_sat, p_sc)))
+    end
+    if h_max > Fimbul.WATER_CRITICAL_ENTHALPY
+        h_sc = collect(range(Fimbul.WATER_CRITICAL_ENTHALPY, h_max; length = n_enthalpy))
+        h = sort(unique(vcat(h_sat, h_sc)))
+    end
+    T_max = PropsSI("T", "P", p_max, "H", h_max, "Water")
+    if T_max > Fimbul.WATER_CRITICAL_TEMPERATURE
+        # T_sc = collect(range(Fimbul.WATER_CRITICAL_TEMPERATURE, T_max; length = n_enthalpy))
+        n_temperature = length(h) - length(T_sat)
+        T_sc = collect(range(Fimbul.WATER_CRITICAL_TEMPERATURE, T_max; length = n_temperature))
+        T = sort(unique(vcat(T_sat, T_sc)))
+    end
+    info_level > 0 && @info "Building two-phase tables with \
+    $(length(p)) pressure points ($(minimum(p)), $(maximum(p))) Pa and \
+    $(length(h)) enthalpy points ($(minimum(h)), $(maximum(h))) J/kg."
+    # Sample properties over the full grid
+    ρ_tab = sample_property("D", "P", p, "H", h, info_level)
+    μ_tab = sample_property("V", "P", p, "H", h, info_level)
+    T_tab = sample_property("T", "P", p, "H", h, info_level)
+    h_tab = sample_property("H", "P", p, "T", T, info_level)
+
+    # Construct per-phase tables by identifying the phase at each point and
+    # assigning the corresponding properties.
+    ρ_liq_ph = similar(ρ_tab)
+    ρ_vap_ph = similar(ρ_tab)
+    μ_liq_ph = similar(μ_tab)
+    μ_vap_ph = similar(μ_tab)
+    h_liq_ph = similar(h_tab)
+    h_vap_ph = similar(h_tab)
+    S_vap_ph = similar(h_tab)
 
     for (i, p_i) in enumerate(p)
         if p_i >= Fimbul.WATER_CRITICAL_PRESSURE
             for (j, h_j) in enumerate(h)
-                ρ_liq_ph[i, j] = ρ[i, j]
-                ρ_vap_ph[i, j] = ρ[i, j]
-                μ_liq_ph[i, j] = μ[i, j]
-                μ_vap_ph[i, j] = μ[i, j]
-                H_liq_ph[i, j] = h_j
-                H_vap_ph[i, j] = h_j
+                ρ_liq_ph[i, j] = ρ_tab[i, j]
+                ρ_vap_ph[i, j] = ρ_tab[i, j]
+                μ_liq_ph[i, j] = μ_tab[i, j]
+                μ_vap_ph[i, j] = μ_tab[i, j]
+                h_liq_ph[i, j] = h_j
+                h_vap_ph[i, j] = h_j
                 S_vap_ph[i, j] = 0.0
             end
             continue
@@ -112,12 +128,12 @@ function Fimbul.build_steam_tables_2ph(;
 
         for (j, h_j) in enumerate(h)
             if h_j < hl
-                ρ_liq_ph[i, j] = ρ[i, j]
+                ρ_liq_ph[i, j] = ρ_tab[i, j]
                 ρ_vap_ph[i, j] = rv
-                μ_liq_ph[i, j] = μ[i, j]
+                μ_liq_ph[i, j] = μ_tab[i, j]
                 μ_vap_ph[i, j] = mv
-                H_liq_ph[i, j] = h_j
-                H_vap_ph[i, j] = hv
+                h_liq_ph[i, j] = h_j
+                h_vap_ph[i, j] = hv
                 S_vap_ph[i, j] = 0.0
             elseif h_j <= hv
                 vapor_quality = (h_j - hl) / (hv - hl)
@@ -131,33 +147,48 @@ function Fimbul.build_steam_tables_2ph(;
                 ρ_vap_ph[i, j] = rv
                 μ_liq_ph[i, j] = ml
                 μ_vap_ph[i, j] = mv
-                H_liq_ph[i, j] = hl
-                H_vap_ph[i, j] = hv
+                h_liq_ph[i, j] = hl
+                h_vap_ph[i, j] = hv
                 S_vap_ph[i, j] = vapor_saturation
             else
                 ρ_liq_ph[i, j] = rl
-                ρ_vap_ph[i, j] = ρ[i, j]
+                ρ_vap_ph[i, j] = ρ_tab[i, j]
                 μ_liq_ph[i, j] = ml
-                μ_vap_ph[i, j] = μ[i, j]
-                H_liq_ph[i, j] = hl
-                H_vap_ph[i, j] = h_j
+                μ_vap_ph[i, j] = μ_tab[i, j]
+                h_liq_ph[i, j] = hl
+                h_vap_ph[i, j] = h_j
                 S_vap_ph[i, j] = 1.0
             end
         end
     end
 
+    make_table_2d(p, h, T_tab)
+    make_table_2d(p, T, h_tab)
+    h_l_itp
+    h_v_itp
+    make_table_2d(p, h, ρ_liq_ph)
+    make_table_2d(p, h, ρ_vap_ph)
+    make_table_2d(p, h, ρ_tab)
+    make_table_2d(p, h, μ_liq_ph)
+    make_table_2d(p, h, μ_vap_ph)
+    make_table_2d(p, h, μ_tab)
+    make_table_2d(p, h, h_liq_ph)
+    make_table_2d(p, h, h_vap_ph)
+    make_table_2d(p, h, S_vap_ph)
+
     return Dict{Symbol, Any}(
-        :density_mix         => make_table_2d(p, h, ρ),
-        :temperature         => make_table_2d(p, h, T),
-        :enthalpy            => make_table_2d(p, T_range, H),
+        :temperature         => make_table_2d(p, h, T_tab),
+        :enthalpy            => make_table_2d(p, T, h_tab),
         :enthalpy_liquid_sat => h_l_itp,
         :enthalpy_vapor_sat  => h_v_itp,
         :density_liquid_ph   => make_table_2d(p, h, ρ_liq_ph),
         :density_vapor_ph    => make_table_2d(p, h, ρ_vap_ph),
+        :density_mix         => make_table_2d(p, h, ρ_tab),
         :viscosity_liquid_ph => make_table_2d(p, h, μ_liq_ph),
         :viscosity_vapor_ph  => make_table_2d(p, h, μ_vap_ph),
-        :enthalpy_liquid_ph  => make_table_2d(p, h, H_liq_ph),
-        :enthalpy_vapor_ph   => make_table_2d(p, h, H_vap_ph),
+        :viscosity_mix       => make_table_2d(p, h, μ_tab),
+        :enthalpy_liquid_ph  => make_table_2d(p, h, h_liq_ph),
+        :enthalpy_vapor_ph   => make_table_2d(p, h, h_vap_ph),
         :saturation_vapor_ph => make_table_2d(p, h, S_vap_ph),
     )
 end
@@ -171,7 +202,7 @@ function sample_property(property, x_name, x, y_name, y, info_level::Int = 0)
             try
                 v_ij = PropsSI(property, x_name, xi, y_name, yj, "Water")
             catch e
-                info_level > 0 && @warn "PropsSI error for $property \
+                info_level > 1 && @warn "PropsSI error for $property \
                 $x_name = $xi, $y_name = $yj: $(e.msg). \
                 Setting property to NaN." exception = e
             end
@@ -179,11 +210,11 @@ function sample_property(property, x_name, x, y_name, y, info_level::Int = 0)
         end
     end
     # Replace NaNs with nearest valid value in the same column
-    for j in 1:length(y)
+    for j in eachindex(y)
         column = view(v, :, j)
         @assert !all(isnan, column) "$property: All values are NaN at \
         $y_name = $(y[j]). This cannot generate table."
-        for i in 1:length(x)
+        for i in eachindex(x)
             if isnan(column[i])
                 # Find nearest non-NaN value in the same column
                 valid_indices = findall(!isnan, column)
@@ -221,13 +252,3 @@ function pad_table(x, y, v, ϵ_xy = 1.0, ϵ_v=1e-3)
     return x_padded, y_padded, v_padded
 
 end
-
-    # ϵ = 1e-6
-    #  = vcat(p[1]*0.9, p, p[end]*1.1)
-    # h = vcat(h[1]*0.9, h, h[end]*1.1)
-    # v_top = v[1,:].*(1-ϵ)
-    # v_bottom = v[end,:].*(1+ϵ)
-    # v = vcat(v_top', v, v_bottom')
-    # v_left = v[:,1].*(1-ϵ)
-    # v_right = v[:,end].*(1+ϵ)
-    # v = hcat(v_left, v, v_right)
