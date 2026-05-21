@@ -58,7 +58,6 @@ function benchmark_2ph_1d(;
     domain_length   :: Float64 = 2010.0*meter,
     cell_size       :: Float64 = 10.0*meter,
     dt_target       :: Float64 = 5.0*year,
-    num_years       :: Int     = 3000,
     enthalpy_tables                = build_steam_tables_2ph(),
 )
 
@@ -161,26 +160,24 @@ function benchmark_2ph_1d(;
     forces = setup_reservoir_forces(model; bc = bc)
 
     # ── Timesteps ──────────────────────────────────────────────────────────
-    total_time = Float64(num_years) * year
-    dt_vec     = _benchmark_rampup_timesteps(total_time, dt_target)
-
     if benchmark_case == :a
-        plot_time = ifelse(!vertical, 250.0*year, 750.0*year)
+        total_time = ifelse(!vertical, 250.0*year, 750.0*year)
     elseif benchmark_case == :b
-        plot_time = ifelse(!vertical, 120.0*year, 350.0*year)
+        total_time = ifelse(!vertical, 120.0*year, 350.0*year)
     elseif benchmark_case == :c
-        plot_time = 1500.0*year
+        total_time = 1500.0*year
     elseif benchmark_case == :d
-        plot_time = ifelse(!vertical, 200.0*year, 1000.0*year)
+        total_time = ifelse(!vertical, 200.0*year, 1000.0*year)
     else  # :e
-        plot_time = 2000.0*year
+        total_time = 2000.0*year
     end
+    dt_vec = _benchmark_rampup_timesteps(total_time, dt_target)
 
     # ── Assemble case ──────────────────────────────────────────────────────
     info = Dict{Symbol, Any}(
         :description    => "1D geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
         :benchmark_case => benchmark_case,
-        :plot_time      => plot_time,
+        :total_time     => total_time,
         :vertical       => vertical,
         :p_inj          => p_inj,
         :p_prod         => p_prod,

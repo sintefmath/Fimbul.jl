@@ -47,9 +47,10 @@ const PROFILE_SPECS = (
 
 # Shared setup used throughout the example.
 table_resolution = 50
-nx = 100
+nx = 200
 cell_size = 10.0
 
+##
 tables = Fimbul.build_steam_tables_2ph(
     n_pressure = table_resolution,
     n_enthalpy = table_resolution,
@@ -71,8 +72,9 @@ function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100
         case;
         tol_cnv = 1e-3,
         tol_mb = 1e-7,
-        info_level = 0,
+        info_level = 2,
         max_timestep = maximum(case.dt),
+        relaxation = true,
     )
     results = simulate_reservoir(case; simulator = simulator, config = config)
     return (case = case, results = results)
@@ -93,14 +95,6 @@ function simulate_case_family(case_symbols, tables; nx = 100, cell_size = 10.0)
         end
     end
     return outputs
-end
-
-function plotting_timestep(out; time = nothing)
-    case = out.case
-    results = out.results
-    plot_time = isnothing(time) ? get(case.input_data, :plot_time, last(results.time)) : time
-    timestep = findfirst(t -> t >= plot_time, results.time)
-    return isnothing(timestep) ? length(results.states) : timestep
 end
 
 function reservoir_coordinate(out)
@@ -173,7 +167,7 @@ function plot_case_profiles(case_symbol, results)
     for (k, vertical) in enumerate(vertical_modes)
         out = results[(case_symbol, vertical)]
         x = reservoir_coordinate(out)
-        state = out.results.states[plotting_timestep(out)]
+        state = out.results.states[end]
 
         row = 2*(k-1)
         vertical_label = vertical ? "vertical" : "horizontal"
@@ -206,6 +200,7 @@ function plot_case_profiles(case_symbol, results)
 end
 
 ##
+# all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
 # all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
 all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
 
@@ -281,7 +276,7 @@ handles = Fimbul.plot_phase_diagram_contours!(
 
 for case_symbol in (SINGLE_PHASE_CASES..., TWO_PHASE_CASES...)
     out = all_results[(case_symbol, false)]
-    state = out.results.states[plotting_timestep(out)]
+    state = out.results.states[end]
     Fimbul.plot_reservoir_state_ph!(
         ax,
         state;
