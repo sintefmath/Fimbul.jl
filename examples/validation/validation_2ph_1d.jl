@@ -9,7 +9,7 @@ to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
 to_kj_per_kg(h) = h ./ 1e3
 
-const TABLE_PRESSURE_LIMITS = (1e5, 50e6)
+const TABLE_PRESSURE_LIMITS = (1e5, 52.5e6)
 const TABLE_ENTHALPY_LIMITS = (500e3, 3500e3)
 const SINGLE_PHASE_CASES = (:a, :b, :c)
 const TWO_PHASE_CASES = (:d, :e)
@@ -46,13 +46,14 @@ const PROFILE_SPECS = (
 # saturation.
 
 # Shared setup used throughout the example.
-table_resolution = 100
+table_resolution = 50
 nx = 100
 cell_size = 10.0
 
 tables = Fimbul.build_steam_tables_2ph(
     n_pressure = table_resolution,
     n_enthalpy = table_resolution,
+    info_level = 1,
 )
 
 ##
@@ -148,6 +149,8 @@ function plot_property_maps(tables)
             variable = spec.variable,
             pressure_limits = TABLE_PRESSURE_LIMITS,
             enthalpy_limits = TABLE_ENTHALPY_LIMITS,
+            n_pressure = 500,
+            n_enthalpy = 500,
             levels = 18,
             lines = true,
             value_transform = spec.transform,
@@ -158,6 +161,8 @@ function plot_property_maps(tables)
             hideydecorations!(ax, ticks = false)
         end
     end
+    is_ax = [f isa Axis for f in fig.content]
+    linkaxes!(fig.content[is_ax]...)
     return fig
 end
 
@@ -200,36 +205,8 @@ function plot_case_profiles(case_symbol, results)
     return fig
 end
 
-function plot_case_family_diagram(case_symbols, results, tables; title = "Phase diagram comparison")
-    fig = Figure(size = (700, 640))
-    Label(fig[0, 1:2], title; fontsize = 22)
-    ax = Axis(fig[1, 1])
-    handles = Fimbul.plot_phase_diagram_contours!(
-        ax,
-        tables;
-        variable = :temperature,
-        pressure_limits = TABLE_PRESSURE_LIMITS,
-        enthalpy_limits = TABLE_ENTHALPY_LIMITS,
-        levels = 20,
-        lines = true,
-    )
-
-    for case_symbol in case_symbols
-        Fimbul.plot_reservoir_state_ph!(
-            ax,
-            results[(case_symbol, false)];
-            color = CASE_COLORS[case_symbol],
-            linewidth = 3,
-            label = "Case $(case_symbol)",
-        )
-    end
-
-    # Legend(fig[1, 2], framevisible = false)
-    axislegend(ax; position = :rt)
-    Colorbar(fig[1, 2], handles.filled, label = "Temperature [°C]")
-    return fig
-end
 ##
+# all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
 all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
 
 # ## H2O properties in pressure-enthalpy space
@@ -289,9 +266,31 @@ fig_case_e
 # ## Phase diagram comparison
 # We compare the cases directly in pressure-enthalpy space, overlaying the state
 # paths on temperature contours.
-fig_two_phase_diagram = plot_case_family_diagram(
-    vcat(SINGLE_PHASE_CASES..., TWO_PHASE_CASES...),
-    all_results,
+fig = Figure(size = (700, 640))
+Label(fig[0, 1:2], "Phase diagram comparison"; fontsize = 22)
+ax = Axis(fig[1, 1])
+handles = Fimbul.plot_phase_diagram_contours!(
+    ax,
     tables;
+    variable = :temperature,
+    pressure_limits = TABLE_PRESSURE_LIMITS,
+    enthalpy_limits = TABLE_ENTHALPY_LIMITS,
+    levels = 20,
+    lines = true,
 )
-fig_two_phase_diagram
+
+for case_symbol in (SINGLE_PHASE_CASES..., TWO_PHASE_CASES...)
+    out = all_results[(case_symbol, false)]
+    state = out.results.states[plotting_timestep(out)]
+    Fimbul.plot_reservoir_state_ph!(
+        ax,
+        state;
+        color = CASE_COLORS[case_symbol],
+        linewidth = 3,
+        label = "Case $(case_symbol)",
+    )
+end
+
+axislegend(ax; position = :rt)
+Colorbar(fig[1, 2], handles.filled, label = "Temperature [°C]")
+fig
