@@ -200,7 +200,7 @@ function plot_case_profiles(case_symbol, results)
     return fig
 end
 
-function plot_case_family_diagram(case_symbols, results, tables; title)
+function plot_case_family_diagram(case_symbols, results, tables; title = "Phase diagram comparison")
     fig = Figure(size = (700, 640))
     Label(fig[0, 1:2], title; fontsize = 22)
     ax = Axis(fig[1, 1])
@@ -293,6 +293,5 @@ fig_two_phase_diagram = plot_case_family_diagram(
     vcat(SINGLE_PHASE_CASES..., TWO_PHASE_CASES...),
     all_results,
     tables;
-    title = "Two-phase cases without gravity",
 )
 fig_two_phase_diagram
