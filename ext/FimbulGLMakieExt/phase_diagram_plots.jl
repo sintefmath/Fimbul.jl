@@ -180,6 +180,7 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
         pressure_limits = pressure_limits,
         enthalpy_limits = enthalpy_limits,
     )
+
     transform = isnothing(value_transform) ? default_phase_diagram_transform(variable) : value_transform
     hcf = nothing
     hcl = nothing
@@ -189,7 +190,7 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
     p_grid = range(first(pressure_limits), last(pressure_limits); length = n_pressure)
     h_grid = range(first(enthalpy_limits), last(enthalpy_limits); length = n_enthalpy)
     values = evaluate_phase_diagram_grid(table, p_grid, h_grid, transform)
-
+    
     if filled
         contourf_defaults = (; levels = levels, colormap = cgrad(:seaborn_icefire_gradient, levels, categorical = true, alpha = 1.0))
         hcf = contourf!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contourf_defaults..., contourf_kwargs...)
@@ -293,8 +294,6 @@ function Fimbul.plot_reservoir_state_ph(model, state;
 end
 
 function Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state;
-    timestep = nothing,
-    time = nothing,
     pressure_limits = nothing,
     enthalpy_limits = nothing,
     contour_kwargs = (;),
