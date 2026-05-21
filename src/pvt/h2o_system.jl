@@ -157,7 +157,6 @@ function JutulDarcy.flash_wellstream_at_surface(
     return (rho, volfrac)
 end
 
-# Set enthalpy increment tolerances for energy conservation convergence criterion
 """
     JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
         inc_tol_dh_rel = Inf, inc_tol_dh_abs = Inf, kwargs...)
@@ -178,9 +177,8 @@ function JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
     end
 end
 
-# Mass balance convergence criterion
 """
-    JutulDarcy.convergence_criterion(model::GeothermalModel, storage,
+    Jutul.convergence_criterion(model::GeothermalModel, storage,
         eq::ConservationLaw{:TotalMasses}, eq_s, r; dt = 1.0,
         update_report = missing)
 
@@ -188,11 +186,11 @@ Compute mass-balance convergence metrics for an `H2OSystem` model.
 
 The residual is normalized using the mixture density `ρ_l S_l + ρ_v S_v`
 """
-function JutulDarcy.convergence_criterion(
-    model::GeothermalModel, storage,
+function Jutul.convergence_criterion(
+    model::SimulationModel{D, S}, storage,
     eq::ConservationLaw{:TotalMasses}, eq_s, r;
     dt = 1.0, update_report = missing,
-    )
+    ) where {D, S <: H2OSystem}
     M = global_map(model.domain)
     v = x -> as_value(Jutul.active_view(x, M, for_variables = false))
     Φ    = v(storage.state.FluidVolume)
@@ -202,7 +200,7 @@ function JutulDarcy.convergence_criterion(
     ρ_mix = reshape([ρ_ph[1,c]*S_ph[1,c] + ρ_ph[2,c]*S_ph[2,c] for c in 1:nc], 1, nc)
     cnv, mb = JutulDarcy.cnv_mb_errors(r, Φ, ρ_mix, dt, Val(1))
     dp_abs, dp_rel = JutulDarcy.pressure_increments(model, storage.state, update_report)
-    names = (:Water,)
+    names = JutulDarcy.component_names(model.system)
     return (
         CNV = (errors = cnv, names = names),
         MB  = (errors = mb,  names = names),
@@ -211,7 +209,6 @@ function JutulDarcy.convergence_criterion(
     )
 end
 
-# Thermal energy balance convergence criterion
 """
     Jutul.convergence_criterion(model::GeothermalModel, storage,
         eq::ConservationLaw{:TotalThermalEnergy}, eq_s, r; dt = 1.0,
