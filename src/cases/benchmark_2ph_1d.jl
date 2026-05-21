@@ -8,7 +8,8 @@ from the MRST `benchmark_1d_geothermal` test suite and implemented using
 Five cases (`:a`–`:e`) cover different initial pressure/temperature conditions
 and pressure gradients. Each case is a 1D column with Dirichlet-like
 pressure/enthalpy conditions at both ends, imposed through flow boundary
-conditions.
+conditions. The initial state is uniform at the producer-side pressure and
+temperature, matching the MRST benchmark setup.
 
 | Case | p_inj [MPa] | p_prod [MPa] | T_inj [°C] | T_prod [°C] | vertical? |
 |:----:|:-----------:|:------------:|:----------:|:-----------:|:--------:|
@@ -32,13 +33,21 @@ Case `:test` is also accepted as a lightweight internal sanity-check case.
 - `benchmark_case = :a`: Case selector. Benchmark cases are `:a`, `:b`, `:c`,
     `:d`, `:e`; `:test` is a lightweight internal case.
 - `vertical = false`: Enable vertical flow (not available for case `:e`).
-- `nx = 201`: Number of cells along the flow direction.
-- `domain_length = 2010.0*meter`: Length of the 1D domain [m].
+- `nx = 200`: Number of cells along the active flow direction.
+- `domain_length = 2000.0*meter`: Length of the 1D domain [m].
 - `cell_size = 10.0*meter`: Cell width in the two inactive directions [m].
-- `dt_target = 5*year`: Target timestep size [s] after ramp-up.
-- `num_years = 3000`: Total simulation duration [years].
+- `dt_target = 5.0*year`: Target timestep size [s] after ramp-up.
 - `enthalpy_tables = build_steam_tables_2ph()`: Pre-built (P,H) steam tables;
   pass your own to avoid rebuilding when calling the function multiple times.
+
+The total simulation time is selected internally from the benchmark case and
+orientation:
+
+- `:a`: 250 years horizontal, 750 years vertical.
+- `:b`: 120 years horizontal, 350 years vertical.
+- `:c`: 1500 years.
+- `:d`: 200 years horizontal, 1000 years vertical.
+- `:e`: 2000 years.
 
 ## Returns
 
@@ -54,8 +63,8 @@ numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 function benchmark_2ph_1d(;
     benchmark_case  :: Symbol  = :a,
     vertical        :: Bool    = false,
-    nx              :: Int     = 201,
-    domain_length   :: Float64 = 2010.0*meter,
+    nx              :: Int     = 200,
+    domain_length   :: Float64 = 2000.0*meter,
     cell_size       :: Float64 = 10.0*meter,
     dt_target       :: Float64 = 5.0*year,
     enthalpy_tables                = build_steam_tables_2ph(),
