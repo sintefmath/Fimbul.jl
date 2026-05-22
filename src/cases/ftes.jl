@@ -1,5 +1,32 @@
 import Jutul.CutCellMeshes: PlaneCut, PolygonalSurface, cut_mesh
 
+function expand_ftes_fracture_property(values, fracture_disc::Dict{Symbol, Any})
+    if ismissing(values)
+        return missing
+    elseif !(values isa AbstractVector)
+        return values
+    end
+
+    n_regular = fracture_disc[:num_regular_cells]
+    n_total = fracture_disc[:num_cells]
+    if length(values) == n_total
+        return values
+    elseif length(values) == 1
+        return fill(only(values), n_total)
+    elseif length(values) != fracture_disc[:num_input_fractures]
+        error("FTES fracture property vector must have length 1, $(fracture_disc[:num_input_fractures]), or $n_total. Got $(length(values)).")
+    end
+
+    cut_numbers = fracture_disc[:cut_numbers]
+    expanded = fill(sum(values)/length(values), n_total)
+    expanded[1:n_regular] .= values[cut_numbers]
+    return expanded
+end
+
+function expand_ftes_fracture_properties(properties, fracture_disc::Dict{Symbol, Any})
+    return (; (k => expand_ftes_fracture_property(v, fracture_disc) for (k, v) in pairs(properties))...)
+end
+
 function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, controls::Dict{Symbol, Any};
     info_level = 0,
     )
@@ -24,10 +51,11 @@ function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, 
 
     info_level > 0 && @info "Setting up matrix, fracture, and well domains"
     matrix_domain = layered_reservoir_domain(matrix_mesh, layers, matrix_parameters[:properties])
+    fracture_properties = expand_ftes_fracture_properties(fracture_parameters[:properties], fracture_disc)
     fracture_domain = JutulDarcy.fracture_domain(
         fracture_mesh,
         matrix_domain;
-        fracture_parameters[:properties]...,
+        fracture_properties...,
     )
 
     injector_disc = well_disc[:injector]
@@ -200,13 +228,13 @@ function ftes(wells, fractures=Union{NamedTuple, Int}; kwargs...)
 end
 
 function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol, Any};
-    depths = nothing, info_level=0, mesh_args...)
+    depths = nothing, info_level=0, hxy_min=missing, mesh_args...)
 
     # Make constraints from well coordinates
     info_level > 0 && @info "Setting up wells and making mesh"
     collars = hcat([x[1:2, 1] for x in well_coordinates]...)
     Δx_min, Δx_max = Fimbul.min_max_distance(collars)
-    hxy_min = Δx_min/4
+    hxy_min = ifelse(ismissing(hxy_min), Δx_min/4, hxy_min)
     r_given = filter(!isinf, fractures[:radius])
     r_max = ifelse(isempty(r_given), 0.0, maximum(r_given))
     well_offset = max(Δx_max/2, r_max-Δx_max/2)
@@ -268,11 +296,20 @@ function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fracture
 
     geo_matrix = tpfv_geometry(matrix_mesh)
     geo_fractures = tpfv_geometry(fracture_mesh)
+    n_regular_fracture_cells = length(fracture_mesh.parent_faces)
+    cut_numbers = info[:cut_no][fracture_mesh.parent_faces]
 
     reservoir_disc = Dict{Symbol, Any}()
     reservoir_disc[:matrix] = Dict(
         :mesh => matrix_mesh, :layers => layers, :geometry => geo_matrix)
-    reservoir_disc[:fractures] = Dict(:mesh => fracture_mesh, :geometry => geo_fractures)
+    reservoir_disc[:fractures] = Dict(
+        :mesh => fracture_mesh,
+        :geometry => geo_fractures,
+        :cut_numbers => cut_numbers,
+        :num_cells => number_of_cells(fracture_mesh),
+        :num_regular_cells => n_regular_fracture_cells,
+        :num_input_fractures => length(fractures[:normal]),
+    )
 
     # Generate matrix and fracture domains
     cells_inj = Jutul.find_enclosing_cells(matrix_mesh, permutedims(well_coordinates[1]), n=1_000_000)
@@ -473,6 +510,7 @@ function setup_ftes_well_coordinates(num_producers::Int, radius::Float64, depth:
 end
 
 function setup_ftes_fractures(num::Int, z_min::Float64, z_max::Float64;
+    uniform_spacing = false,
     strike::Union{Float64, Tuple{Float64, Float64}}=(0.0, 5.0),
     dip::Union{Float64, Tuple{Float64, Float64}}=(0.0, 5.0),
     radius::Union{Float64, Tuple{Float64, Float64}}=Inf,
@@ -505,7 +543,11 @@ function setup_ftes_fractures(num::Int, z_min::Float64, z_max::Float64;
     aperture = aperture[1] .+ randn(num).*aperture[2]
     porosity = porosity[1] .+ randn(num).*porosity[2]
 
-    z = z_min .+ rand(num) .* (z_max - z_min)
+    if uniform_spacing
+        z = range(z_min, z_max, length=num)
+    else
+        z = z_min .+ rand(num) .* (z_max - z_min)
+    end
 
     if boundary_or_center isa Vector
         centers = [vcat(boundary_or_center, z[i]) for i in 1:num]
