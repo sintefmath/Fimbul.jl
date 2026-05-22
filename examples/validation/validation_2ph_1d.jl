@@ -191,7 +191,7 @@ function plot_case_profiles(case_symbol, results)
                 lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3)
             end
         end
-        fig[row, :] = Label(a, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
+        fig[row, :] = Label(fig, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
     end
     return fig
 end
