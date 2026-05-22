@@ -116,27 +116,24 @@ function plot_property_maps(tables)
     specs = (
         (
             variable = :temperature,
-            title = "Temperature",
             label = "Temperature [°C]",
-            transform = nothing,
         ),
         (
             variable = :density_mix,
-            title = "Density",
             label = "Density [kg/m³]",
-            transform = nothing,
         ),
         (
             variable = :saturation_vapor_ph,
-            title = "Vapor saturation",
             label = "Vapor saturation [-]",
-            transform = nothing,
         ),
     )
 
     fig = Figure(size = (1200, 500))
     for (i, spec) in enumerate(specs)
-        ax = Axis(fig[2, i])
+        yaxisposition = ifelse(i < length(specs), :left, :right)
+        ax = Axis(fig[2, i];
+            xticksmirrored = true, yticksmirrored = true,
+            yaxisposition = yaxisposition, aspect = AxisAspect(1))
         handles = Fimbul.plot_phase_diagram_contours!(
             ax,
             tables;
@@ -147,10 +144,10 @@ function plot_property_maps(tables)
             n_enthalpy = 500,
             levels = 18,
             lines = true,
-            value_transform = spec.transform,
             contourf_kwargs = (; colormap = :seaborn_icefire_gradient),
-        )
-        Colorbar(fig[1, i], handles.filled, vertical = false, flipaxis = true, label = spec.label, labelsize = 20)
+        )       
+        Colorbar(fig[1, i], handles.filled, vertical = false, flipaxis = true, width = ax.width,
+            label = spec.label, labelsize = 20)
         if i > 1
             hideydecorations!(ax, ticks = false)
         end
@@ -194,7 +191,7 @@ function plot_case_profiles(case_symbol, results)
                 lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3)
             end
         end
-        fig[row, :] = Label(fig, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
+        fig[row, :] = Label(a, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
     end
     return fig
 end
@@ -263,7 +260,7 @@ fig_case_e
 # paths on temperature contours.
 fig = Figure(size = (700, 640))
 Label(fig[0, 1:2], "Phase diagram comparison"; fontsize = 22)
-ax = Axis(fig[1, 1])
+ax = Axis(fig[1, 1]; xticksmirrored = true, yticksmirrored = true, aspect = AxisAspect(1))
 handles = Fimbul.plot_phase_diagram_contours!(
     ax,
     tables;
