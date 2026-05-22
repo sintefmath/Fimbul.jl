@@ -140,19 +140,6 @@ function benchmark_2ph_1d(;
     kr = BrooksCoreyRelativePermeabilities(sys, 1.0, [0.3, 0.0], 1.0)
     model = replace_variables!(model, RelativePermeabilities = kr)
 
-    for k in keys(model.models)
-        nc = number_of_cells(model.models[k].data_domain)
-        parameters[k][:LiquidMassFractions] = permutedims(fill(1.0, nc))
-        parameters[k][:VaporMassFractions] = permutedims(fill(1.0, nc))
-    end
-
-    for m in values(model.models)
-        push!(m.output_variables,
-            :Temperature, :Enthalpy, :PhaseMassDensities, :PhaseViscosities,
-            :FluidEnthalpy, :LiquidMassFractions, :VaporMassFractions,
-        )
-    end
-
     # ── Initial state ──────────────────────────────────────────────────────
     # Uniform initial conditions at the producer-side state (low p, low T).
     # The MRST benchmark also initialises uniformly (not hydrostatic).

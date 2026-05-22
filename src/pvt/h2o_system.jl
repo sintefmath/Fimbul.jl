@@ -56,6 +56,7 @@ JutulDarcy.component_names(sys::H2OSystem)      = (:H₂O,)
 
 # Convenience const for easy dispatching on models with this H2OSystem.
 const GeothermalModel = SimulationModel{<:Any, <:H2OSystem, <:Any, <:Any}
+Jutul.default_value(model::GeothermalModel, ::JutulDarcy.PhaseMassFractions) = 1.0
 
 # Only Pressure is selected here. The Enthalpy primary variable is added by add_thermal_to_model!.
 function JutulDarcy.select_primary_variables!(S, ::H2OSystem, model::SimulationModel)
