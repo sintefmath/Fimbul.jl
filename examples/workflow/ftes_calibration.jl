@@ -35,7 +35,6 @@ function setup_ftes_simulator(case)
 	# 	rtol = 1e-3,
 	# )
 	simulator, config = setup_reservoir_simulator(case;
-		# linear_solver = linsolve,
 		output_substates = true,
 		relaxation = true,
 		initial_dt = 14day,
@@ -118,7 +117,7 @@ mesh_args = (
 )
 
 controls = Fimbul.ftes_controls(
-	rate_charge = 50.0liter/second,
+	rate_charge = 5.0liter/second,
 	temperature_charge = convert_to_si(90.0, :Celsius),
 	temperature_discharge = convert_to_si(20.0, :Celsius),
 	producer_bhp_fraction = 0.2,
@@ -132,6 +131,7 @@ fractures_horizontal = Fimbul.setup_ftes_fractures(
 	10,
 	depth_window.z_min,
 	depth_window.z_max;
+	uniform_spacing = true,
 	strike = (0.0, 20.0),
 	dip = (0.0, 2.5),
 	radius = 55.0,
@@ -167,7 +167,6 @@ parameters_real = Fimbul.ftes_parameters(
 	# ),
 	fracture_properties = (
 		aperture = fractures_real[:aperture],
-		permeability = real_fracture_permeability,
 		porosity = fractures_real[:porosity],
 	),
 )
