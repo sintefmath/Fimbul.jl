@@ -220,6 +220,146 @@ function ftes(wells, fractures=Union{NamedTuple, Int}; kwargs...)
 
 end
 
+function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol, Any};
+    depths = nothing, info_level=0, mesh_args...)
+
+    # Make constraints from well coordinates
+    info_level > 0 && @info "Setting up wells and making mesh"
+    collars = hcat([x[1:2, 1] for x in well_coordinates]...)
+    Δx_min, Δx_max = Fimbul.min_max_distance(collars)
+    hxy_min = Δx_min/4
+    r_given = filter(!isinf, fractures[:radius])
+    r_max = ifelse(isempty(r_given), 0.0, maximum(r_given))
+    well_offset = max(Δx_max/2, r_max-Δx_max/2)
+    well_outline = Fimbul.offset_boundary(collars, well_offset; n=24)
+    well_outline = hcat(well_outline, well_outline[:, 1]) # Close the loop
+    
+    collars = [permutedims([x[1] x[2]]).+hxy_min/2 for x in eachcol(collars)]
+    cell_constraints = [x for x in collars]
+    push!(cell_constraints, well_outline)
+    # Determine layers including the well depths
+    well_depth = maximum(maximum(x[3, :]) for x in well_coordinates)
+    if isnothing(depths)
+        depths = [0.0, well_depth+1e-2, well_depth*1.25]
+    else
+        extra_depths = [0.0, well_depth+1e-2, well_depth*1.25]
+        for d in extra_depths
+            if all(!isapprox.(depths, d, atol=0.5))
+                push!(depths, d)
+            end
+        end
+        depths = sort(depths)
+    end
+    # Generate mesh
+    num_fractures = length(fractures[:normal])
+    hz = diff(depths)./[num_fractures*3, 2]
+    matrix_mesh, layers, _ = extruded_mesh(cell_constraints, depths;
+        hxy_min=hxy_min, hz=hz, offset=well_offset*4, offset_rel=missing, mesh_args...)
+    # Add fractures as polygonal disk cuts (radius from fracture dict)
+    n_poly = 16
+    θ_poly = range(0.0, 2π, length = n_poly + 1)[1:n_poly]
+    function fracture_plane_basis(n_hat)
+        ref = abs(n_hat[1]) < 0.9 ? [1.0, 0.0, 0.0] : [0.0, 1.0, 0.0]
+        u = ref .- dot(ref, n_hat) .* n_hat; u ./= norm(u)
+        v = cross(n_hat, u); v ./= norm(v)
+        return u, v
+    end
+    cuts = []
+    # Compute domain radius
+    info_level > 0 && @info "Adding fractures to the mesh"
+    geo = tpfv_geometry(matrix_mesh)
+    for (normal, center, r) in zip(fractures[:normal], fractures[:centers], fractures[:radius])
+        if isinf(r)
+            push!(cuts, PlaneCut(center, normal))
+        else
+            n_hat = normal ./ norm(normal)
+            u, v = fracture_plane_basis(n_hat)
+            polygon = [Jutul.SVector{3, Float64}(
+                center[1] + r * (cos(θ) * u[1] + sin(θ) * v[1]),
+                center[2] + r * (cos(θ) * u[2] + sin(θ) * v[2]),
+                center[3] + r * (cos(θ) * u[3] + sin(θ) * v[3])) for θ in θ_poly]
+            push!(cuts, PolygonalSurface([polygon]))
+        end
+    end
+    matrix_mesh, info = cut_mesh(matrix_mesh, cuts; extra_out = true, min_cut_fraction = 0.0)
+    fracture_faces = findall(info[:face_index] .== 0)
+    layers = layers[info[:cell_index]]
+    # Generate embedded mesh for fractures
+    fracture_mesh = Jutul.EmbeddedMeshes.EmbeddedMesh(matrix_mesh, fracture_faces)
+
+    geo_matrix = tpfv_geometry(matrix_mesh)
+    geo_fractures = tpfv_geometry(fracture_mesh)
+
+    reservoir_disc = Dict{Symbol, Any}()
+    reservoir_disc[:matrix] = Dict(
+        :mesh => matrix_mesh, :layers => layers, :geometry => geo_matrix)
+    reservoir_disc[:fractures] = Dict(:mesh => fracture_mesh, :geometry => geo_fractures)
+
+    # Generate matrix and fracture domains
+    cells_inj = Jutul.find_enclosing_cells(matrix_mesh, permutedims(well_coordinates[1]), n=1_000_000)
+
+    x_prod = [permutedims(x) for x in well_coordinates[2:end]]
+    connectivity = zeros(Int, length(x_prod)+1, 2)
+    connectivity[2:end, 1] .= 1
+    cells_prod, wcells, neighborship = Fimbul.get_well_neighborship(
+        matrix_mesh, x_prod, connectivity, geo_matrix; top_node=true, n=1_000_000)
+    well_cell_centers = hcat([0; 0; 0], geo_matrix.cell_centroids[:, cells_prod])
+
+    well_disc = Dict{Symbol, Any}()
+    well_disc[:injector] = Dict(:cells => cells_inj)
+    well_disc[:producer] = Dict(
+        :cells => cells_prod,
+        :neighborship => neighborship,
+        :well_cell_centers => well_cell_centers,
+        :perforation_cells_well => wcells[2:end],
+        )
+
+    discretization = Dict{Symbol, Any}()
+    discretization[:reservoir] = reservoir_disc
+    discretization[:well] = well_disc
+
+    return discretization
+
+end
+
+function ftes_discretization(wells, fractures=Union{NamedTuple, Int}; kwargs...)
+     well_coordinates = wells
+    if well_coordinates isa NamedTuple
+        if !haskey(well_coordinates, :num_producers) || !haskey(well_coordinates, :radius) || !haskey(well_coordinates, :depth)
+            error("Named tuple defining wells must contain the keys: :num_producers, :radius, and :depth")
+        end
+        well_coordinates = setup_ftes_well_coordinates(wells.num_producers, wells.radius, wells.depth)
+    end
+    well_coordinates isa Vector{Matrix{Float64}} || error("well_coordinates must be a Vector of Matrix{Float64}")
+
+    if fractures isa Int
+        z_min = minimum(minimum(x[3, :] for x in well_coordinates))
+        z_max = maximum(maximum(x[3, :] for x in well_coordinates))
+        Δz = z_max - z_min
+        z_min += Δz/8
+        z_max -= Δz/8
+        fractures = (num=fractures, z_min=z_min, z_max=z_max)
+    end
+    if fractures isa NamedTuple
+        if !haskey(fractures, :num) || !haskey(fractures, :z_min) || !haskey(fractures, :z_max)
+            error("Named tuple defining fractures must contain the keys: :num, :z_min, and :z_max")
+        end
+        num_fractures = fractures.num
+        z_min = fractures.z_min
+        z_max = fractures.z_max
+        # Remove these keys from the named tuple before passing to the setup function
+        fractures = (; (k => v for (k, v) in pairs(fractures) if k ∉ (:num, :z_min, :z_max))...)
+        fractures = setup_ftes_fractures(num_fractures, z_min, z_max; fractures...)
+    end
+    fractures isa Dict{Symbol, Any} || error("fractures must be a Dict{Symbol, Any}")
+    required_keys = [:normal, :centers, :radius, :aperture, :porosity]
+    for key in required_keys
+        haskey(fractures, key) || error("fractures must contain the key: $key")
+    end
+
+    return ftes_discretization(well_coordinates, fractures; kwargs...)
+end
+
 function setup_ftes_well_coordinates(num_producers::Int, radius::Float64, depth::Float64)
     # Place producers in a circle around the injector
     Δθ = 2π/(num_producers)
