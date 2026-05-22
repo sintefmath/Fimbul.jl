@@ -72,7 +72,7 @@ function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100
         case;
         tol_cnv = 1e-3,
         tol_mb = 1e-7,
-        info_level = 2,
+        info_level = 0,
         max_timestep = maximum(case.dt),
         relaxation = true,
     )
