@@ -51,12 +51,21 @@ function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, 
 
     info_level > 0 && @info "Setting up matrix, fracture, and well domains"
     matrix_domain = layered_reservoir_domain(matrix_mesh, layers, matrix_parameters[:properties])
+    # volumes = max.(matrix_domain[:volumes], 1e-6)
+    # matrix_domain[:volumes, Cells()] = volumes
+    # areas = max.(matrix_domain[:areas], 1e-6)
+    # matrix_domain[:areas, Faces()] = areas
+
     fracture_properties = expand_ftes_fracture_properties(fracture_parameters[:properties], fracture_disc)
     fracture_domain = JutulDarcy.fracture_domain(
         fracture_mesh,
         matrix_domain;
         fracture_properties...,
     )
+    # volumes = max.(fracture_domain[:volumes], 1e-6)
+    # fracture_domain[:volumes, Cells()] = volumes
+    # areas = max.(fracture_domain[:areas], 1e-6)
+    # fracture_domain[:areas, Faces()] = areas
 
     injector_disc = well_disc[:injector]
     well_inj = setup_well(
