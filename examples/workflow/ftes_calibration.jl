@@ -13,8 +13,6 @@ meter, day, year, darcy, bar, liter, second = si_units(
 	:second,
 )
 
-Random.seed!(2026)
-
 function merge_fracture_sets(fracture_sets...)
 	merged = Dict{Symbol, Any}()
 	all_keys = reduce(union, (collect(keys(fr)) for fr in fracture_sets))
@@ -37,10 +35,24 @@ function setup_ftes_simulator(case)
 	simulator, config = setup_reservoir_simulator(case;
 		output_substates = true,
 		relaxation = true,
-		initial_dt = 14day,
+		initial_dt = 5.0,
 		info_level = 0,
 	)
-	push!(config[:timestep_selectors], JutulDarcy.ControlChangeTimestepSelector(case.model, 0.2, 45day))
+	for well in well_symbols(case.model)
+		config[:tolerances][well][:mass_conservation] = (
+			CNV = Inf, MB = 1e-5,
+			increment_dp_abs = 1e-3*si"atm", increment_dp_rel = Inf,
+			increment_dz = Inf, increment_saturation = Inf)
+		config[:tolerances][well][:energy_conservation] = (
+			CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
+	end
+	# config[:tolerances][:Fractures][:mass_conservation] = (
+	# 	CNV = Inf, MB = 1.0e-5,
+	# 	increment_dp_abs = 1e-3*si"atm", increment_dp_rel = Inf,
+	# 	increment_dz = Inf, increment_saturation = Inf)
+	# config[:tolerances][:Fractures][:energy_conservation] = (
+	# 	CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
+	push!(config[:timestep_selectors], JutulDarcy.ControlChangeTimestepSelector(case.model, 0.0, 5.0))
 	push!(config[:timestep_selectors], VariableChangeTimestepSelector(:Temperature, 15.0;
 		model = :Reservoir,
 		relative = false,
@@ -117,7 +129,7 @@ mesh_args = (
 )
 
 controls = Fimbul.ftes_controls(
-	rate_charge = 5.0liter/second,
+	rate_charge = 12.0liter/second,
 	temperature_charge = convert_to_si(90.0, :Celsius),
 	temperature_discharge = convert_to_si(20.0, :Celsius),
 	producer_bhp_fraction = 0.2,
@@ -127,6 +139,7 @@ controls = Fimbul.ftes_controls(
 )
 
 # ## Step 1: "Real" FTES case
+Random.seed!(2026)
 fractures_horizontal = Fimbul.setup_ftes_fractures(
 	10,
 	depth_window.z_min,
@@ -135,22 +148,25 @@ fractures_horizontal = Fimbul.setup_ftes_fractures(
 	strike = (0.0, 20.0),
 	dip = (0.0, 2.5),
 	radius = 55.0,
-	aperture = 1e-4,
-	porosity = 0.35,
+	aperture = (0.5e-3, 1.5e-4),
+	porosity = (0.5, 0.2),
+	# porosity = 0.5,
 )
 
+Δz = depth_window.z_max - depth_window.z_min
 fractures_conductive = Fimbul.setup_ftes_fractures(
-	5,
-	depth_window.z_min,
-	depth_window.z_max;
+	1,
+	depth_window.z_min + 0.3Δz,
+	depth_window.z_max - 0.3Δz;
 	strike = (0.0, 15.0),
-	dip = (10.0, 5.0),
+	dip = (0.0, 2.5),
 	radius = Inf,
 	aperture = 0.5e-3,
 	porosity = 0.4,
 )
 
 fractures_real = merge_fracture_sets(fractures_horizontal, fractures_conductive)
+fractures_real = fractures_horizontal
 real_fracture_permeability = vcat(fill(2.0e-4*darcy, 10), fill(1.0e-3*darcy, 5))
 
 discretization_real = Fimbul.ftes_discretization(
@@ -172,6 +188,21 @@ parameters_real = Fimbul.ftes_parameters(
 )
 
 case_real = Fimbul.ftes(discretization_real, parameters_real, controls; info_level = 1)
+
+##
+using Statistics
+
+# names = [:Transmissibilities, :RockThermalConductivities, :FluidThermalConductivities]
+# for name in names
+# 	values = case_real.parameters[:Fractures][name]
+# 	fix = values .== 0.0
+# 	if any(fix)
+# 		mean_value = mean(values[.!fix])
+# 		values[fix] .= mean_value
+# 		@info "Replaced $(sum(fix)) zero values in $name with mean value $mean_value"
+# 	end
+# end
+
 
 ##
 matrix_mesh = physical_representation(reservoir_model(case_real.model).data_domain)
@@ -197,7 +228,6 @@ plot_ftes_wells(ax)
 fig
 
 ##
-
 result_real = run_case(case_real; info_level = 2)
 
 # ## Step 2: Idealized FTES case
@@ -226,9 +256,10 @@ parameters_initial = Fimbul.ftes_parameters(
 	# 	porosity = 0.12,
 	# ),
 	fracture_properties = (
-		aperture = fill(2.5e-4, 10),
-		permeability = fill(3.0e-4*darcy, 10),
-		porosity = fill(0.2, 10),
+		aperture = fractures_idealized[:aperture],
+		porosity = fractures_idealized[:porosity],
+		# permeability = fill(3.0e-4*darcy, 10),
+		# porosity = fill(0.2, 10),
 	),
 )
 
@@ -236,7 +267,7 @@ case_initial = Fimbul.ftes(discretization_idealized, parameters_initial, control
 result_initial = run_case(case_initial; info_level = 2)
 
 # ## Step 3: Calibrate the idealized case
-truth_well_data = result_real.well_results
+truth_well_data = result_real.wells
 prod_temp_ref = get_1d_interpolator(truth_well_data.time, truth_well_data[:Producer, :temperature])
 prod_rate_ref = get_1d_interpolator(truth_well_data.time, truth_well_data[:Producer, :wrat])
 inj_bhp_ref = get_1d_interpolator(truth_well_data.time, truth_well_data[:Injector, :bhp])
@@ -255,29 +286,29 @@ function mismatch_objective(model, state, dt, step_info, forces)
 	injector_bhp = compute_well_qoi(model, state, forces, :Injector, :bhp)
 
 	dtemp = (prod_temp_ref(time) - producer_temp)/convert_to_si(1.0, :Kelvin)
-	drate = (prod_rate_ref(time) - producer_rate)/(liter/second)
-	dbhp = (inj_bhp_ref(time) - injector_bhp)/bar
+	# drate = (prod_rate_ref(time) - producer_rate)/(liter/second)
+	# dbhp = (inj_bhp_ref(time) - injector_bhp)/bar
 
 	return dt*(dtemp^2 + 0.05*drate^2 + 0.1*dbhp^2)/total_time
 end
 
 opt = JutulDarcy.setup_reservoir_dict_optimization(parameters_initial, setup_idealized_case)
-free_optimization_parameter!(opt, [:reservoir, :matrix, :properties, :permeability],
-	abs_min = 1.0e-5*darcy,
-	abs_max = 5.0e-4*darcy,
-)
-free_optimization_parameter!(opt, [:reservoir, :matrix, :properties, :porosity],
-	abs_min = 0.03,
-	abs_max = 0.2,
-)
+# free_optimization_parameter!(opt, [:reservoir, :matrix, :properties, :permeability],
+# 	abs_min = 1.0e-5*darcy,
+# 	abs_max = 5.0e-4*darcy,
+# )
+# free_optimization_parameter!(opt, [:reservoir, :matrix, :properties, :porosity],
+# 	abs_min = 0.03,
+# 	abs_max = 0.2,
+# )
 free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :aperture],
 	abs_min = 1.0e-4,
 	abs_max = 1.0e-3,
 )
-free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :permeability],
-	abs_min = 5.0e-5*darcy,
-	abs_max = 2.0e-3*darcy,
-)
+# free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :permeability],
+# 	abs_min = 5.0e-5*darcy,
+# 	abs_max = 2.0e-3*darcy,
+# )
 free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :porosity],
 	abs_min = 0.05,
 	abs_max = 0.6,
@@ -306,3 +337,16 @@ println(parameters_initial)
 println()
 println("Optimized parameters:")
 println(parameters_optimized)
+
+##
+Tf = case_real.parameters[:Fractures][:Transmissibilities]
+is_zero = Tf .== 0.0
+fig = Figure(size = (900, 700))
+ax = Axis3(fig[1, 1])
+plot_mesh!(ax, fracture_mesh, outer=false)
+plot_mesh_edges!(ax, fracture_mesh, outer=false, alpha = 0.1)
+fig
+geo = tpfv_geometry(fracture_mesh)
+xf = geo.face_centroids[:, is_zero]
+scatter!(ax, xf[1,:], xf[2,:], xf[3,:], markersize = 10)
+fig
