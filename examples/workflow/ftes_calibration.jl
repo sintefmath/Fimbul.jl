@@ -251,10 +251,9 @@ discretization_idealized = Fimbul.ftes_discretization(
 )
 
 parameters_initial = Fimbul.ftes_parameters(
-	# matrix_properties = (
-	# 	permeability = 1.5e-4*darcy,
-	# 	porosity = 0.12,
-	# ),
+	matrix_properties = (
+		rock_thermal_conductivity = 4.0*si"watt/(meter*Kelvin)",
+	),
 	fracture_properties = (
 		aperture = fractures_idealized[:aperture],
 		porosity = fractures_idealized[:porosity],
@@ -293,25 +292,29 @@ function mismatch_objective(model, state, dt, step_info, forces)
 end
 
 opt = JutulDarcy.setup_reservoir_dict_optimization(parameters_initial, setup_idealized_case)
-# free_optimization_parameter!(opt, [:reservoir, :matrix, :properties, :permeability],
+# free_optimization_parameter!(opt, [:reservoir, :matrix, :permeability],
 # 	abs_min = 1.0e-5*darcy,
 # 	abs_max = 5.0e-4*darcy,
 # )
-# free_optimization_parameter!(opt, [:reservoir, :matrix, :properties, :porosity],
+# free_optimization_parameter!(opt, [:reservoir, :matrix, :porosity],
 # 	abs_min = 0.03,
 # 	abs_max = 0.2,
 # )
+free_optimization_parameter!(opt, [:reservoir, :matrix, :rock_thermal_conductivity],
+	abs_min = 1.0*si"watt/(meter*Kelvin)",
+	abs_max = 4.0*si"watt/(meter*Kelvin)",
+)
 free_optimization_parameter!(opt, [:reservoir, :fractures, :aperture],
 	abs_min = 1.0e-4,
 	abs_max = 1.0e-3,
 )
-# free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :permeability],
+# free_optimization_parameter!(opt, [:reservoir, :fractures, :permeability],
 # 	abs_min = 5.0e-5*darcy,
 # 	abs_max = 2.0e-3*darcy,
 # )
 free_optimization_parameter!(opt, [:reservoir, :fractures, :porosity],
-	abs_min = 0.05,
-	abs_max = 0.6,
+	abs_min = 0.2,
+	abs_max = 0.8,
 )
 
 parameters_optimized = JutulDarcy.optimize_reservoir(
