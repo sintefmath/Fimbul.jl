@@ -389,24 +389,22 @@ function ftes_parameters(;
     fracture_properties = Dict{Symbol, Any}(),
     )
 
-    if isempty(matrix_properties)
-        matrix_properties = Dict{Symbol, Any}(
-            :permeability => 1e-4si_unit(:darcy),
-            :porosity => 0.01,
-            :rock_thermal_conductivity => 2.5*watt/(meter*Kelvin),
-        )
-    else
-        matrix_properties = to_symbol_dict(matrix_properties)
-    end
-    if isempty(fracture_properties)
-        fracture_properties = Dict{Symbol, Any}(
-            :aperture => 1.0e-4,
-            :permeability => missing,
-            :porosity => 0.5,
-        )
-    else
-        fracture_properties = to_symbol_dict(fracture_properties)
-    end
+    default_matrix_properties = Dict{Symbol, Any}(
+        :permeability => 1e-4si_unit(:darcy),
+        :porosity => 0.01,
+        :rock_thermal_conductivity => 2.5*watt/(meter*Kelvin),
+    )
+    matrix_properties = to_symbol_dict(matrix_properties)
+    matrix_properties = merge(default_matrix_properties, matrix_properties)
+
+    default_fracture_properties = Dict{Symbol, Any}(
+        :aperture => 1.0e-4,
+        :permeability => missing,
+        :porosity => 0.5,
+    )
+    fracture_properties = to_symbol_dict(fracture_properties)
+    fracture_properties = merge(default_fracture_properties, fracture_properties)
+
     matrix_properties = normalize_ftes_layer_properties(matrix_properties)
 
     p0(z) = 20si_unit(:atm)
