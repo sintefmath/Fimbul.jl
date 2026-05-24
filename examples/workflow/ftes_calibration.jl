@@ -289,7 +289,7 @@ function mismatch_objective(model, state, dt, step_info, forces)
 	# drate = (prod_rate_ref(time) - producer_rate)/(liter/second)
 	# dbhp = (inj_bhp_ref(time) - injector_bhp)/bar
 
-	return dt*(dtemp^2 + 0.05*drate^2 + 0.1*dbhp^2)/total_time
+	return dt*dtemp^2/total_time
 end
 
 opt = JutulDarcy.setup_reservoir_dict_optimization(parameters_initial, setup_idealized_case)
@@ -301,7 +301,7 @@ opt = JutulDarcy.setup_reservoir_dict_optimization(parameters_initial, setup_ide
 # 	abs_min = 0.03,
 # 	abs_max = 0.2,
 # )
-free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :aperture],
+free_optimization_parameter!(opt, [:reservoir, :fractures, :aperture],
 	abs_min = 1.0e-4,
 	abs_max = 1.0e-3,
 )
@@ -309,7 +309,7 @@ free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :apertur
 # 	abs_min = 5.0e-5*darcy,
 # 	abs_max = 2.0e-3*darcy,
 # )
-free_optimization_parameter!(opt, [:reservoir, :fractures, :properties, :porosity],
+free_optimization_parameter!(opt, [:reservoir, :fractures, :porosity],
 	abs_min = 0.05,
 	abs_max = 0.6,
 )

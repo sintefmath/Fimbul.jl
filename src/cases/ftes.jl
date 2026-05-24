@@ -24,12 +24,36 @@ function expand_ftes_fracture_property(values, fracture_disc::Dict{Symbol, Any})
 end
 
 function expand_ftes_fracture_properties(properties, fracture_disc::Dict{Symbol, Any})
-    return (; (k => expand_ftes_fracture_property(v, fracture_disc) for (k, v) in pairs(properties))...)
+    return Dict{Symbol, Any}(k => expand_ftes_fracture_property(v, fracture_disc) for (k, v) in pairs(properties))
 end
 
-function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, controls::Dict{Symbol, Any};
+function to_symbol_dict(values)
+    return Dict{Symbol, Any}(pairs(values))
+end
+
+function to_nested_symbol_dict(values)
+    if values isa AbstractDict
+        return Dict{Symbol, Any}(
+            key => to_nested_symbol_dict(value) for (key, value) in pairs(to_symbol_dict(values))
+        )
+    else
+        return values
+    end
+end
+
+function normalize_ftes_layer_properties(properties)
+    return Dict{Symbol, Any}(
+        key => (value isa AbstractVector ? value : [value]) for (key, value) in pairs(properties)
+    )
+end
+
+function ftes(discretization::AbstractDict, parameters::AbstractDict, controls::AbstractDict;
     info_level = 0,
     )
+
+    discretization = to_nested_symbol_dict(discretization)
+    parameters = to_nested_symbol_dict(parameters)
+    controls = to_nested_symbol_dict(controls)
 
     reservoir_disc = discretization[:reservoir]
     well_disc = discretization[:well]
@@ -50,17 +74,17 @@ function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, 
     bc_parameters = parameters[:boundary_conditions]
 
     info_level > 0 && @info "Setting up matrix, fracture, and well domains"
-    matrix_domain = layered_reservoir_domain(matrix_mesh, layers, matrix_parameters[:properties])
+    matrix_domain = layered_reservoir_domain(matrix_mesh, layers, (; pairs(matrix_parameters)...))
     # volumes = max.(matrix_domain[:volumes], 1e-6)
     # matrix_domain[:volumes, Cells()] = volumes
     # areas = max.(matrix_domain[:areas], 1e-6)
     # matrix_domain[:areas, Faces()] = areas
 
-    fracture_properties = expand_ftes_fracture_properties(fracture_parameters[:properties], fracture_disc)
+    fracture_properties = expand_ftes_fracture_properties(fracture_parameters, fracture_disc)
     fracture_domain = JutulDarcy.fracture_domain(
         fracture_mesh,
         matrix_domain;
-        fracture_properties...,
+        pairs(fracture_properties)...,
     )
     # volumes = max.(fracture_domain[:volumes], 1e-6)
     # fracture_domain[:volumes, Cells()] = volumes
@@ -71,14 +95,14 @@ function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, 
     well_inj = setup_well(
         matrix_domain,
         injector_disc[:cells];
-        injector_parameters...,
+        pairs(injector_parameters)...,
     )
 
     producer_disc = well_disc[:producer]
     well_prod = setup_well(
         matrix_domain,
         producer_disc[:cells];
-        producer_parameters...,
+        pairs(producer_parameters)...,
         neighborship = producer_disc[:neighborship],
         perforation_cells_well = producer_disc[:perforation_cells_well],
         well_cell_centers = producer_disc[:well_cell_centers],
@@ -180,10 +204,10 @@ function ftes(discretization::Dict{Symbol, Any}, parameters::Dict{Symbol, Any}, 
 
 end
 
-function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol, Any};
+function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::AbstractDict;
     depths = nothing,
-    matrix_properties = NamedTuple(),
-    fracture_properties = NamedTuple(),
+    matrix_properties = Dict{Symbol, Any}(),
+    fracture_properties = Dict{Symbol, Any}(),
     rate_charge = missing,
     rate_discharge = missing,
     temperature_charge = convert_to_si(95.0, :Celsius),
@@ -197,11 +221,15 @@ function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol,
     )
 
     if isempty(fracture_properties)
-        fracture_properties = (
-            aperture = fractures[:aperture],
-            permeability = get(fractures, :permeability, missing),
-            porosity = fractures[:porosity],
+        fractures = to_symbol_dict(fractures)
+        fracture_properties = Dict{Symbol, Any}(
+            :aperture => fractures[:aperture],
+            :permeability => get(fractures, :permeability, missing),
+            :porosity => fractures[:porosity],
         )
+    else
+        fractures = to_symbol_dict(fractures)
+        fracture_properties = to_symbol_dict(fracture_properties)
     end
 
     discretization = ftes_discretization(
@@ -236,8 +264,10 @@ function ftes(wells, fractures=Union{NamedTuple, Int}; kwargs...)
 
 end
 
-function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol, Any};
+function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fractures::AbstractDict;
     depths = nothing, info_level=0, hxy_min=missing, mesh_args...)
+
+    fractures = to_symbol_dict(fractures)
 
     # Make constraints from well coordinates
     info_level > 0 && @info "Setting up wells and making mesh"
@@ -355,28 +385,37 @@ function ftes_discretization(wells, fractures=Union{NamedTuple, Int}; kwargs...)
 end
 
 function ftes_parameters(;
-    matrix_properties = NamedTuple(),
-    fracture_properties = NamedTuple(),
+    matrix_properties = Dict{Symbol, Any}(),
+    fracture_properties = Dict{Symbol, Any}(),
     )
 
     if isempty(matrix_properties)
-        matrix_properties = (permeability = 1e-4si_unit(:darcy), porosity = 0.01)
+        matrix_properties = Dict{Symbol, Any}(
+            :permeability => 1e-4si_unit(:darcy),
+            :porosity => 0.01,
+            :rock_thermal_conductivity => 2.5*watt/(meter*Kelvin),
+        )
+    else
+        matrix_properties = to_symbol_dict(matrix_properties)
     end
     if isempty(fracture_properties)
-        fracture_properties = (aperture = 1.0e-4, permeability = missing, porosity = 0.5)
+        fracture_properties = Dict{Symbol, Any}(
+            :aperture => 1.0e-4,
+            :permeability => missing,
+            :porosity => 0.5,
+        )
+    else
+        fracture_properties = to_symbol_dict(fracture_properties)
     end
+    matrix_properties = normalize_ftes_layer_properties(matrix_properties)
 
     p0(z) = 20si_unit(:atm)
     T0(z) = convert_to_si(10.0, :Celsius)
 
     parameters = Dict{Symbol, Any}()
     parameters[:reservoir] = Dict{Symbol, Any}(
-        :matrix => Dict{Symbol, Any}(
-            :properties => matrix_properties,
-        ),
-        :fractures => Dict{Symbol, Any}(
-            :properties => fracture_properties,
-        ),
+        :matrix => matrix_properties,
+        :fractures => fracture_properties,
     )
     parameters[:well] = Dict{Symbol, Any}(
         :injector => Dict{Symbol, Any}(
@@ -491,7 +530,8 @@ function normalize_ftes_inputs(wells, fractures)
         fractures = (; (k => v for (k, v) in pairs(fractures) if k ∉ (:num, :z_min, :z_max))...)
         fractures = setup_ftes_fractures(num_fractures, z_min, z_max; fractures...)
     end
-    fractures isa Dict{Symbol, Any} || error("fractures must be a Dict{Symbol, Any}")
+    fractures isa AbstractDict || error("fractures must be an AbstractDict with Symbol keys")
+    fractures = to_symbol_dict(fractures)
     required_keys = [:normal, :centers, :radius, :aperture, :porosity]
     for key in required_keys
         haskey(fractures, key) || error("fractures must contain the key: $key")
