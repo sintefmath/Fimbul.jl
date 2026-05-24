@@ -325,9 +325,9 @@ parameters_optimized = JutulDarcy.optimize_reservoir(
 case_optimized = Fimbul.ftes(discretization_idealized, parameters_optimized, controls; info_level = 1)
 result_optimized = run_case(case_optimized)
 
-observed_real = get_well_observables(result_real.well_results)
-observed_initial = get_well_observables(result_initial.well_results)
-observed_optimized = get_well_observables(result_optimized.well_results)
+observed_real = get_well_observables(result_real.wells)
+observed_initial = get_well_observables(result_initial.wells)
+observed_optimized = get_well_observables(result_optimized.wells)
 
 match_figure = plot_match(observed_real, observed_initial, observed_optimized)
 display(match_figure)
@@ -337,16 +337,3 @@ println(parameters_initial)
 println()
 println("Optimized parameters:")
 println(parameters_optimized)
-
-##
-Tf = case_real.parameters[:Fractures][:Transmissibilities]
-is_zero = Tf .== 0.0
-fig = Figure(size = (900, 700))
-ax = Axis3(fig[1, 1])
-plot_mesh!(ax, fracture_mesh, outer=false)
-plot_mesh_edges!(ax, fracture_mesh, outer=false, alpha = 0.1)
-fig
-geo = tpfv_geometry(fracture_mesh)
-xf = geo.face_centroids[:, is_zero]
-scatter!(ax, xf[1,:], xf[2,:], xf[3,:], markersize = 10)
-fig
