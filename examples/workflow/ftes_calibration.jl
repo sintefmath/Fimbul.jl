@@ -50,17 +50,17 @@ function get_well_observables(well_results)
     return (time = t_days, producer_temp = producer_temp)
 end
 
-function plot_match!(ax, reference, simulated::AbstractVector)
+function plot_ftes_match!(ax, reference, simulated::AbstractVector)
     colors = Makie.wong_colors(6)[[1, 2]]
 
     lines!(ax, reference.time, reference.producer_temp;
-        label = "Reference", linewidth = 5, linestyle = :dash, color = :black)
+        label = "Reference", linewidth = 6, linestyle = :dash, color = :black)
     lines!(ax, simulated[1].time, simulated[1].producer_temp;
         label = "Initial", linewidth = 2, color = colors[1])
     if length(simulated) > 2
         for observable in simulated[2:end-1]
             lines!(ax, observable.time, observable.producer_temp;
-                label = "Optimization iterate", linewidth = 2, color = :gray)
+                label = "Iterates", linewidth = 2, color = :gray, depth_shift=0, alpha=0.5)
         end
     end
     if length(simulated) > 1
@@ -206,6 +206,26 @@ parameters_initial = Fimbul.ftes_parameters(
 
 case_initial = Fimbul.ftes(
     discretization_idealized, parameters_initial, controls; info_level = 1)
+
+##
+matrix_mesh = physical_representation(reservoir_model(case_initial.model).data_domain)
+fracture_mesh = physical_representation(case_initial.model.models[:Fractures].data_domain)
+
+axis_args = (
+    perspectiveness = 0.75,
+    zreversed = true,
+    aspect = :data,
+    elevation = 0.025π,
+    azimuth = 1.35π,
+)
+fig = Figure(size = (900, 700))
+ax = Axis3(fig[1, 1]; axis_args..., title = "FTES initial system")
+Jutul.plot_mesh!(ax, fracture_mesh; color = :gray)
+Jutul.plot_mesh_edges!(ax, matrix_mesh; alpha = 0.1)
+plot_ftes_wells!(ax, case_initial)
+fig
+
+##
 sim, cfg = setup_ftes_simulator(case_initial; output_substates = true)
 result_initial = simulate_reservoir(
     case_initial; simulator = sim, config = cfg)
@@ -216,11 +236,11 @@ result_initial = simulate_reservoir(
 reference_observables = get_well_observables(result_reference.wells)
 initial_observables = get_well_observables(result_initial.wells)
 
-fig = Figure(size = (900, 500))
+fig = Figure(size = (600, 500))
 ax = Axis(fig[1, 1];
     xlabel = "Time (days)",
-    ylabel = "Producer temperature (°C)",
-    title = "Initial mismatch",
+    title = "Producer temperature (°C)",
+    aspect = AxisAspect(1)
 )
 plot_match!(ax, reference_observables, [initial_observables])
 fig
@@ -276,7 +296,7 @@ parameters_optimized = JutulDarcy.optimize_reservoir(
     opt,
     mismatch_objective;
     deps = :case,
-    max_it = 2,
+    max_it = 10,
     optimizer = :lbfgsb_qp,
     simulator = simulator,
     config = config,
@@ -295,7 +315,7 @@ parameters_optimized = JutulDarcy.optimize_reservoir(
 simulated_observables = []
 push!(simulated_observables, initial_observables)
 # For illustraional purposes, we simulate the intermediate optimization iterates
-# to show how the response evolves during calibration. Adjust the range of
+# to show how the response evolves During calibration. Adjust the range of
 # `simulate_int` to control how many intermediate iterates to recompute.
 simulate_int = 2:length(opt.history.solutions)-1
 simulate_int = setdiff(simulate_int, [1, length(opt.history.solutions)])
@@ -316,20 +336,25 @@ fig = Figure(size = (1000, 500))
 ax = Axis(fig[1, 1];
     xlabel = "Time (days)",
     title = "Producer temperature (°C)",
+    aspect = AxisAspect(1)
 )
-plot_match!(ax, reference_observables, simulated_observables)
+plot_ftes_match!(ax, reference_observables, simulated_observables)
 
 ax = Axis(fig[1, 2];
     xlabel = "Optimization iteration",
     title = "Temperature mismatch objective (-)",
+    yscale = log10,
+    aspect = AxisAspect(1),
+    xticks = 1:length(opt.history.objectives),
 )
 
 colors = Makie.wong_colors(6)[[1, 2]]
-lines!(ax, opt.history.objectives; linewidth = 2, color = :black)
-scatter!(ax, opt.history.objectives, markersize = 8, color = :gray)
-scatter!(ax, 1, opt.history.objectives[1];
+obj0 = opt.history.objectives[1]
+lines!(ax, opt.history.objectives./obj0; linewidth = 2, color = :black)
+scatter!(ax, opt.history.objectives./obj0, markersize = 8, color = :gray)
+scatter!(ax, 1, opt.history.objectives[1]/obj0;
     markersize = 10, color = colors[1], label = "Initial")
-scatter!(ax, length(opt.history.objectives), opt.history.objectives[end];
+scatter!(ax, length(opt.history.objectives), opt.history.objectives[end]/obj0;
     markersize = 10, color = colors[2], label = "Final")
 fig
 
