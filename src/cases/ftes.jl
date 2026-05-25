@@ -265,7 +265,7 @@ function ftes(wells, fractures=Union{NamedTuple, Int}; kwargs...)
 end
 
 function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fractures::AbstractDict;
-    depths = nothing, info_level=0, hxy_min=missing, mesh_args...)
+    depths = nothing, info_level=0, hxy_min=missing, hz=missing, mesh_args...)
 
     fractures = to_symbol_dict(fractures)
 
@@ -298,7 +298,7 @@ function ftes_discretization(well_coordinates::Vector{Matrix{Float64}}, fracture
     end
     # Generate mesh
     num_fractures = length(fractures[:normal])
-    hz = diff(depths)./[num_fractures*3, 2]
+    hz = ifelse(ismissing(hz), diff(depths)./[num_fractures*3, 2], hz)
     matrix_mesh, layers, _ = extruded_mesh(cell_constraints, depths;
         hxy_min=hxy_min, hz=hz, offset=well_offset*4, offset_rel=missing, mesh_args...)
     # Add fractures as polygonal disk cuts (radius from fracture dict)
