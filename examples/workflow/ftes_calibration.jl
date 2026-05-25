@@ -82,7 +82,7 @@ function get_well_observables(well_results)
 	return (time = t_days, producer_temp = producer_temp, producer_rate = producer_rate, injector_bhp = injector_bhp)
 end
 
-function plot_match(reference, initial, optimized)
+function plot_match(reference, simulated::Vector)
 	fig = Figure(size = (1100, 800))
 
 	ax1 = Axis(fig[1, 1],
@@ -90,30 +90,12 @@ function plot_match(reference, initial, optimized)
 		xlabel = "Time (days)",
 		ylabel = "Temperature (C)",
 	)
-	scatter!(ax1, reference.time, reference.producer_temp, label = "Reference")
-	lines!(ax1, initial.time, initial.producer_temp, label = "Initial")
-	lines!(ax1, optimized.time, optimized.producer_temp, label = "Optimized")
+	lines!(ax1, reference.time, reference.producer_temp;
+		label = "Reference", linewidth = 6, linestyle=:dash, color = :black)
+	for (i, sim) in enumerate(simulated)
+		lines!(ax1, sim.time, sim.producer_temp, label = "Simulated $i")
+	end
 	axislegend(ax1, position = :rb)
-
-	ax2 = Axis(fig[2, 1],
-		title = "Producer rate",
-		xlabel = "Time (days)",
-		ylabel = "Rate (L/s)",
-	)
-	scatter!(ax2, reference.time, reference.producer_rate, label = "Reference")
-	lines!(ax2, initial.time, initial.producer_rate, label = "Initial")
-	lines!(ax2, optimized.time, optimized.producer_rate, label = "Optimized")
-	axislegend(ax2, position = :rb)
-
-	ax3 = Axis(fig[3, 1],
-		title = "Injector bottom-hole pressure",
-		xlabel = "Time (days)",
-		ylabel = "Pressure (bar)",
-	)
-	scatter!(ax3, reference.time, reference.injector_bhp, label = "Reference")
-	lines!(ax3, initial.time, initial.injector_bhp, label = "Initial")
-	lines!(ax3, optimized.time, optimized.injector_bhp, label = "Optimized")
-	axislegend(ax3, position = :rb)
 
 	return fig
 end
@@ -149,8 +131,7 @@ fractures_horizontal = Fimbul.setup_ftes_fractures(
 	dip = (0.0, 2.5),
 	radius = 55.0,
 	aperture = (0.5e-3, 1.5e-4),
-	porosity = (0.5, 0.2),
-	# porosity = 0.5,
+	porosity = 0.5,
 )
 
 Δz = depth_window.z_max - depth_window.z_min
@@ -240,7 +221,7 @@ fractures_idealized = Fimbul.setup_ftes_fractures(
 	dip = 0.0,
 	radius = 55.0,
 	aperture = 0.5e-3,
-	porosity = 0.3,
+	porosity = 0.5,
 )
 
 discretization_idealized = Fimbul.ftes_discretization(
@@ -292,29 +273,14 @@ function mismatch_objective(model, state, dt, step_info, forces)
 end
 
 opt = JutulDarcy.setup_reservoir_dict_optimization(parameters_initial, setup_idealized_case)
-# free_optimization_parameter!(opt, [:reservoir, :matrix, :permeability],
-# 	abs_min = 1.0e-5*darcy,
-# 	abs_max = 5.0e-4*darcy,
-# )
-# free_optimization_parameter!(opt, [:reservoir, :matrix, :porosity],
-# 	abs_min = 0.03,
-# 	abs_max = 0.2,
-# )
+
 free_optimization_parameter!(opt, [:reservoir, :matrix, :rock_thermal_conductivity],
 	abs_min = 1.0*si"watt/(meter*Kelvin)",
 	abs_max = 4.0*si"watt/(meter*Kelvin)",
 )
 free_optimization_parameter!(opt, [:reservoir, :fractures, :aperture],
-	abs_min = 1.0e-4,
-	abs_max = 1.0e-3,
-)
-# free_optimization_parameter!(opt, [:reservoir, :fractures, :permeability],
-# 	abs_min = 5.0e-5*darcy,
-# 	abs_max = 2.0e-3*darcy,
-# )
-free_optimization_parameter!(opt, [:reservoir, :fractures, :porosity],
-	abs_min = 0.2,
-	abs_max = 0.8,
+	abs_min = 1.0e-4*si"meter",
+	abs_max = 1.0e-3*si"meter",
 )
 
 parameters_optimized = JutulDarcy.optimize_reservoir(
@@ -328,11 +294,11 @@ parameters_optimized = JutulDarcy.optimize_reservoir(
 case_optimized = Fimbul.ftes(discretization_idealized, parameters_optimized, controls; info_level = 1)
 result_optimized = run_case(case_optimized)
 
+##
 observed_real = get_well_observables(result_real.wells)
 observed_initial = get_well_observables(result_initial.wells)
 observed_optimized = get_well_observables(result_optimized.wells)
-
-match_figure = plot_match(observed_real, observed_initial, observed_optimized)
+match_figure = plot_match(observed_real, [observed_initial, observed_optimized])
 display(match_figure)
 
 println("Initial parameters:")
