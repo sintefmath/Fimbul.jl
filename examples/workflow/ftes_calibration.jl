@@ -3,16 +3,6 @@ using HYPRE
 using GLMakie
 using Random
 
-meter, day, year, darcy, bar, liter, second = si_units(
-	:meter,
-	:day,
-	:year,
-	:darcy,
-	:bar,
-	:liter,
-	:second,
-)
-
 function merge_fracture_sets(fracture_sets...)
 	merged = Dict{Symbol, Any}()
 	all_keys = reduce(union, (collect(keys(fr)) for fr in fracture_sets))
