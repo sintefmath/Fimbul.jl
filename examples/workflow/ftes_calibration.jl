@@ -17,14 +17,14 @@ function merge_fracture_sets(fracture_sets...)
 	return merged
 end
 
-function setup_ftes_simulator(case)
+function setup_ftes_simulator(case; kwargs...)
 	simulator, config = setup_reservoir_simulator(case;
-		output_substates = true,
 		relaxation = true,
 		initial_dt = 5.0,
 		info_level = 0,
+		kwargs...,
 	)
-	sel_cc = JutulDarcy.ControlChangeTimestepSelector(case.model, 0.0, 60.0*si_unit(:day))
+	sel_cc = JutulDarcy.ControlChangeTimestepSelector(case.model, 0.0, 60.0)
 	push!(config[:timestep_selectors], sel_cc)
 	sel_vc = VariableChangeTimestepSelector(:Temperature, 15.0;
 		model = :Reservoir,
@@ -176,7 +176,8 @@ plot_ftes_wells(ax)
 fig
 
 ##
-result_real = run_case(case_real; info_level = 2)
+sim, cfg = setup_ftes_simulator(case_real; output_substates = true)
+result_real = simulate_reservoir(case_real; simulator = sim, config = cfg)
 
 ##
 msh = physical_representation(reservoir_model(case_real.model).data_domain)
@@ -249,7 +250,9 @@ parameters_initial = Fimbul.ftes_parameters(
 )
 
 case_initial = Fimbul.ftes(discretization_idealized, parameters_initial, controls; info_level = 1)
-result_initial = run_case(case_initial; info_level = 2)
+
+sim, cfg = setup_ftes_simulator(case_initial; output_substates = true)
+result_initial = simulate_reservoir(case_initial; simulator = sim, config = cfg)
 
 ##
 reference_ws = get_well_observables(result_real.wells)
@@ -312,10 +315,6 @@ for h in history
 	observables = get_well_observables(result.wells)
 	push!(simulated_opt, observables)
 end
-
-##
-case_optimized = Fimbul.ftes(discretization_idealized, parameters_optimized, controls; info_level = 1)
-result_optimized = run_case(case_optimized)
 
 ##
 fig = Figure(size = (900, 700))
