@@ -28,39 +28,24 @@ function merge_fracture_sets(fracture_sets...)
 end
 
 function setup_ftes_simulator(case)
-	# linsolve = GenericKrylov(
-	# 	preconditioner = ILUZeroPreconditioner(),
-	# 	rtol = 1e-3,
-	# )
 	simulator, config = setup_reservoir_simulator(case;
 		output_substates = true,
 		relaxation = true,
 		initial_dt = 5.0,
 		info_level = 0,
 	)
-	for well in well_symbols(case.model)
-		config[:tolerances][well][:mass_conservation] = (
-			CNV = Inf, MB = 1e-5,
-			increment_dp_abs = 1e-3*si"atm", increment_dp_rel = Inf,
-			increment_dz = Inf, increment_saturation = Inf)
-		config[:tolerances][well][:energy_conservation] = (
-			CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
-	end
-	# config[:tolerances][:Fractures][:mass_conservation] = (
-	# 	CNV = Inf, MB = 1.0e-5,
-	# 	increment_dp_abs = 1e-3*si"atm", increment_dp_rel = Inf,
-	# 	increment_dz = Inf, increment_saturation = Inf)
-	# config[:tolerances][:Fractures][:energy_conservation] = (
-	# 	CNV = Inf, EB = 1e-5, increment_dT = 1e-2)
-	push!(config[:timestep_selectors], JutulDarcy.ControlChangeTimestepSelector(case.model, 0.0, 5.0))
-	push!(config[:timestep_selectors], VariableChangeTimestepSelector(:Temperature, 15.0;
+	sel_cc = JutulDarcy.ControlChangeTimestepSelector(case.model, 0.0, 60.0*si_unit(:day))
+	push!(config[:timestep_selectors], sel_cc)
+	sel_vc = VariableChangeTimestepSelector(:Temperature, 15.0;
 		model = :Reservoir,
 		relative = false,
-	))
-	push!(config[:timestep_selectors], VariableChangeTimestepSelector(:Temperature, 15.0;
+	)
+	push!(config[:timestep_selectors], sel_vc)
+	sel_vc_f = VariableChangeTimestepSelector(:Temperature, 15.0;
 		model = :Fractures,
 		relative = false,
-	))
+	)
+	push!(config[:timestep_selectors], sel_vc_f)
 	config[:timestep_max_decrease] = 1e-6
 	return simulator, config
 end
@@ -77,25 +62,30 @@ end
 function get_well_observables(well_results)
 	t_days = convert_from_si.(well_results.time, :day)
 	producer_temp = convert_from_si.(well_results[:Producer, :temperature], :Celsius)
-	producer_rate = -well_results[:Producer, :wrat]/(liter/second)
-	injector_bhp = convert_from_si.(well_results[:Injector, :bhp], :bar)
-	return (time = t_days, producer_temp = producer_temp, producer_rate = producer_rate, injector_bhp = injector_bhp)
+	return (time = t_days, producer_temp = producer_temp)
 end
 
-function plot_match(reference, simulated::Vector)
-	fig = Figure(size = (1100, 800))
+function plot_match!(ax, reference, simulated::Vector)
 
-	ax1 = Axis(fig[1, 1],
-		title = "Producer temperature",
-		xlabel = "Time (days)",
-		ylabel = "Temperature (C)",
-	)
-	lines!(ax1, reference.time, reference.producer_temp;
+	colors = Makie.wong_colors(6)[[1,2]]
+
+	lines!( # Plot reference
+		ax, reference.time, reference.producer_temp;
 		label = "Reference", linewidth = 6, linestyle=:dash, color = :black)
-	for (i, sim) in enumerate(simulated)
-		lines!(ax1, sim.time, sim.producer_temp, label = "Simulated $i")
+	lines!( # Plot initial guess
+		ax, simulated[1].time, simulated[1].producer_temp;
+		label = "Initial", linewidth = 2, color=colors[1])
+	for k in 2:length(simulated)-1
+		lines!( # Plot optimization iterations
+			ax, simulated[k].time, simulated[k].producer_temp;
+			label = "Opt. Iteration", linewidth = 2, color=:gray)
 	end
-	axislegend(ax1, position = :rb)
+	if length(simulated) > 1
+		lines!( # Plot final optimized result
+			ax, simulated[end].time, simulated[end].producer_temp;
+			label = "Final", linewidth = 2, color=colors[2])
+	end
+	axislegend(ax, position = :rb, merge=true)
 
 	return fig
 end
@@ -110,10 +100,12 @@ mesh_args = (
 	offset_rel = missing,
 )
 
+T_charge = convert_to_si(90, :Celsius)
+T_discharge = convert_to_si(20, :Celsius)
 controls = Fimbul.ftes_controls(
 	rate_charge = 12.0liter/second,
-	temperature_charge = convert_to_si(90.0, :Celsius),
-	temperature_discharge = convert_to_si(20.0, :Celsius),
+	temperature_charge = T_charge,
+	temperature_discharge = T_discharge,
 	producer_bhp_fraction = 0.2,
     charge_period = ["April", "November"],
     discharge_period = ["December", "March"],
@@ -171,21 +163,6 @@ parameters_real = Fimbul.ftes_parameters(
 case_real = Fimbul.ftes(discretization_real, parameters_real, controls; info_level = 1)
 
 ##
-using Statistics
-
-# names = [:Transmissibilities, :RockThermalConductivities, :FluidThermalConductivities]
-# for name in names
-# 	values = case_real.parameters[:Fractures][name]
-# 	fix = values .== 0.0
-# 	if any(fix)
-# 		mean_value = mean(values[.!fix])
-# 		values[fix] .= mean_value
-# 		@info "Replaced $(sum(fix)) zero values in $name with mean value $mean_value"
-# 	end
-# end
-
-
-##
 matrix_mesh = physical_representation(reservoir_model(case_real.model).data_domain)
 fracture_mesh = physical_representation(case_real.model.models[:Fractures].data_domain)
 
@@ -210,6 +187,46 @@ fig
 
 ##
 result_real = run_case(case_real; info_level = 2)
+
+##
+msh = physical_representation(reservoir_model(case_real.model).data_domain)
+geo = tpfv_geometry(msh)
+x_range = diff(vcat(extrema(geo.cell_centroids[1, :])...))[1]
+y_range = diff(vcat(extrema(geo.cell_centroids[2, :])...))[1]
+z_range = diff(vcat(extrema(geo.cell_centroids[3, :])...))[1]
+aspect  = (x_range, y_range, z_range) ./ max.(x_range, y_range, z_range)
+
+##
+using Dates
+timestamps = case_real.input_data[:timestamps][2:end]
+
+steps = findall([Dates.monthname(t) ∈ ["December", "April"] .&&
+    Dates.day(t) == 1 for t in timestamps])
+steps = steps[[1, 2, end-1, end]] # Select first two and last two cycles for better visualization
+cells = .!(geo.cell_centroids[1,:] .< 0.0 .&& geo.cell_centroids[2,:] .< 0.0)
+colorrange = convert_from_si.((T_discharge, T_charge), :Celsius)
+fig = Figure(size = (800, 900))
+for (k, step) in enumerate(steps)
+    row = (k-1)÷2 + 1
+    col = (k-1)%2 + 1
+    month = Dates.monthname(case_real.input_data[:timestamps][step])
+    year = Dates.year(case_real.input_data[:timestamps][step])
+    ax = Axis3(fig[row, col];
+        title = "$month $year",
+        zreversed = true, aspect = aspect, axis_args...,
+        azimuth = 1.25π, titlegap = -50)
+    T = convert_from_si.(result_real.result.states[step][:Reservoir][:Temperature], :Celsius)
+    plot_cell_data!(ax, msh, T;
+        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = colorrange)
+    hidedecorations!(ax)
+end
+Colorbar(fig[3, 1:2];
+    colormap = :seaborn_icefire_gradient, colorrange = colorrange,
+    label = "Temperature (°C)", vertical = false, flipaxis = false)
+colgap!(fig.layout, 0)
+rowgap!(fig.layout, 0)
+fig
+
 
 # ## Step 2: Idealized FTES case
 fractures_idealized = Fimbul.setup_ftes_fractures(
@@ -238,20 +255,24 @@ parameters_initial = Fimbul.ftes_parameters(
 	fracture_properties = (
 		aperture = fractures_idealized[:aperture],
 		porosity = fractures_idealized[:porosity],
-		# permeability = fill(3.0e-4*darcy, 10),
-		# porosity = fill(0.2, 10),
 	),
 )
 
 case_initial = Fimbul.ftes(discretization_idealized, parameters_initial, controls; info_level = 1)
 result_initial = run_case(case_initial; info_level = 2)
 
+##
+reference_ws = get_well_observables(result_real.wells)
+initial_ws = get_well_observables(result_initial.wells)
+fig = Figure(size = (900, 700))
+ax = Axis(fig[1, 1])
+plot_match!(ax, reference_ws, [initial_ws])
+fig
+
 # ## Step 3: Calibrate the idealized case
-truth_well_data = result_real.wells
-prod_temp_ref = get_1d_interpolator(truth_well_data.time, truth_well_data[:Producer, :temperature])
-prod_rate_ref = get_1d_interpolator(truth_well_data.time, truth_well_data[:Producer, :wrat])
-inj_bhp_ref = get_1d_interpolator(truth_well_data.time, truth_well_data[:Injector, :bhp])
-total_time = truth_well_data.time[end]
+reference_well_data = result_real.wells
+prod_temp_ref = get_1d_interpolator(reference_well_data.time, reference_well_data[:Producer, :temperature])
+total_time = reference_well_data.time[end]
 
 function setup_idealized_case(prm, step_info = missing)
 	return Fimbul.ftes(discretization_idealized, prm, controls)
@@ -262,12 +283,7 @@ function mismatch_objective(model, state, dt, step_info, forces)
 	time = step_info[:time]
 
 	producer_temp = compute_well_qoi(model, state, forces, :Producer, :temperature)
-	producer_rate = compute_well_qoi(model, state, forces, :Producer, :wrat)
-	injector_bhp = compute_well_qoi(model, state, forces, :Injector, :bhp)
-
 	dtemp = (prod_temp_ref(time) - producer_temp)/convert_to_si(1.0, :Kelvin)
-	# drate = (prod_rate_ref(time) - producer_rate)/(liter/second)
-	# dbhp = (inj_bhp_ref(time) - injector_bhp)/bar
 
 	return dt*dtemp^2/total_time
 end
@@ -283,22 +299,54 @@ free_optimization_parameter!(opt, [:reservoir, :fractures, :aperture],
 	abs_max = 1.0e-3*si"meter",
 )
 
+sim, cfg = setup_ftes_simulator(case_initial)
+output_path = jutul_output_path("ftes-calibration", subfolder = joinpath("papers", "get-2026"))
 parameters_optimized = JutulDarcy.optimize_reservoir(
 	opt,
 	mismatch_objective;
 	deps = :case,
-	max_it = 12,
+	max_it = 2,
+	solution_history = true,
 	optimizer = :lbfgsb_qp,
+	simulator = sim,
+	config = cfg,
+	output_path = output_path,
 )
 
+##
+history = opt.history[4]
+simulated_opt = []
+for h in history
+	case = setup_idealized_case(h.parameters)
+	result = run_case(case; info_level = 0)
+	observables = get_well_observables(result.wells)
+	push!(simulated_opt, observables)
+end
+
+##
 case_optimized = Fimbul.ftes(discretization_idealized, parameters_optimized, controls; info_level = 1)
 result_optimized = run_case(case_optimized)
 
 ##
+fig = Figure(size = (900, 700))
+ax = Axis(fig[1, 1])
+plot_match!(ax, observed_real, simulated_opt)
+ax = Axis(fig[1, 2], yscale = log10)
+lines!(ax, opt.history.objectives; label = "Objective value", linewidth = 2)
+fig
+
+##
+
+
 observed_real = get_well_observables(result_real.wells)
 observed_initial = get_well_observables(result_initial.wells)
 observed_optimized = get_well_observables(result_optimized.wells)
-match_figure = plot_match(observed_real, [observed_initial, observed_optimized])
+
+
+match_figure = plot_match(observed_real, simulated_opt)
+
+lines(opt.history.objectives)
+
 display(match_figure)
 
 println("Initial parameters:")
