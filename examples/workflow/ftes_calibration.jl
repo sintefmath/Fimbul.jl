@@ -53,47 +53,22 @@ end
 function plot_match!(ax, reference, simulated::AbstractVector)
     colors = Makie.wong_colors(6)[[1, 2]]
 
-    lines!(
-        ax,
-        reference.time,
-        reference.producer_temp;
-        label = "Reference",
-        linewidth = 5,
-        linestyle = :dash,
-        color = :black,
-    )
-    lines!(
-        ax,
-        simulated[1].time,
-        simulated[1].producer_temp;
-        label = "Initial",
-        linewidth = 2,
-        color = colors[1],
-    )
+    lines!(ax, reference.time, reference.producer_temp;
+        label = "Reference", linewidth = 5, linestyle = :dash, color = :black)
+    lines!(ax, simulated[1].time, simulated[1].producer_temp;
+        label = "Initial", linewidth = 2, color = colors[1])
     if length(simulated) > 2
         for observable in simulated[2:end-1]
-            lines!(
-                ax,
-                observable.time,
-                observable.producer_temp;
-                label = "Optimization iterate",
-                linewidth = 2,
-                color = :gray,
-            )
+            lines!(ax, observable.time, observable.producer_temp;
+                label = "Optimization iterate", linewidth = 2, color = :gray)
         end
     end
     if length(simulated) > 1
-        lines!(
-            ax,
-            simulated[end].time,
-            simulated[end].producer_temp;
-            label = "Final",
-            linewidth = 2,
-            color = colors[2],
-        )
+        lines!(ax, simulated[end].time, simulated[end].producer_temp;
+            label = "Final", linewidth = 2, color = colors[2])
     end
 
-    axislegend(ax, position = :rb, merge = true)
+    axislegend(ax, position = :rt, merge = true)
     return ax
 end
 
@@ -311,41 +286,51 @@ parameters_optimized = JutulDarcy.optimize_reservoir(
 # ## Inspect optimization history
 # The objective history provides a compact view of how much the mismatch is
 # reduced during the calibration.
-fig = Figure(size = (900, 450))
-ax = Axis(fig[1, 1];
-    xlabel = "Optimization iteration",
-    ylabel = "Objective value",
-    yscale = log10,
-    title = "Calibration history",
-)
-lines!(ax, opt.history.objectives; linewidth = 2)
-scatter!(ax, opt.history.objectives)
-fig
+
 
 # ## Compare the calibrated response
 # We now simulate the optimized idealized model and compare the resulting
 # producer temperature curve against the initial proxy and the synthetic
 # reference data.
-
-# case_optimized = setup_idealized_case(parameters_optimized)
-# result_optimized = run_case(case_optimized; info_level = 0, output_substates = true)
-# optimized_observables = get_well_observables(result_optimized.wells)
 simulated_observables = []
-for h in opt.history.solutions
+push!(simulated_observables, initial_observables)
+# For illustraional purposes, we simulate the intermediate optimization iterates
+# to show how the response evolves during calibration. Adjust the range of
+# `simulate_int` to control how many intermediate iterates to recompute.
+simulate_int = 2:length(opt.history.solutions)-1
+simulate_int = setdiff(simulate_int, [1, length(opt.history.solutions)])
+for h in opt.history.solutions[simulate_int]
 	case = setup_idealized_case(h.parameters)
     sim, cfg = setup_ftes_simulator(case; output_substates = true)
 	result = simulate_reservoir(case; simulator = sim, config = cfg)
 	observables = get_well_observables(result.wells)
 	push!(simulated_observables, observables)
 end
+case = setup_idealized_case(opt.history.solutions[end].parameters)
+sim, cfg = setup_ftes_simulator(case; output_substates = true)
+result = simulate_reservoir(case; simulator = sim, config = cfg)
+push!(simulated_observables, get_well_observables(result.wells))
 
-fig = Figure(size = (900, 500))
+# ### 
+fig = Figure(size = (1000, 500))
 ax = Axis(fig[1, 1];
     xlabel = "Time (days)",
-    ylabel = "Producer temperature (°C)",
-    title = "Reference, initial proxy, and calibrated proxy",
+    title = "Producer temperature (°C)",
 )
 plot_match!(ax, reference_observables, simulated_observables)
+
+ax = Axis(fig[1, 2];
+    xlabel = "Optimization iteration",
+    title = "Temperature mismatch objective (-)",
+)
+
+colors = Makie.wong_colors(6)[[1, 2]]
+lines!(ax, opt.history.objectives; linewidth = 2, color = :black)
+scatter!(ax, opt.history.objectives, markersize = 8, color = :gray)
+scatter!(ax, 1, opt.history.objectives[1];
+    markersize = 10, color = colors[1], label = "Initial")
+scatter!(ax, length(opt.history.objectives), opt.history.objectives[end];
+    markersize = 10, color = colors[2], label = "Final")
 fig
 
 # ## Inspect the calibrated parameters
