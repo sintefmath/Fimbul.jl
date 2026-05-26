@@ -145,7 +145,7 @@ end
 function JutulDarcy.flash_wellstream_at_surface(
         var,
         well_model,
-    system  :: H2OSystem,
+        system ::H2OSystem,
         well_state,
         rhoS,
         cond    = JutulDarcy.default_surface_cond(),
