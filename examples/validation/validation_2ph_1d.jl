@@ -66,8 +66,10 @@ available_vertical_modes(case_symbol) = case_symbol == :e ? (false,) : (false, t
 hydrotherm_profile_path(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT) =
     joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal").txt")
 
-function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT)
-    path = hydrotherm_profile_path(case_symbol, vertical; root)
+hydrotherm_timestep_path(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT) =
+    joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal")_timesteps.txt")
+
+function load_hydrotherm_columns(path)
     isfile(path) || return nothing
 
     lines = readlines(path)
@@ -86,6 +88,25 @@ function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_RESULTS_
     end
 
     return columns
+end
+
+function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT)
+    return load_hydrotherm_columns(hydrotherm_profile_path(case_symbol, vertical; root))
+end
+
+function load_hydrotherm_timesteps(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT)
+    table = load_hydrotherm_columns(hydrotherm_timestep_path(case_symbol, vertical; root))
+    table === nothing && return nothing
+    return table["timestep_years"] .* si_unit(:year)
+end
+
+function replace_case_timesteps(case, timesteps)
+    timesteps === nothing && return case
+    isapprox(sum(timesteps), sum(case.dt); rtol = 1e-3) ||
+        error("HYDROTHERM timestep sum $(sum(timesteps)) does not match case duration $(sum(case.dt))")
+
+    (; model, forces, state0, parameters, input_data) = case
+    return JutulCase(model, timesteps, forces; state0 = state0, parameters = parameters, input_data = input_data)
 end
 
 function load_hydrotherm_property(case_symbol, vertical, spec)
@@ -111,13 +132,13 @@ function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100
         enthalpy_tables = tables,
         vertical = vertical,
     )
+    case = replace_case_timesteps(case, load_hydrotherm_timesteps(case_symbol, vertical))
     simulator, config = setup_reservoir_simulator(
         case;
         tol_cnv = 1e-3,
         tol_mb = 1e-7,
-        # info_level = 1,
-        # max_timestep = maximum(case.dt),
-        max_timestep = 0.5si"year",
+        max_timestep = Inf,
+        timesteps = :none,
         relaxation = true,
     )
     results = simulate_reservoir(case; simulator = simulator, config = config)
@@ -229,8 +250,8 @@ function plot_case_profiles(case_symbol, results)
                     yreversed = true,
                 )
                 if hydrotherm !== nothing
-                    lines!(ax, hydrotherm.values, hydrotherm.coordinate_m;
-                        linewidth = 6, linestyle = :dash, color = :black)
+                    lines!(ax, hydrotherm.values, hydrotherm.coordinate_m .- cell_size/2;
+                        linewidth = 8, linestyle = :dash, color = :black, label = "HYDROTHERM")
                 end
                 lines!(ax, values, x, color = CASE_COLORS[case_symbol], linewidth = 3, label = "Fimbul")
             else
@@ -241,8 +262,8 @@ function plot_case_profiles(case_symbol, results)
                 )
                 y = ordered_values(values, vertical)
                 if hydrotherm !== nothing
-                    lines!(ax, hydrotherm.coordinate_m, hydrotherm.values;
-                        linewidth = 6, linestyle = :dash, color = :black, label = "HYDROTHERM")
+                    lines!(ax, hydrotherm.coordinate_m .- cell_size/2, hydrotherm.values;
+                        linewidth = 8, linestyle = :dash, color = :black, label = "HYDROTHERM")
                 end
                 lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3, label = "Fimbul")
                 if col == 1
@@ -331,6 +352,8 @@ handles = Fimbul.plot_phase_diagram_contours!(
 )
 
 for case_symbol in (SINGLE_PHASE_CASES..., TWO_PHASE_CASES...)
+    hydrotherm = load_hydrotherm_phase_path(case_symbol)
+    lines!(ax, hydrotherm.enthalpy_kj_per_kg, hydrotherm.pressure_mpa; linewidth = 6, linestyle = :dash, color = CASE_COLORS[case_symbol])
     out = all_results[(case_symbol, false)]
     state = out.results.states[end]
     Fimbul.plot_reservoir_state_ph!(
