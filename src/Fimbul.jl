@@ -17,7 +17,7 @@ module Fimbul
     export well_mismatch_thermal
     # Cases
     export analytical_1d
-    export benchmark_2ph_1d
+    export benchmark_ht_1d
     export geothermal_doublet
     export egs
     export ags

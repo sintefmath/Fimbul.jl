@@ -1,7 +1,7 @@
-# # 1D two-phase geothermal benchmark
-# This example reproduces the 1D geothermal benchmark cases from
-# [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation in
-# Fimbul, and validates the results against HYDROTHERM
+# # 1D high-temperature geothermal benchmark
+# This example reproduces the 1D high-temperature geothermal benchmark cases
+# from [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation
+# in Fimbul, and validates the results against HYDROTHERM
 # [kipp_hydrotherm_2008](@cite) reference solutions.
 
 using Jutul, JutulDarcy, Fimbul, CoolProp, GLMakie
@@ -30,10 +30,10 @@ const PROFILE_SPECS = (
         hydrotherm_column = "liquid_saturation"),
 )
 
-# ## Governing equations for two-phase flow
-# In the two-phase H2O benchmark, the conserved quantities are total mass and
-# total energy. Using pressure $p$ and specific enthalpy $h$ as primary
-# variables, the governing equations can be written as
+# ## Governing equations for high-temperature H2O flow
+# Across the high-temperature H2O benchmark cases, the conserved quantities are
+# total mass and total energy. Using pressure $p$ and specific enthalpy $h$ as
+# primary variables, the governing equations can be written as
 #
 # ``\frac{\partial}{\partial t}\left(\phi \sum_{\alpha \in \{l, v\}} \rho_\alpha S_\alpha\right)
 # + \nabla \cdot \left(\sum_{\alpha \in \{l, v\}} \rho_\alpha \mathbf{u}_\alpha\right) = q_m``
@@ -126,7 +126,7 @@ function load_hydrotherm_phase_path(case_symbol)
 end
 
 function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100, cell_size = 10.0)
-    case = benchmark_2ph_1d(
+    case = benchmark_ht_1d(
         benchmark_case = case_symbol,
         nx = nx,
         cell_size = cell_size,
@@ -291,8 +291,8 @@ fig_properties
 
 # ## Single-phase benchmark cases
 # Cases `:a` to `:c` remain in the single-phase region for the plotted states.
-# We therefore use them to inspect how pressure, enthalpy, and temperature vary
-# along the 1D column both with and without gravity.
+# We therefore use them to compare Fimbul and HYDROTHERM pressure and
+# temperature profiles along the 1D column, both with and without gravity.
 
 # ### Case a
 # Case `:a` spans 50 to 25 MPa and 350 to 150 °C. The pressure stays high
@@ -317,9 +317,9 @@ fig_case_c = plot_case_profiles(:c, all_results)
 fig_case_c
 
 # ## Two-phase benchmark cases
-# Cases `:d` and `:e` traverse the two-phase region. As above, we first inspect
-# the 1D pressure, enthalpy, and temperature profiles, and then compare the
-# no-gravity paths in pressure-enthalpy space.
+# Cases `:d` and `:e` traverse the two-phase region. Here we compare Fimbul and
+# HYDROTHERM pressure, temperature, and liquid-saturation profiles, and then
+# compare the no-gravity paths in pressure-enthalpy space.
 
 # ### Case d
 # Case `:d` spans 20 to 1 MPa and 400 to 150 °C. The inlet starts as hot,

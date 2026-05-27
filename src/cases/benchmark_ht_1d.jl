@@ -1,12 +1,11 @@
 """
-    benchmark_2ph_1d(; <keyword arguments>)
+    benchmark_ht_1d(; <keyword arguments>)
 
-1D two-phase geothermal benchmark cases from Weis et al. (2014), translated
-from the MRST `benchmark_1d_geothermal` test suite and implemented using
-`H2OSystem` with IAPWS-IF97 steam tables.
+1D high-temperature geothermal benchmark cases from Weis et al. (2014).
 
 Five cases (`:a`–`:e`) cover different initial pressure/temperature conditions
-and pressure gradients. Each case is a 1D column with Dirichlet-like
+and pressure gradients, spanning single-phase liquid, single-phase vapor, and
+two-phase flow regimes. Each case is a 1D column with Dirichlet-like
 pressure/enthalpy conditions at both ends, imposed through flow boundary
 conditions. The initial state is uniform at the producer-side pressure and
 temperature, matching the MRST benchmark setup.
@@ -60,7 +59,7 @@ convection of H₂O-NaCl fluids from ambient to magmatic temperatures: A new
 numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 347–371. https://doi.org/10.1111/gfl.12080
 """
-function benchmark_2ph_1d(;
+function benchmark_ht_1d(;
     benchmark_case  :: Symbol  = :a,
     vertical        :: Bool    = false,
     nx              :: Int     = 200,
@@ -171,7 +170,7 @@ function benchmark_2ph_1d(;
 
     # ── Assemble case ──────────────────────────────────────────────────────
     info = Dict{Symbol, Any}(
-        :description    => "1D geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
+        :description    => "1D high-temperature geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
         :benchmark_case => benchmark_case,
         :total_time     => total_time,
         :vertical       => vertical,
