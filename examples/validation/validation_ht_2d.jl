@@ -19,6 +19,9 @@ to_megapascal(p) = convert_from_si.(p, "megapascal")
 nx = 91
 nz = 30
 
+const HYDROTHERM_RESULTS_ROOT = normpath(joinpath(
+    @__DIR__, "..", "..", "..", "..", "..", "misc", "hydrotherm-dev", "validation_ht_2d", "profiles"
+))
 const X_LIMITS_KM = (-2.0, 2.0)
 const SNAPSHOT_YEARS = (500.0, 2000.0, 5000.0)
 const SINGLE_PHASE_TEMPERATURE_LEVELS = collect(0.0:25.0:125.0)
@@ -26,6 +29,8 @@ const TWO_PHASE_TEMPERATURE_LEVELS = collect(0.0:50.0:350.0)
 const SINGLE_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:50.0)
 const TWO_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:35.0)
 const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0]
+const HYDROTHERM_CONTOUR_LINEWIDTH = 5
+const HYDROTHERM_CONTOUR_COLOR = :black
 
 ##
 tables = Fimbul.build_steam_tables_2ph()
@@ -73,6 +78,57 @@ function section_data(case, values)
     return reshape(vec(values), nx, nz)
 end
 
+function hydrotherm_property_path(case_name, property_name; root = HYDROTHERM_RESULTS_ROOT)
+    path = joinpath(root, "$(case_name)_$(property_name).txt")
+    isfile(path) || error("Missing HYDROTHERM export $(path). Run export_profiles.jl in validation_ht_2d first.")
+    return path
+end
+
+function load_hydrotherm_vector(path)
+    values = Float64[]
+    for line in eachline(path)
+        stripped = strip(line)
+        (isempty(stripped) || startswith(stripped, "#")) && continue
+        push!(values, parse(Float64, stripped))
+    end
+    return values
+end
+
+function load_hydrotherm_matrix(path)
+    rows = Vector{Vector{Float64}}()
+    for line in eachline(path)
+        stripped = strip(line)
+        (isempty(stripped) || startswith(stripped, "#")) && continue
+        push!(rows, parse.(Float64, split(stripped)))
+    end
+    isempty(rows) && error("Empty HYDROTHERM matrix file: $(path)")
+    matrix = reduce(vcat, permutedims.(rows))
+    return permutedims(matrix)
+end
+
+hydrotherm_case_name(case) = String(case.input_data[:benchmark_case])
+
+function load_hydrotherm_reference(case)
+    case_name = hydrotherm_case_name(case)
+    x_m = load_hydrotherm_vector(hydrotherm_property_path(case_name, "x_m"))
+    z_m = load_hydrotherm_vector(hydrotherm_property_path(case_name, "z_m"))
+    pressure_mpa = load_hydrotherm_matrix(hydrotherm_property_path(case_name, "pressure_mpa"))
+    temperature_c = load_hydrotherm_matrix(hydrotherm_property_path(case_name, "temperature_c"))
+    liquid_saturation = load_hydrotherm_matrix(hydrotherm_property_path(case_name, "liquid_saturation"))
+    vapor_saturation = map(liquid_saturation) do value
+        isnan(value) ? NaN : 1.0 - value
+    end
+
+    x0 = x_m[cld(length(x_m), 2)]
+    return (
+        x_km = (x_m .- x0) ./ 1e3,
+        depth_km = z_m ./ 1e3,
+        pressure = pressure_mpa,
+        temperature = temperature_c,
+        vapor_saturation = vapor_saturation,
+    )
+end
+
 function snapshot_index(case, years)
     times_years = convert_from_si.(cumsum(case.dt), :year)
     return argmin(abs.(times_years .- years))
@@ -113,6 +169,7 @@ function final_state_field_specs(case, results)
     state = results.states[end]
     final_years = final_time_years(case)
     source_regime = get(case.input_data, :source_regime, :single_phase)
+    hydrotherm = load_hydrotherm_reference(case)
 
     temperature = to_celsius(section_data(case, state[:Temperature]))
     pressure = to_megapascal(section_data(case, state[:Pressure]))
@@ -124,18 +181,18 @@ function final_state_field_specs(case, results)
         (
             title = "Temperature after $(final_years) years",
             values = temperature,
+            hydrotherm_values = hydrotherm.temperature,
             levels = temperature_levels,
             colormap = :seaborn_icefire_gradient,
             colorbar_label = "Temperature [°C]",
-            contour_color = (:white, 0.45),
         ),
         (
             title = "Pressure after $(final_years) years",
             values = pressure,
+            hydrotherm_values = hydrotherm.pressure,
             levels = pressure_levels,
             colormap = :vik,
             colorbar_label = "Pressure [MPa]",
-            contour_color = (:white, 0.45),
         ),
     ]
 
@@ -145,15 +202,15 @@ function final_state_field_specs(case, results)
             (
                 title = "Vapor saturation after $(final_years) years",
                 values = vapor_saturation,
+                hydrotherm_values = hydrotherm.vapor_saturation,
                 levels = VAPOR_SATURATION_LEVELS,
                 colormap = :dense,
                 colorbar_label = "Vapor saturation [-]",
-                contour_color = (:white, 0.45),
             ),
         )
     end
 
-    return (axes = axes, source = source, specs = specs)
+    return (axes = axes, source = source, specs = specs, hydrotherm = hydrotherm)
 end
 
 function plot_final_state(case, results)
@@ -161,6 +218,7 @@ function plot_final_state(case, results)
     axes = state.axes
     source = state.source
     specs = state.specs
+    hydrotherm = state.hydrotherm
 
     fig = Figure(size = (520*length(specs), 520))
     for (i, spec) in enumerate(specs)
@@ -177,10 +235,11 @@ function plot_final_state(case, results)
             colormap = spec.colormap,
             levels = spec.levels,
         )
-        contour!(ax, axes.x_km, axes.depth_km, spec.values;
+        contour!(ax, hydrotherm.x_km, hydrotherm.depth_km, spec.hydrotherm_values;
             levels = spec.levels,
-            color = spec.contour_color,
-            linewidth = 1,
+            color = HYDROTHERM_CONTOUR_COLOR,
+            linewidth = HYDROTHERM_CONTOUR_LINEWIDTH,
+            linestyle = :dash,
         )
         scatter!(ax, [source.x_km], [source.depth_km]; color = :black, marker = :star5, markersize = 14)
         if i > 1
