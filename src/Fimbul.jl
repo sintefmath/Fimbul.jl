@@ -18,6 +18,7 @@ module Fimbul
     # Cases
     export analytical_1d
     export benchmark_ht_1d
+    export benchmark_ht_2d
     export geothermal_doublet
     export egs
     export ags

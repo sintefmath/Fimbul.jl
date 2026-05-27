@@ -1,0 +1,220 @@
+# # 2D high-temperature geothermal benchmark
+# This example demonstrates the 2D high-temperature geothermal benchmark from
+# [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation in
+# Fimbul.
+#
+# We demonstrate the currently implemented magmatic-fluid-source variants: a
+# moderate-enthalpy source that remains single-phase near the injector, and a
+# high-enthalpy source that produces a two-phase plume during ascent. The model
+# represents a 9 km by 3 km vertical crustal section with an open top boundary
+# at atmospheric pressure and 10 °C, and a hot H2O source at the center of the
+# bottom boundary. The alternative bottom heat-flux benchmark is not included
+# here because heat-flux boundary conditions are not yet supported in Fimbul.
+
+using Jutul, JutulDarcy, Fimbul, HYPRE, GLMakie
+
+to_celsius(T) = convert_from_si.(T, :Celsius)
+to_megapascal(p) = convert_from_si.(p, "megapascal")
+
+nx = 91
+nz = 30
+
+const X_LIMITS_KM = (-2.0, 2.0)
+const SNAPSHOT_YEARS = (500.0, 2000.0, 5000.0)
+const SINGLE_PHASE_TEMPERATURE_LEVELS = collect(0.0:25.0:125.0)
+const TWO_PHASE_TEMPERATURE_LEVELS = collect(0.0:50.0:350.0)
+const SINGLE_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:50.0)
+const TWO_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:35.0)
+const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0]
+
+##
+tables = Fimbul.build_steam_tables_2ph()
+
+# ## Set up and simulate the benchmark cases
+# We simulate both fluid-source variants from Weis et al. (2014): the
+# moderate-enthalpy single-phase plume and the hotter two-phase plume.
+function simulate_benchmark_case(benchmark_case, tables; nx = 120, nz = 60)
+    case = benchmark_ht_2d(
+        benchmark_case = benchmark_case,
+        nx = nx,
+        nz = nz,
+        enthalpy_tables = tables,
+    )
+
+    simulator, config = setup_reservoir_simulator(
+        case;
+        tol_cnv = 1e-3,
+        tol_mb = 1e-7,
+        max_timestep = Inf,
+        timesteps = :none,
+        relaxation = true,
+    )
+    results = simulate_reservoir(case; simulator = simulator, config = config)
+    return (case = case, results = results)
+end
+
+single_phase = simulate_benchmark_case(:single_phase_source, tables; nx = nx, nz = nz)
+two_phase = simulate_benchmark_case(:two_phase_source, tables; nx = nx, nz = nz)
+
+##
+function section_axes(case)
+    domain = case.model.models[:Reservoir].data_domain
+    centroids = tpfv_geometry(physical_representation(domain)).cell_centroids
+    x0 = case.input_data[:x_coordinate_origin]
+    x = sort(unique(vec(centroids[1, :] .- x0))) ./ 1e3
+    depth = sort(unique(vec(centroids[3, :]))) ./ 1e3
+    return (x_km = x, depth_km = depth)
+end
+
+function section_data(case, values)
+    axes = section_axes(case)
+    nx = length(axes.x_km)
+    nz = length(axes.depth_km)
+    return reshape(vec(values), nx, nz)
+end
+
+function snapshot_index(case, years)
+    times_years = convert_from_si.(cumsum(case.dt), :year)
+    return argmin(abs.(times_years .- years))
+end
+
+to_vapor_saturation(S) = vec(S[2, :])
+
+final_time_years(case) = round(Int, convert_from_si(sum(case.dt), :year))
+
+function source_location_km(case)
+    domain = case.model.models[:Reservoir].data_domain
+    centroids = tpfv_geometry(physical_representation(domain)).cell_centroids
+    source_cell = case.input_data[:source_cell]
+    x0 = case.input_data[:x_coordinate_origin]
+    return (
+        x_km = (centroids[1, source_cell] - x0) / 1e3,
+        depth_km = centroids[3, source_cell] / 1e3,
+    )
+end
+
+
+function contour_colorbar_ticks(levels)
+    ticks = collect(levels)
+    labels = map(ticks) do value
+        rounded = round(value; digits = 1)
+        if isapprox(rounded, round(rounded))
+            string(Int(round(rounded)))
+        else
+            string(rounded)
+        end
+    end
+    return (ticks, labels)
+end
+
+function final_state_field_specs(case, results)
+    axes = section_axes(case)
+    source = source_location_km(case)
+    state = results.states[end]
+    final_years = final_time_years(case)
+    source_regime = get(case.input_data, :source_regime, :single_phase)
+
+    temperature = to_celsius(section_data(case, state[:Temperature]))
+    pressure = to_megapascal(section_data(case, state[:Pressure]))
+
+    temperature_levels = source_regime == :two_phase ? TWO_PHASE_TEMPERATURE_LEVELS : SINGLE_PHASE_TEMPERATURE_LEVELS
+    pressure_levels = source_regime == :two_phase ? TWO_PHASE_PRESSURE_LEVELS : SINGLE_PHASE_PRESSURE_LEVELS
+
+    specs = Any[
+        (
+            title = "Temperature after $(final_years) years",
+            values = temperature,
+            levels = temperature_levels,
+            colormap = :seaborn_icefire_gradient,
+            colorbar_label = "Temperature [°C]",
+            contour_color = (:white, 0.45),
+        ),
+        (
+            title = "Pressure after $(final_years) years",
+            values = pressure,
+            levels = pressure_levels,
+            colormap = :vik,
+            colorbar_label = "Pressure [MPa]",
+            contour_color = (:white, 0.45),
+        ),
+    ]
+
+    if source_regime == :two_phase
+        vapor_saturation = clamp.(section_data(case, to_vapor_saturation(state[:Saturations])), 0.0, 1.0)
+        push!(specs,
+            (
+                title = "Vapor saturation after $(final_years) years",
+                values = vapor_saturation,
+                levels = VAPOR_SATURATION_LEVELS,
+                colormap = :dense,
+                colorbar_label = "Vapor saturation [-]",
+                contour_color = (:white, 0.45),
+            ),
+        )
+    end
+
+    return (axes = axes, source = source, specs = specs)
+end
+
+function plot_final_state(case, results)
+    state = final_state_field_specs(case, results)
+    axes = state.axes
+    source = state.source
+    specs = state.specs
+
+    fig = Figure(size = (520*length(specs), 520))
+    for (i, spec) in enumerate(specs)
+        ax = Axis(
+            fig[1, i];
+            limits = ((-2.0, 2.0), (0.0, 3.0)),
+            title = spec.title,
+            xlabel = "Distance [km]",
+            ylabel = ifelse(i == 1, "Depth [km]", ""),
+            yreversed = true,
+            aspect = AxisAspect(4/3),
+        )
+        plt = contourf!(ax, axes.x_km, axes.depth_km, spec.values;
+            colormap = spec.colormap,
+            levels = spec.levels,
+        )
+        contour!(ax, axes.x_km, axes.depth_km, spec.values;
+            levels = spec.levels,
+            color = spec.contour_color,
+            linewidth = 1,
+        )
+        scatter!(ax, [source.x_km], [source.depth_km]; color = :black, marker = :star5, markersize = 14)
+        if i > 1
+            hideydecorations!(ax, ticks = false)
+        end
+        Colorbar(fig[2, i], plt;
+            vertical = false,
+            label = spec.colorbar_label,
+            ticks = contour_colorbar_ticks(spec.levels),
+            flipaxis = false,
+        )
+    end
+    return fig
+end
+
+# ## Single-phase source case
+# The moderate-enthalpy source generates an upward-rising thermal plume that
+# stays in the liquid regime. At late time, the deepest part of the plume also
+# carries the highest absolute pressures near the source.
+plot_reservoir(single_phase.case, single_phase.results.states;
+    key = :Temperature, colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3))
+
+# ### Validate against reference data
+fig_single_phase_final = plot_final_state(single_phase.case, single_phase.results)
+fig_single_phase_final
+
+# ## Two-phase source case
+# Raising the source enthalpy to 1.5 MJ/kg produces a hotter plume that enters
+# the two-phase field during ascent. At late time, the plume maintains high
+# deep pressures near the source and develops a liquid-saturation deficit where
+# vapor forms in the rising core.
+plot_reservoir(two_phase.case, two_phase.results.states;
+    key = :Temperature, colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3))
+
+# ### Validate against reference data
+fig_two_phase = plot_final_state(two_phase.case, two_phase.results)
+fig_two_phase
