@@ -1,7 +1,8 @@
 # # 1D two-phase geothermal benchmark
 # This example reproduces the 1D geothermal benchmark cases from
 # [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation in
-# Fimbul.
+# Fimbul, and validates the results against HYDROTHERM
+# [kipp_hydrotherm_2008](@cite) reference solutions.
 
 using Jutul, JutulDarcy, Fimbul, CoolProp, GLMakie
 
@@ -336,8 +337,9 @@ fig_case_e = plot_case_profiles(:e, all_results)
 fig_case_e
 
 # ## Phase diagram comparison
-# We compare the cases directly in pressure-enthalpy space, overlaying the state
-# paths on temperature contours.
+# We compare the horizontal cases directly in pressure-enthalpy space,
+# overlaying Fimbul state paths and HYDROTHERM reference paths on temperature
+# contours.
 fig = Figure(size = (700, 640))
 Label(fig[0, 1:2], "Phase diagram comparison"; fontsize = 22)
 ax = Axis(fig[1, 1]; xticksmirrored = true, yticksmirrored = true, aspect = AxisAspect(1))
