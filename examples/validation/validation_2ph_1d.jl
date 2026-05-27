@@ -21,9 +21,12 @@ const CASE_COLORS = Dict(
     :e => :magenta,
 )
 const PROFILE_SPECS = (
-    (name = :Pressure, label = "Pressure [MPa]", transform = to_megapascal),
-    (name = :Temperature, label = "Temperature [°C]", transform = to_celsius),
-    (name = :Saturations, label = "Liquid saturation [-]", transform = x -> vec(x[1,:])),
+    (name = :Pressure, label = "Pressure [MPa]", transform = to_megapascal,
+        hydrotherm_column = "pressure_mpa"),
+    (name = :Temperature, label = "Temperature [°C]", transform = to_celsius,
+        hydrotherm_column = "temperature_c"),
+    (name = :Saturations, label = "Liquid saturation [-]", transform = x -> vec(x[1,:]),
+        hydrotherm_column = "liquid_saturation"),
 )
 
 # ## Governing equations for two-phase flow
@@ -60,6 +63,46 @@ tables = Fimbul.build_steam_tables_2ph(
 ##
 available_vertical_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
 
+hydrotherm_profile_path(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT) =
+    joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal").txt")
+
+function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT)
+    path = hydrotherm_profile_path(case_symbol, vertical; root)
+    isfile(path) || return nothing
+
+    lines = readlines(path)
+    isempty(lines) && error("Empty HYDROTHERM profile file: $(path)")
+    header = split(strip(replace(first(lines), "#" => "")))
+    columns = Dict(name => Float64[] for name in header)
+
+    for line in Iterators.drop(lines, 1)
+        stripped = strip(line)
+        isempty(stripped) && continue
+        tokens = split(stripped)
+        length(tokens) == length(header) || error("Expected $(length(header)) columns in $(path), got $(length(tokens))")
+        for (name, token) in zip(header, tokens)
+            push!(columns[name], token == "NaN" ? NaN : parse(Float64, token))
+        end
+    end
+
+    return columns
+end
+
+function load_hydrotherm_property(case_symbol, vertical, spec)
+    table = load_hydrotherm_table(case_symbol, vertical)
+    table === nothing && return nothing
+    haskey(table, spec.hydrotherm_column) || return nothing
+
+    coordinate_column = vertical ? "depth_m" : "distance_m"
+    return (coordinate_m = table[coordinate_column], values = table[spec.hydrotherm_column])
+end
+
+function load_hydrotherm_phase_path(case_symbol)
+    table = load_hydrotherm_table(case_symbol, false)
+    table === nothing && return nothing
+    return (pressure_mpa = table["pressure_mpa"], enthalpy_kj_per_kg = table["enthalpy_kj_per_kg"])
+end
+
 function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100, cell_size = 10.0)
     case = benchmark_2ph_1d(
         benchmark_case = case_symbol,
@@ -72,8 +115,9 @@ function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100
         case;
         tol_cnv = 1e-3,
         tol_mb = 1e-7,
-        info_level = 0,
-        max_timestep = maximum(case.dt),
+        # info_level = 1,
+        # max_timestep = maximum(case.dt),
+        max_timestep = 0.5si"year",
         relaxation = true,
     )
     results = simulate_reservoir(case; simulator = simulator, config = config)
@@ -159,7 +203,9 @@ end
 
 function plot_case_profiles(case_symbol, results)
     vertical_modes = available_vertical_modes(case_symbol)
-    fig = Figure(size = (800 + 400*(case_symbol ∈ TWO_PHASE_CASES), 400 * length(vertical_modes)))
+    hydrotherm_present = true
+    fig_height = 400 * length(vertical_modes)
+    fig = Figure(size = (800 + 400*(case_symbol ∈ TWO_PHASE_CASES), fig_height))
 
     for (k, vertical) in enumerate(vertical_modes)
         out = results[(case_symbol, vertical)]
@@ -173,6 +219,8 @@ function plot_case_profiles(case_symbol, results)
                 continue
             end
             values = spec.transform(state[spec.name])
+            hydrotherm = load_hydrotherm_property(case_symbol, vertical, spec)
+            hydrotherm_present = hydrotherm_present || hydrotherm !== nothing
             if vertical
                 ax = Axis(
                     fig[row+1, col];
@@ -180,7 +228,11 @@ function plot_case_profiles(case_symbol, results)
                     ylabel = "Depth [m]",
                     yreversed = true,
                 )
-                lines!(ax, values, x, color = CASE_COLORS[case_symbol], linewidth = 3)
+                if hydrotherm !== nothing
+                    lines!(ax, hydrotherm.values, hydrotherm.coordinate_m;
+                        linewidth = 6, linestyle = :dash, color = :black)
+                end
+                lines!(ax, values, x, color = CASE_COLORS[case_symbol], linewidth = 3, label = "Fimbul")
             else
                 ax = Axis(
                     fig[row+1, col];
@@ -188,7 +240,14 @@ function plot_case_profiles(case_symbol, results)
                     ylabel = spec.label,
                 )
                 y = ordered_values(values, vertical)
-                lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3)
+                if hydrotherm !== nothing
+                    lines!(ax, hydrotherm.coordinate_m, hydrotherm.values;
+                        linewidth = 6, linestyle = :dash, color = :black, label = "HYDROTHERM")
+                end
+                lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3, label = "Fimbul")
+                if col == 1
+                    axislegend(ax; position = :rt)
+                end
             end
         end
         fig[row, :] = Label(fig, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
