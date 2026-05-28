@@ -63,20 +63,31 @@ single_phase = simulate_benchmark_case(:single_phase_source, tables; nx = nx, nz
 two_phase = simulate_benchmark_case(:two_phase_source, tables; nx = nx, nz = nz)
 
 ##
-function section_axes(case)
+pad_top(values::AbstractVector, top_value) = vcat(fill(top_value, 1), values)
+pad_top(values::AbstractMatrix, top_value) = hcat(fill(top_value, size(values, 1), 1), values)
+
+function section_cell_axes(case)
     domain = case.model.models[:Reservoir].data_domain
-    centroids = tpfv_geometry(physical_representation(domain)).cell_centroids
+    geometry = tpfv_geometry(physical_representation(domain))
+    centroids = geometry.cell_centroids
     x0 = case.input_data[:x_coordinate_origin]
     x = sort(unique(vec(centroids[1, :] .- x0))) ./ 1e3
     depth = sort(unique(vec(centroids[3, :]))) ./ 1e3
-    return (x_km = x, depth_km = depth)
+    top_depth = minimum(geometry.boundary_centroids[3, :]) / 1e3
+    top_depth = top_depth - (depth[2] - depth[1])/2  #/ shift from Fimbul cell centers to top boundary
+    return (x_km = x, depth_km = depth, top_depth_km = top_depth)
 end
 
-function section_data(case, values)
-    axes = section_axes(case)
+function section_axes(case)
+    axes = section_cell_axes(case)
+    return (x_km = axes.x_km, depth_km = pad_top(axes.depth_km, axes.top_depth_km))
+end
+
+function section_data(case, values; top_value)
+    axes = section_cell_axes(case)
     nx = length(axes.x_km)
     nz = length(axes.depth_km)
-    return reshape(vec(values), nx, nz)
+    return pad_top(reshape(vec(values), nx, nz), top_value)
 end
 
 function hydrotherm_property_path(case_name, property_name; root = HYDROTHERM_RESULTS_ROOT)
@@ -140,7 +151,7 @@ end
 function align_hydrotherm_depth_to_fimbul(z_m, values...)
     length(z_m) >= 2 || error("Need at least two HYDROTHERM depth coordinates to align the reference grid")
     dz_m = z_m[2] - z_m[1]
-    z_aligned_m = z_m[2:end] .- dz_m
+    z_aligned_m = z_m[2:end] .- dz_m*0.0
     aligned_values = map(values) do value
         value[:, 2:end]
     end
@@ -219,8 +230,8 @@ function final_state_field_specs(case, results)
     source_regime = get(case.input_data, :source_regime, :single_phase)
     hydrotherm = load_hydrotherm_reference(case)
 
-    temperature = to_celsius(section_data(case, state[:Temperature]))
-    pressure = to_megapascal(section_data(case, state[:Pressure]))
+    temperature = to_celsius(section_data(case, state[:Temperature]; top_value = case.input_data[:top_temperature]))
+    pressure = to_megapascal(section_data(case, state[:Pressure]; top_value = case.input_data[:top_pressure]))
 
     temperature_levels = source_regime == :two_phase ? TWO_PHASE_TEMPERATURE_LEVELS : SINGLE_PHASE_TEMPERATURE_LEVELS
     pressure_levels = source_regime == :two_phase ? TWO_PHASE_PRESSURE_LEVELS : SINGLE_PHASE_PRESSURE_LEVELS
@@ -245,7 +256,7 @@ function final_state_field_specs(case, results)
     ]
 
     if source_regime == :two_phase
-        vapor_saturation = clamp.(section_data(case, to_vapor_saturation(state[:Saturations])), 0.0, 1.0)
+        vapor_saturation = clamp.(section_data(case, to_vapor_saturation(state[:Saturations]); top_value = 0.0), 0.0, 1.0)
         push!(specs,
             (
                 title = "Vapor saturation after $(final_years) years",
@@ -304,6 +315,8 @@ function plot_final_state(case, results)
             flipaxis = false,
         )
     end
+    is_ax = [f isa Axis for f in fig.content]
+    linkaxes!(fig.content[is_ax]...)
     return fig
 end
 
