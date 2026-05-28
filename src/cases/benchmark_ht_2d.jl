@@ -151,11 +151,13 @@ function benchmark_ht_2d(;
     bc_pressure = fill(top_pressure, length(bc_cells))
     bc_temperature = fill(top_temperature, length(bc_cells))
     bc_enthalpy = enthalpy_tables[:enthalpy].(bc_pressure, bc_temperature)
+    bc_density = enthalpy_tables[:density_mix].(bc_pressure, bc_enthalpy)
     bc = flow_boundary_condition(
         bc_cells,
         domain,
         bc_pressure,
         bc_temperature;
+        density = bc_density,
         enthalpy = bc_enthalpy,
     )
 
