@@ -10,6 +10,11 @@
 # at atmospheric pressure and 10 °C, and a hot H2O source at the center of the
 # bottom boundary. The alternative bottom heat-flux benchmark is not included
 # here because heat-flux boundary conditions are not yet supported in Fimbul.
+#
+# > [!NOTE] Small discrepancies remain because the open-top boundary treatment
+# > in JutulDarcy/Fimbul is not yet fully supported. For now, treat
+# > this example as a qualitative validation of plume structure and phase
+# > behavior rather than an exact point-by-point match.
 
 using Jutul, JutulDarcy, Fimbul, HYPRE, GLMakie
 
@@ -38,7 +43,40 @@ tables = Fimbul.build_steam_tables_2ph()
 # ## Set up and simulate the benchmark cases
 # We simulate both fluid-source variants from Weis et al. (2014): the
 # moderate-enthalpy single-phase plume and the hotter two-phase plume.
-function simulate_benchmark_case(benchmark_case, tables; nx = 120, nz = 60)
+
+function replace_case_timesteps(case, timesteps)
+    isapprox(sum(timesteps), sum(case.dt); rtol = 1e-3) ||
+        error("HYDROTHERM timestep sum $(sum(timesteps)) does not match case duration $(sum(case.dt))")
+
+    (; model, forces, state0, parameters, input_data) = case
+    return JutulCase(model, timesteps, forces;
+        state0 = state0,
+        parameters = parameters,
+        input_data = input_data,
+    )
+end
+
+function load_hydrotherm_timesteps(case)
+    timesteps = Float64[]
+    for line in eachline(hydrotherm_timestep_path(hydrotherm_case_name(case)))
+        stripped = strip(line)
+        (isempty(stripped) || startswith(stripped, "#")) && continue
+        tokens = split(stripped)
+        length(tokens) >= 2 || error("Expected at least two columns in HYDROTHERM timestep line: $(line)")
+        push!(timesteps, parse(Float64, tokens[2]))
+    end
+    return timesteps .* si_unit(:year)
+end
+
+function hydrotherm_timestep_path(case_name; root = HYDROTHERM_RESULTS_ROOT)
+    path = joinpath(root, "$(case_name)_timesteps.txt")
+    isfile(path) || error("Missing HYDROTHERM timestep export $(path). Run export_profiles.jl in validation_ht_2d first.")
+    return path
+end
+
+hydrotherm_case_name(case) = String(case.input_data[:benchmark_case])
+
+function simulate_benchmark_case(benchmark_case, tables; nx = nx, nz = nz)
     case = benchmark_ht_2d(
         benchmark_case = benchmark_case,
         nx = nx,
@@ -49,12 +87,14 @@ function simulate_benchmark_case(benchmark_case, tables; nx = 120, nz = 60)
 
     simulator, config = setup_reservoir_simulator(
         case;
-        tol_cnv = 1e-3,
-        tol_mb = 1e-7,
+        tol_cnv = 1e-5,
+        tol_mb = 1e-8,
         max_timestep = Inf,
         timesteps = :none,
         relaxation = true,
     )
+    sel = VariableChangeTimestepSelector(:Saturations, 0.03; model = :Reservoir, relative = false)
+    push!(config[:timestep_selectors], sel)
     results = simulate_reservoir(case; simulator = simulator, config = config)
     return (case = case, results = results)
 end
@@ -73,8 +113,13 @@ function section_cell_axes(case)
     x0 = case.input_data[:x_coordinate_origin]
     x = sort(unique(vec(centroids[1, :] .- x0))) ./ 1e3
     depth = sort(unique(vec(centroids[3, :]))) ./ 1e3
-    top_depth = minimum(geometry.boundary_centroids[3, :]) / 1e3
-    top_depth = top_depth - (depth[2] - depth[1])/2  #/ shift from Fimbul cell centers to top boundary
+    # top_depth = minimum(geometry.boundary_centroids[3, :]) / 1e3
+    top_depth = 0.0
+    # top_depth = -(depth[2] - depth[1])/2  # shift from Fimbul cell centers to top boundary
+    # top_depth = 0.0
+    # dept
+    # top_depth = top_depth - (depth[2] - depth[1])/2  #/ shift from Fimbul cell centers to top boundary
+    # depth .+= depth[2] - depth[1]  # shift from Fimbul cell centers to top boundary
     return (x_km = x, depth_km = depth, top_depth_km = top_depth)
 end
 
@@ -96,12 +141,6 @@ function hydrotherm_property_path(case_name, property_name; root = HYDROTHERM_RE
     return path
 end
 
-function hydrotherm_timestep_path(case_name; root = HYDROTHERM_RESULTS_ROOT)
-    path = joinpath(root, "$(case_name)_timesteps.txt")
-    isfile(path) || error("Missing HYDROTHERM timestep export $(path). Run export_profiles.jl in validation_ht_2d first.")
-    return path
-end
-
 function load_hydrotherm_vector(path)
     values = Float64[]
     for line in eachline(path)
@@ -110,30 +149,6 @@ function load_hydrotherm_vector(path)
         push!(values, parse(Float64, stripped))
     end
     return values
-end
-
-function load_hydrotherm_timesteps(case)
-    timesteps = Float64[]
-    for line in eachline(hydrotherm_timestep_path(hydrotherm_case_name(case)))
-        stripped = strip(line)
-        (isempty(stripped) || startswith(stripped, "#")) && continue
-        tokens = split(stripped)
-        length(tokens) >= 2 || error("Expected at least two columns in HYDROTHERM timestep line: $(line)")
-        push!(timesteps, parse(Float64, tokens[2]))
-    end
-    return timesteps .* si_unit(:year)
-end
-
-function replace_case_timesteps(case, timesteps)
-    isapprox(sum(timesteps), sum(case.dt); rtol = 1e-3) ||
-        error("HYDROTHERM timestep sum $(sum(timesteps)) does not match case duration $(sum(case.dt))")
-
-    (; model, forces, state0, parameters, input_data) = case
-    return JutulCase(model, timesteps, forces;
-        state0 = state0,
-        parameters = parameters,
-        input_data = input_data,
-    )
 end
 
 function load_hydrotherm_matrix(path)
@@ -150,15 +165,16 @@ end
 
 function align_hydrotherm_depth_to_fimbul(z_m, values...)
     length(z_m) >= 2 || error("Need at least two HYDROTHERM depth coordinates to align the reference grid")
-    dz_m = z_m[2] - z_m[1]
-    z_aligned_m = z_m[2:end] .- dz_m*0.0
-    aligned_values = map(values) do value
-        value[:, 2:end]
-    end
+    dz_m = (z_m[2] - z_m[1])/2
+    z_aligned_m = z_m .- dz_m*0
+    println(z_aligned_m)
+    aligned_values = values
+    # z_aligned_m = z_m[2:end] .- dz_m*0.0
+    # aligned_values = map(values) do value
+    #     value[:, 2:end]
+    # end
     return (z_aligned_m, aligned_values...)
 end
-
-hydrotherm_case_name(case) = String(case.input_data[:benchmark_case])
 
 function load_hydrotherm_reference(case)
     case_name = hydrotherm_case_name(case)
@@ -170,7 +186,7 @@ function load_hydrotherm_reference(case)
     vapor_saturation = map(liquid_saturation) do value
         isnan(value) ? NaN : 1.0 - value
     end
-    # z_m = z_m .+ (z_m[2] - z_m[1])/2  # shift from HYDROTHERM cell centers to Fimbul cell centers
+    # z_m = z_m .- (z_m[2] - z_m[1])/2  # shift from HYDROTHERM cell centers to Fimbul cell centers
     # z_m, pressure_mpa, temperature_c, vapor_saturation = align_hydrotherm_depth_to_fimbul(
     #     z_m,
     #     pressure_mpa,
@@ -294,6 +310,8 @@ function plot_final_state(case, results)
             colormap = spec.colormap,
             levels = spec.levels,
         )
+        println(axes.depth_km)
+        println(hydrotherm.depth_km)
         contour!(ax, axes.x_km, axes.depth_km, spec.values;
             color = :white,
             levels = spec.levels,
@@ -303,6 +321,7 @@ function plot_final_state(case, results)
             color = :white,
             linewidth = HYDROTHERM_CONTOUR_LINEWIDTH,
             linestyle = :dash,
+            labels=true,
         )
         scatter!(ax, [source.x_km], [source.depth_km]; color = :black, marker = :star5, markersize = 14)
         if i > 1

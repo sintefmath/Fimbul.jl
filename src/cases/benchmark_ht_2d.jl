@@ -114,6 +114,7 @@ function benchmark_ht_2d(;
         name = :MagmaticSource,
         simple_well = true,
         use_top_node = true,
+        WIth = 0.0
     )
 
     sys = H2OSystem(enthalpy_tables)
@@ -159,6 +160,7 @@ function benchmark_ht_2d(;
         bc_temperature;
         density = bc_density,
         enthalpy = bc_enthalpy,
+        dir = :z,
     )
 
     source_cell = cell_index(g, (source_i, 1, source_k))
