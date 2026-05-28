@@ -7,8 +7,8 @@ Five cases (`:a`–`:e`) cover different initial pressure/temperature conditions
 and pressure gradients, spanning single-phase liquid, single-phase vapor, and
 two-phase flow regimes. Each case is a 1D column with Dirichlet-like
 pressure/enthalpy conditions at both ends, imposed through flow boundary
-conditions. The initial state is uniform at the producer-side pressure and
-temperature, matching the MRST benchmark setup.
+conditions. The initial state uses a linear pressure profile between the two
+boundary pressures and a uniform producer-side temperature.
 
 | Case | p_inj [MPa] | p_prod [MPa] | T_inj [°C] | T_prod [°C] | vertical? |
 |:----:|:-----------:|:------------:|:----------:|:-----------:|:--------:|
@@ -92,9 +92,6 @@ function benchmark_ht_1d(;
     elseif benchmark_case == :e
         p_inj  = 4e6;   p_prod = 1e6
         T_inj  = K0 + 300;  T_prod = K0 + 150
-    elseif benchmark_case == :test
-        p_inj  = 1e6;  p_prod = 1e5
-        T_inj  = K0 + 100;  T_prod = K0 + 100
      else
         error("Invalid benchmark_case: $benchmark_case")
     end
@@ -140,8 +137,8 @@ function benchmark_ht_1d(;
     model = replace_variables!(model, RelativePermeabilities = kr)
 
     # ── Initial state ──────────────────────────────────────────────────────
-    # Uniform initial conditions at the producer-side state (low p, low T).
-    # The MRST benchmark also initialises uniformly (not hydrostatic).
+    # Initialize with a linear pressure profile between the boundary pressures
+    # and a uniform producer-side temperature.
     state0 = setup_reservoir_state(model,
         Pressure = p0,
         Enthalpy = h0,

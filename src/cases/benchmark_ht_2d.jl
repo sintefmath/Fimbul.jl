@@ -39,8 +39,8 @@ conditions are not yet supported in Fimbul.
 - `rock_density = 2700.0`: Rock density [kg/m³].
 - `rock_heat_capacity = 880.0`: Rock heat capacity [J/(kg·K)].
 - `rock_thermal_conductivity = 2.0`: Rock thermal conductivity [W/(m·K)].
-- `total_time = 1000.0*year`: Total simulated time [s].
-- `dt_target = 5.0*year`: Target report step after ramp-up [s].
+- `total_time = 5000.0*year`: Total simulated time [s].
+- `dt_target = 10.0*year`: Target timestep size after ramp-up [s].
 - `enthalpy_tables = build_steam_tables_2ph()`: Pre-built (P,H) steam tables.
 
 ## Returns
@@ -77,8 +77,8 @@ function benchmark_ht_2d(;
     enthalpy_tables = build_steam_tables_2ph(),
 )
     benchmark_case == :fluid_source && (benchmark_case = :single_phase_source)
-    benchmark_case in (:single_phase_source, :two_phase_source, :test) ||
-        throw(ArgumentError("benchmark_case must be :fluid_source, :single_phase_source, :two_phase_source, or :test"))
+    benchmark_case in (:single_phase_source, :two_phase_source) ||
+        throw(ArgumentError("benchmark_case must be :fluid_source, :single_phase_source, or :two_phase_source"))
     1 <= source_i <= nx || throw(ArgumentError("source_i must satisfy 1 <= source_i <= nx"))
     1 <= source_k <= nz || throw(ArgumentError("source_k must satisfy 1 <= source_k <= nz"))
 
@@ -87,17 +87,6 @@ function benchmark_ht_2d(;
     end
 
     source_regime = benchmark_case == :two_phase_source ? :two_phase : :single_phase
-
-    if benchmark_case == :test
-        nx = min(nx, 20)
-        nz = min(nz, 12)
-        domain_width = 2000.0*meter
-        domain_depth = 1000.0*meter
-        source_i = cld(nx, 2)
-        source_k = nz
-        total_time = 50.0*year
-        dt_target = min(dt_target, 1.0*year)
-    end
 
     g = CartesianMesh((nx, 1, nz), (domain_width, domain_thickness, domain_depth))
     domain = reservoir_domain(g;
