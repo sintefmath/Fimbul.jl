@@ -205,13 +205,19 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
         envelope = phase_diagram_envelope(tables, pressure_limits; n_pressure = n_pressure)
         if !isnothing(envelope)
             h_l_sat, h_v_sat, p_sat = envelope
-            keep = (p_sat .>= pressure_limits[1]) .& (p_sat .<= pressure_limits[2]) .& (h_l_sat .>= enthalpy_limits[1]) .& (h_v_sat .<= enthalpy_limits[2])
-            h_l_sat = h_l_sat[keep]
-            h_v_sat = h_v_sat[keep]
-            p_sat = p_sat[keep]
             envelope_defaults = (; color = :white, linewidth = 1, linestyle = :solid)
-            henv_liq = lines!(ax, h_l_sat ./ 1e3, p_sat ./ 1e6; envelope_defaults..., envelope_kwargs...)
-            henv_vap = lines!(ax, h_v_sat ./ 1e3, p_sat ./ 1e6; envelope_defaults..., envelope_kwargs...)
+
+            keep_p = (p_sat .>= pressure_limits[1]) .& (p_sat .<= pressure_limits[2])
+
+            keep_l = keep_p .& (h_l_sat .>= enthalpy_limits[1]) .&& (h_l_sat .<= enthalpy_limits[2])
+            if any(keep_l)
+                henv_liq = lines!(ax, h_l_sat[keep_l] ./ 1e3, p_sat[keep_l] ./ 1e6; envelope_defaults..., envelope_kwargs...)
+            end
+
+            keep_v = keep_p .& (h_v_sat .>= enthalpy_limits[1]) .&& (h_v_sat .<= enthalpy_limits[2])
+            if any(keep_v)
+                henv_vap = lines!(ax, h_v_sat[keep_v] ./ 1e3, p_sat[keep_v] ./ 1e6; envelope_defaults..., envelope_kwargs...)
+            end
         end
     end
 
