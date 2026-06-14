@@ -20,7 +20,7 @@ obtained via Steam-Tables look-ups from `build_steam_tables_2ph`.
 Use `H2OSystem` together with `setup_reservoir_model` to obtain a fully
 configured model.
 """
-struct H2OSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.AbstractCompositionalSystemLV
+struct H2OSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.CompositionalSystemLV
     phases  :: T
     rho_ref :: F
     reference_phase_index::Int
