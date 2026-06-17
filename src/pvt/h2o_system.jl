@@ -42,6 +42,11 @@ function H2OSystem(pvt_tables::Dict;
     return H2OSystem(phases, rho_ref, reference_phase_index, pvt_tables)
 end
 
+function H2OSystem(; kwargs...)
+    pvt_tables = steam_tables_h2o()
+    return H2OSystem(pvt_tables; kwargs...)
+end
+
 Base.show(io::IO, ::H2OSystem) =
     print(io, "H2OSystem (AqueousPhase + VaporPhase, 1 component)")
 

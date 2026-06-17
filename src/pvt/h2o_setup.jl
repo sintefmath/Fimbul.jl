@@ -30,3 +30,7 @@ function JutulDarcy.add_thermal_to_model!(model::GeothermalModel)
 end
 
 JutulDarcy.system_uses_cnv_mb(system::H2OSystem) = true
+
+function steam_tables_h2o()
+
+end
