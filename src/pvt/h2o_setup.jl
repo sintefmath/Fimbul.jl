@@ -31,6 +31,38 @@ end
 
 JutulDarcy.system_uses_cnv_mb(system::H2OSystem) = true
 
-function steam_tables_h2o()
+using LazyArtifacts
 
+"""
+    steam_tables_h2o(; kwargs...) -> Dict{Symbol, Any}
+
+Load the packaged H2O steam tables artifact. If the artifact cannot be loaded,
+fall back to building the tables with CoolProp when that extension is available.
+"""
+function steam_tables_h2o(; kwargs...)
+    try
+        return steam_tables_h2o_from_artifact()
+    catch
+        if !isempty(methods(build_steam_tables_h2o))
+            return build_steam_tables_h2o(; kwargs...)
+        end
+        throw(ErrorException(
+            "Could not load the SteamTablesH2O artifact and CoolProp is not available to rebuild the steam tables."
+        ))
+    end
+end
+
+function steam_tables_h2o_from_artifact()
+    tables_dir = artifact"SteamTablesH2O"
+    table_files = filter(f -> endswith(lowercase(f), ".jld2"), readdir(tables_dir; join = true))
+    isempty(table_files) && throw(ErrorException("SteamTablesH2O artifact does not contain a JLD2 table file."))
+    tables = Jutul.JLD2.load(first(table_files))
+    if tables isa Dict
+        if haskey(tables, :data)
+            return tables[:data]
+        elseif haskey(tables, "data")
+            return tables["data"]
+        end
+    end
+    return tables
 end
