@@ -1,0 +1,7 @@
+[SteamTablesH2O]
+git-tree-sha1 = "8705cf2396b3757d83401379d63acb5111f12744"
+lazy = true
+
+    [[SteamTablesH2O.download]]
+    sha256 = "f372c77f19523014f996c166b80b3bd99a06dc4a3f27ddd60542e47405ddf6ba"
+    url = "https://github.com/sintefmath/Fimbul.jl/releases/download/v0.3.4/steam_tables_h2o.tar.bz2"
