@@ -14,4 +14,4 @@ function plot_reservoir_state_phase_diagram! end
 
 function plot_reservoir_state_phase_diagram end
 
-function build_steam_tables_2ph end
+function build_steam_tables_h2o end
