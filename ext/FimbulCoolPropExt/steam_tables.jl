@@ -1,5 +1,5 @@
 """
-    Fimbul.build_steam_tables_2ph(; n_pressure = 100, n_enthalpy = 100,
+    Fimbul.build_steam_tables_h2o(; n_pressure = 100, n_enthalpy = 100,
         p_min = 1e4, p_max = 100e6, h_min = 8e4, h_max = 5e6) -> Dict{Symbol, Any}
 
 Build interpolated pure-water steam tables from CoolProp for the two-phase
@@ -22,7 +22,7 @@ Returned keys:
 The per-phase `(P, H)` tables are defined over the full grid to keep secondary
 variable updates branch-free in the OBL-style formulation.
 """
-function Fimbul.build_steam_tables_2ph(;
+function Fimbul.build_steam_tables_h2o(;
         n_pressure::Int = 100,
         n_enthalpy::Int = 100,
         p_min::Float64  = 1e4,
