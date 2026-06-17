@@ -4,6 +4,19 @@
 Setup function for borehole thermal energy storage (BTES) system.
 
 # Keyword arguments
+- `field = missing`: Explicit wells for the system. If given, this overrides
+  `num_wells`, `num_sectors` and `well_spacing`. The wells are given using
+  the following structure:
+  - A full field is represented as `[sector_1, sector_2, ..., sector_n]`.
+  - `sector_k` contains all wells in sector `k`, represented as
+    `[well_1, well_2, ..., well_nk]`.
+  - Each `well_l` is a `3 x m` matrix containing the coordinates of the well
+    trajectory.
+  Wells within a sector are coupled in series, in the order they appear in
+  `sector_k`: `well_1` is charged first and discharged last, `well_nk` is
+  charged last and discharged first. A single well (a `3 x m` matrix) can
+  also be passed directly as `field`, representing the special case of a
+  field with a single sector containing a single well.
 - `num_wells = 48`: Number of wells in the BTES system.
 - `num_sections = 6`: Number of sections in the BTES system. The system is
   divided into equal circle sectors, and all wells in each sector are coupled in series.
@@ -29,6 +42,7 @@ Setup function for borehole thermal energy storage (BTES) system.
 - `mesh_args = NamedTuple()`: Additional arguments for the mesh generation.
 """
 function btes(;
+    field = missing,
     num_wells = 48,
     num_sectors = 6,
     well_spacing = 5.0,
@@ -53,9 +67,20 @@ function btes(;
     mesh_args = NamedTuple(),
     )
 
+    if !ismissing(field) && field isa AbstractMatrix
+        # Special case: a single well, given as a single 3 x m matrix
+        field = [[field]]
+    end
+
     # ## Create mesh
-    x = fibonacci_pattern_2d(num_wells; spacing = well_spacing)
-    well_coordinates = [x[:, i:i] for i in 1:size(x, 2)]  # Convert 2×N to vector of 2×1 matrices
+    if ismissing(field)
+        x = fibonacci_pattern_2d(num_wells; spacing = well_spacing)
+        well_coordinates = [x[:, i:i] for i in 1:size(x, 2)]  # Convert 2×N to vector of 2×1 matrices
+    else
+        # Use the (x,y) projection of each well trajectory as a mesh constraint
+        well_coordinates = [wc[1:2, :] for wc in vcat(field...)]
+        num_wells = length(well_coordinates)
+    end
     hz = diff(depths)./n_z
     hxy = well_spacing/n_xy
 
@@ -77,21 +102,42 @@ function btes(;
     # Set up BTES wells
     hxy_min = metrics.hxy_min
     well_models = []
+    well_names = Symbol[]
     nl = length(layers)
     geo = tpfv_geometry(mesh)
-    for (wno, xw) in enumerate(well_coordinates)
-        name = Symbol("B$wno")
-        println("Adding well $name ($wno/$num_wells)")
-        xw = xw[:, 1]  # Extract 2D coordinates from 2×1 matrix
-        d = max(norm(xw, 2))
-        v = (d > 0) ? xw./d : (1.0, 0.0)
-        # Shift coordiates a bit to avoid being exactly on the node
-        xw = xw .+ (hxy_min/2) .* v
-        trajectory = [xw[1] xw[2] 0.0 + 1e-3; xw[1] xw[2] depths[end] - 1e-3]
-        cells = Jutul.find_enclosing_cells(mesh, trajectory, n = 100)
-        filter!(c -> layers[c] ∈ well_layers, cells)
-        well = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
-        push!(well_models, well)
+    if ismissing(field)
+        # By default, each well is a straight vertical borehole placed at one
+        # of the constraint points, with its trajectory given by its top and
+        # bottom coordinates.
+        for (wno, xw) in enumerate(well_coordinates)
+            name = Symbol("B$wno")
+            println("Adding well $name ($wno/$num_wells)")
+            xw = xw[:, 1]  # Extract 2D coordinates from 2×1 matrix
+            d = max(norm(xw, 2))
+            v = (d > 0) ? xw./d : (1.0, 0.0)
+            # Shift coordiates a bit to avoid being exactly on the node
+            xw = xw .+ (hxy_min/2) .* v
+            x_top, y_top, z_top = xw[1], xw[2], 0.0 + 1e-3
+            x_bottom, y_bottom, z_bottom = xw[1], xw[2], depths[end] - 1e-3
+            trajectory = permutedims([x_top y_top z_top; x_bottom y_bottom z_bottom])
+            cells = Jutul.find_enclosing_cells(mesh, permutedims(trajectory), n = 100)
+            filter!(c -> layers[c] ∈ well_layers, cells)
+            w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
+            push!(well_models, w_sup, w_ret)
+            push!(well_names, name)
+        end
+    else
+        # Wells are given explicitly through `field`
+        well_coords_3d = vcat(field...)
+        for (wno, wc) in enumerate(well_coords_3d)
+            name = Symbol("B$wno")
+            println("Adding well $name ($wno/$num_wells)")
+            cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), n = 100)
+            filter!(c -> layers[c] ∈ well_layers, cells)
+            w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
+            push!(well_models, w_sup, w_ret)
+            push!(well_names, name)
+        end
     end
     # Make the model
     # Closed-loop wells must not be shut: The supply and return are hydraulically
@@ -125,8 +171,21 @@ function btes(;
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    control_charge, control_discharge, sectors = setup_controls(model, num_sectors,
-        rate_charge, rate_discharge, temperature_charge, temperature_discharge);
+    if ismissing(field)
+        control_charge, control_discharge, sectors = setup_controls(model, num_sectors,
+            rate_charge, rate_discharge, temperature_charge, temperature_discharge);
+    else
+        # Group supply well names by sector, preserving the order given in `field`
+        wells_per_sector = Vector{Vector{Symbol}}()
+        wtot = 0
+        for sector in field
+            sw = [Symbol(well_names[wtot + l], "_supply") for l in 1:length(sector)]
+            wtot += length(sector)
+            push!(wells_per_sector, sw)
+        end
+        control_charge, control_discharge, sectors = setup_controls(model, wells_per_sector,
+            rate_charge, rate_discharge, temperature_charge, temperature_discharge);
+    end
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
     forces_rest = setup_reservoir_forces(model, bc=bc)
@@ -152,12 +211,12 @@ function btes(;
 
 end
 
-function setup_controls(model, number_of_sectors, 
+function setup_controls(model, number_of_sectors,
     rate_charge, rate_discharge, temperature_charge, temperature_discharge)
 
     rho = reservoir_model(model).system.rho_ref[1]
     rate_target = TotalRateTarget(rate_charge)
-    ctrl_charge = InjectorControl(rate_target, [1.0], 
+    ctrl_charge = InjectorControl(rate_target, [1.0],
         density=rho, temperature=temperature_charge)
     rate_target = TotalRateTarget(rate_discharge)
     ctrl_discharge = InjectorControl(rate_target, [1.0],
@@ -238,6 +297,82 @@ function setup_controls(model, number_of_sectors,
             control_discharge[well_ret] = ctrl_ret
             push!(assigned, well_sup, well_ret)
             push!(sec_wells, sw[wno])
+        end
+        sectors[Symbol("S$sno")] = sec_wells
+    end
+
+    @assert sort(assigned) == sort(well_symbols(model))
+
+    return control_charge, control_discharge, sectors
+
+end
+
+function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
+    rate_charge, rate_discharge, temperature_charge, temperature_discharge)
+
+    rho = reservoir_model(model).system.rho_ref[1]
+    rate_target = TotalRateTarget(rate_charge)
+    ctrl_charge = InjectorControl(rate_target, [1.0],
+        density=rho, temperature=temperature_charge)
+    rate_target = TotalRateTarget(rate_discharge)
+    ctrl_discharge = InjectorControl(rate_target, [1.0],
+        density=rho, temperature=temperature_discharge);
+    # BHP control for return side
+    bhp_target = BottomHolePressureTarget(1.0si_unit(:atm))
+    ctrl_ret = ProducerControl(bhp_target);
+    # Set up forces
+    control_charge = Dict()
+    control_discharge = Dict()
+    assigned = []
+    get_return = (well) -> Symbol(replace(String(well), "_supply" => "_return"))
+    sectors = Dict()
+
+    for (sno, sw) in enumerate(wells_per_sector)
+        sec_wells = Symbol[]
+        for (k, well_sup) in enumerate(sw)
+            well_ret = get_return(well_sup)
+            @assert well_sup ∉ assigned
+            @assert well_ret ∉ assigned
+            if length(sw) == 1
+                # Single well in sector: charge and discharge it directly
+                control_charge[well_sup] = ctrl_charge
+                control_discharge[well_sup] = ctrl_discharge
+            elseif k == 1
+                # Water is injected into innermost well during charging
+                control_charge[well_sup] = ctrl_charge
+                # Discharging runs from outer to inner
+                well_prev = get_return(sw[k+1])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
+                ctrl = InjectorControl(target, [1.0],
+                    density=rho, temperature=NaN; check=false)
+                control_discharge[well_sup] = ctrl
+            elseif k == length(sw)
+                # Water is injected into outermost well during discharging
+                control_discharge[well_sup] = ctrl_discharge
+                # Charging runs from inner to outer
+                well_prev = get_return(sw[k-1])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
+                ctrl = InjectorControl(target, [1.0],
+                    density=rho, temperature=NaN; check=false)
+                control_charge[well_sup] = ctrl
+            else
+                # Charging runs from inner to outer
+                well_prev = get_return(sw[k-1])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
+                ctrl = InjectorControl(target, [1.0],
+                    density=rho, temperature=NaN; check=false)
+                control_charge[well_sup] = ctrl
+                # Discharging runs from outer to inner
+                well_prev = get_return(sw[k+1])
+                target = JutulDarcy.ReinjectionTarget([well_prev])
+                ctrl = InjectorControl(target, [1.0],
+                    density=rho, temperature=NaN; check=false)
+                control_discharge[well_sup] = ctrl
+            end
+            control_charge[well_ret] = ctrl_ret
+            control_discharge[well_ret] = ctrl_ret
+            push!(assigned, well_sup, well_ret)
+            push!(sec_wells, well_sup, well_ret)
         end
         sectors[Symbol("S$sno")] = sec_wells
     end
