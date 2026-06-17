@@ -30,7 +30,7 @@ module Fimbul
     export thermal_radius_aquifer
     # Two-phase geothermal
     export H2OSystem
-    export build_steam_tables_2ph
+    export build_steam_tables_h2o
 
     # Load dependencies into namespace
     using Jutul, JutulDarcy
