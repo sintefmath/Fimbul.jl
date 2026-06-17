@@ -15,7 +15,7 @@ Two-phase (liquid + vapour), single-component fluid system for geothermal
 
 One mass conservation equation is closed by the `Enthalpy` primary variable
 (alongside `Pressure`).  Phase split, densities, viscosities and enthalpies are
-obtained via Steam-Tables look-ups from `build_steam_tables_2ph`.
+obtained via Steam-Tables look-ups from `build_steam_tables_h2o`.
 
 Use `H2OSystem` together with `setup_reservoir_model` to obtain a fully
 configured model.
