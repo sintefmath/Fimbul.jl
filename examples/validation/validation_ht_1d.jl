@@ -5,13 +5,11 @@
 # [kipp_hydrotherm_2008](@cite) reference solutions.
 
 using Jutul, JutulDarcy, Fimbul, GLMakie
-include("benchmarks_ht.jl")
+using DelimitedFiles, LazyArtifacts
 
 to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
 to_kj_per_kg(h) = h ./ 1e3
-
-const HYDROTHERM_1D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_1d")
 
 const SINGLE_PHASE_CASES = (:a, :b, :c)
 const TWO_PHASE_CASES = (:d, :e)
@@ -53,9 +51,6 @@ const PROFILE_SPECS = (
 # Shared setup used throughout the example.
 nx = 200
 cell_size = 10.0
-
-##
-tables = Fimbul.steam_tables_h2o()
 
 ##
 available_vertical_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
@@ -267,6 +262,10 @@ all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...); 
 # We first inspect the steam tables directly. The figure below shows three key
 # properties in $(p, h)$-space: temperature, density, and vapor saturation. The
 # two-phase envelope is drawn on each subplot.
+
+# Tables are available in the model's fluid system, but can also be loaded
+# (or generated using CoolProp) directly from Fimbul utilities.
+tables = Fimbul.steam_tables_h2o()
 fig_properties = plot_property_maps(tables)
 fig_properties
 
