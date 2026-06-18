@@ -24,6 +24,7 @@ module Fimbul
     export ags
     export ates
     export btes
+    export ftes
     export coaxial_bhe
     export egg_geothermal, egg_geothermal_doublet, egg_ates
     # Other utilities
