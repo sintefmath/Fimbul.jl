@@ -2,7 +2,8 @@
     Fimbul.build_steam_tables_h2o(; n_pressure = 100, n_enthalpy = 100,
         p_min = 1e4, p_max = 100e6, h_min = 8e4, h_max = 5e6) -> Dict{Symbol, Any}
 
-Build interpolated pure-water steam tables from CoolProp for the two-phase
+Build interpolated pure-water steam tables from
+[CoolProp](https://github.com/CoolProp/CoolProp.jl) for the two-phase
 pressure-enthalpy formulation used by Fimbul.
 
 All returned tables use SI units. Pressure is in Pa, enthalpy in J/kg,

@@ -213,12 +213,15 @@ end
 all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...); nx = nx, cell_size = cell_size)
 
 # ## H2O properties in pressure-enthalpy space
+# The steam tables have been generated using the `CoolProp` library
+# [bell_pure_2014](@cite)--see also `FimbulCoolPropExt``). They are available
+# in the model's fluid system, but can also be loaded directly using Artifacts.
+# To generate your own steam tables, see the `build_steam_tables_h2o` function
+# in `FimbulCoolPropExt`.
+
 # We first inspect the steam tables directly. The figure below shows three key
 # properties in $(p, h)$-space: temperature, density, and vapor saturation. The
 # two-phase envelope is drawn on each subplot.
-
-# Tables are available in the model's fluid system, but can also be loaded
-# (or generated using CoolProp) directly from Fimbul utilities.
 tables = Fimbul.steam_tables_h2o()
 fig_properties = plot_property_maps(tables)
 fig_properties
