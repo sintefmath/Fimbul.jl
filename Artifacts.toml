@@ -1,5 +1,6 @@
 [HYDROTHERMBenchmarks]
 git-tree-sha1 = "a0a54c078f1be937022402cc3d313183804bf690"
+lazy = true
 
     [[HYDROTHERMBenchmarks.download]]
     sha256 = "f208d0d1709b94cf210934e416c968be0eb843b5c858857370a67ea0643edc16"
