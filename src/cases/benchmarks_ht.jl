@@ -1,3 +1,7 @@
+const HYDROTHERM_BENCHMARKS_ROOT = joinpath(artifact"HYDROTHERMBenchmarks", "hydrotherm")
+const HYDROTHERM_1D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_1d")
+const HYDROTHERM_2D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_2d")
+
 """
     benchmark_ht_1d(; <keyword arguments>)
 
