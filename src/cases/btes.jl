@@ -17,6 +17,9 @@ Setup function for borehole thermal energy storage (BTES) system.
   charged last and discharged first. A single well (a `3 x m` matrix) can
   also be passed directly as `field`, representing the special case of a
   field with a single sector containing a single well.
+- `pattern = :sunflower`: Well placement pattern used when `field` is not
+  given. One of `:sunflower`, `:rectangular`, `:circular` or `:polygonal`.
+- `num_sides = 6`: Number of sides of the polygon when `pattern = :polygonal`.
 - `num_wells = 48`: Number of wells in the BTES system.
 - `num_sections = 6`: Number of sections in the BTES system. The system is
   divided into equal circle sectors, and all wells in each sector are coupled in series.
@@ -44,6 +47,7 @@ Setup function for borehole thermal energy storage (BTES) system.
 function btes(;
     field = missing,
     pattern = :sunflower,
+    num_sides = 6,
     num_wells = 48,
     num_sectors = 6,
     well_spacing = 5.0,
@@ -75,8 +79,10 @@ function btes(;
             field = rectangular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
         elseif pattern == :circular
             field = circular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
+        elseif pattern == :polygonal
+            field = polygonal_pattern(num_wells, well_spacing, num_sides; num_sectors = num_sectors, depths = depths)
         else
-            error("Unknown pattern: $pattern. Supported patterns are :sunflower, :rectangular and :circular.")
+            error("Unknown pattern: $pattern. Supported patterns are :sunflower, :rectangular, :circular and :polygonal.")
         end
     elseif field isa AbstractMatrix
         # Special case: a single well, given as a single 3 x m matrix
@@ -277,6 +283,7 @@ function group_into_sectors(xy::AbstractMatrix, num_sectors::Int)
 
 end
 
+#=
 function setup_controls(model, number_of_sectors,
     rate_charge, rate_discharge, temperature_charge, temperature_discharge)
 
@@ -372,6 +379,7 @@ function setup_controls(model, number_of_sectors,
     return control_charge, control_discharge, sectors
 
 end
+=#
 
 function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
     rate_charge, rate_discharge, temperature_charge, temperature_discharge)
