@@ -188,6 +188,9 @@ function build_fimbul_docs(
             "Introduction" => [
                 "Fimbul.jl" => "index.md",
             ],
+            "Formulation" => [
+                "Fluid properties" => "formulation/fluid_properties.md",
+            ],
             "Cases" => [
                 "man/cases/cases.md",
                 "man/cases/utils.md",
