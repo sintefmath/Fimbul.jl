@@ -21,7 +21,7 @@ function get_example_paths(; check_empty = true)
     examples = OrderedDict()
     examples["storage"] = []
     examples["production"] = []
-    examples["analytical"] = []
+    examples["validation"] = []
     for excat in readdir(basepth)
         if isdir(joinpath(basepth, excat))
             for exfile in readdir(joinpath(basepth, excat))

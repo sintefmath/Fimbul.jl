@@ -1,8 +1,10 @@
 # Setup functions
 
-## Cases with analytical solutions
+## Validation cases
 ```@docs
 analytical_1d
+benchmark_ht_1d
+benchmark_ht_2d
 ```
 
 ## Generic cases
@@ -23,5 +25,6 @@ egg_geothermal_doublet
 ```@docs
 ates
 btes
+ftes
 egg_ates
 ```
