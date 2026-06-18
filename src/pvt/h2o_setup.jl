@@ -56,7 +56,7 @@ function steam_tables_h2o_from_artifact()
     tables_dir = artifact"SteamTablesH2O"
     table_files = filter(f -> endswith(lowercase(f), ".jld2"), readdir(tables_dir; join = true))
     isempty(table_files) && throw(ErrorException("SteamTablesH2O artifact does not contain a JLD2 table file."))
-    tables = Jutul.JLD2.load(first(table_files))
+    tables = Jutul.JLD2.load(last(table_files))
     if tables isa Dict
         if haskey(tables, :data)
             return tables[:data]

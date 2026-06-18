@@ -17,6 +17,7 @@
 # > behavior rather than an exact point-by-point match.
 
 using Jutul, JutulDarcy, Fimbul, HYPRE, GLMakie
+include("benchmarks_ht.jl")
 
 to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
@@ -24,18 +25,12 @@ to_megapascal(p) = convert_from_si.(p, "megapascal")
 nx = 91
 nz = 30
 
-const HYDROTHERM_RESULTS_ROOT = normpath(joinpath(
-    @__DIR__, "..", "..", "..", "..", "..", "misc", "hydrotherm-dev", "validation_ht_2d", "profiles"
-))
+const HYDROTHERM_2D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_2d")
 const SINGLE_PHASE_TEMPERATURE_LEVELS = collect(0.0:25.0:125.0)
 const TWO_PHASE_TEMPERATURE_LEVELS = collect(0.0:50.0:350.0)
 const SINGLE_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:50.0)
 const TWO_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:35.0)
 const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0]
-
-##
-tables = Fimbul.build_steam_tables_2ph()
-
 # ## Set up and simulate the benchmark cases
 # We simulate both fluid-source variants from Weis et al. (2014): the
 # moderate-enthalpy single-phase plume and the hotter two-phase plume.
@@ -50,31 +45,24 @@ function replace_case_timesteps(case, timesteps)
 end
 
 hydrotherm_case_name(case) = String(case.input_data[:benchmark_case])
-hydrotherm_path(case_name, name) = joinpath(HYDROTHERM_RESULTS_ROOT, "$(case_name)_$(name).txt")
+hydrotherm_path(case_name, name) = joinpath(HYDROTHERM_2D_ROOT, "$(case_name)_$(name).txt")
 
-hydrotherm_lines(path) = [
-    stripped for stripped in (strip(line) for line in eachline(path))
-    if !isempty(stripped) && !startswith(stripped, "#")
-]
+load_hydrotherm_vector(path) = vec(readdlm(path, comments = true))
 
-load_hydrotherm_vector(path) = parse.(Float64, hydrotherm_lines(path))
-
-function load_hydrotherm_matrix(path)
-    rows = [parse.(Float64, split(line)) for line in hydrotherm_lines(path)]
-    return hcat(rows...)
-end
+load_hydrotherm_matrix(path) = permutedims(readdlm(path, comments = true))
 
 function load_hydrotherm_timesteps(case)
     path = hydrotherm_path(hydrotherm_case_name(case), "timesteps")
-    return [parse(Float64, split(line)[2]) for line in hydrotherm_lines(path)] .* si_unit(:year)
+    data = readdlm(path, comments = true)
+    return data[:, 2] .* si_unit(:year)
 end
 
-function simulate_benchmark_case(benchmark_case, tables; nx = nx, nz = nz)
+function simulate_benchmark_case(benchmark_case; nx = nx, nz = nz)
+
     case = benchmark_ht_2d(
         benchmark_case = benchmark_case,
         nx = nx,
         nz = nz,
-        enthalpy_tables = tables,
     )
     case = replace_case_timesteps(case, load_hydrotherm_timesteps(case))
 
@@ -92,8 +80,9 @@ function simulate_benchmark_case(benchmark_case, tables; nx = nx, nz = nz)
     return (case = case, results = results)
 end
 
-single_phase = simulate_benchmark_case(:single_phase_source, tables; nx = nx, nz = nz)
-two_phase = simulate_benchmark_case(:two_phase_source, tables; nx = nx, nz = nz)
+single_phase = simulate_benchmark_case(:single_phase_source; nx = nx, nz = nz)
+
+two_phase = simulate_benchmark_case(:two_phase_source; nx = nx, nz = nz)
 
 ##
 pad_top(values::AbstractVector, top_value) = vcat(fill(top_value, 1), values)

@@ -4,14 +4,15 @@
 # in Fimbul, and validates the results against HYDROTHERM
 # [kipp_hydrotherm_2008](@cite) reference solutions.
 
-using Jutul, JutulDarcy, Fimbul, CoolProp, GLMakie
+using Jutul, JutulDarcy, Fimbul, GLMakie
+include("benchmarks_ht.jl")
 
 to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
 to_kj_per_kg(h) = h ./ 1e3
 
-const TABLE_PRESSURE_LIMITS = (1e5, 52.5e6)
-const TABLE_ENTHALPY_LIMITS = (500e3, 3500e3)
+const HYDROTHERM_1D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_1d")
+
 const SINGLE_PHASE_CASES = (:a, :b, :c)
 const TWO_PHASE_CASES = (:d, :e)
 const CASE_COLORS = Dict(
@@ -50,55 +51,35 @@ const PROFILE_SPECS = (
 # saturation.
 
 # Shared setup used throughout the example.
-table_resolution = 50
 nx = 200
 cell_size = 10.0
 
 ##
-tables = Fimbul.build_steam_tables_2ph(
-    n_pressure = table_resolution,
-    n_enthalpy = table_resolution,
-    info_level = 1,
-)
+tables = Fimbul.steam_tables_h2o()
 
 ##
 available_vertical_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
 
-hydrotherm_profile_path(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT) =
+hydrotherm_profile_path(case_symbol, vertical; root = HYDROTHERM_1D_ROOT) =
     joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal").txt")
 
-hydrotherm_timestep_path(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT) =
+hydrotherm_timestep_path(case_symbol, vertical; root = HYDROTHERM_1D_ROOT) =
     joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal")_timesteps.txt")
 
-function load_hydrotherm_columns(path)
+function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_1D_ROOT)
+    path = hydrotherm_profile_path(case_symbol, vertical; root)
     isfile(path) || return nothing
-
-    lines = readlines(path)
-    isempty(lines) && error("Empty HYDROTHERM profile file: $(path)")
-    header = split(strip(replace(first(lines), "#" => "")))
-    columns = Dict(name => Float64[] for name in header)
-
-    for line in Iterators.drop(lines, 1)
-        stripped = strip(line)
-        isempty(stripped) && continue
-        tokens = split(stripped)
-        length(tokens) == length(header) || error("Expected $(length(header)) columns in $(path), got $(length(tokens))")
-        for (name, token) in zip(header, tokens)
-            push!(columns[name], token == "NaN" ? NaN : parse(Float64, token))
-        end
-    end
-
-    return columns
+    header = split(strip(replace(readline(path), "#" => "")))
+    data = readdlm(path, comments = true)
+    return Dict(name => vec(data[:, i]) for (i, name) in enumerate(header))
 end
 
-function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT)
-    return load_hydrotherm_columns(hydrotherm_profile_path(case_symbol, vertical; root))
-end
+function load_hydrotherm_timesteps(case_symbol, vertical; root = HYDROTHERM_1D_ROOT)
 
-function load_hydrotherm_timesteps(case_symbol, vertical; root = HYDROTHERM_RESULTS_ROOT)
-    table = load_hydrotherm_columns(hydrotherm_timestep_path(case_symbol, vertical; root))
-    table === nothing && return nothing
-    return table["timestep_years"] .* si_unit(:year)
+    path = hydrotherm_timestep_path(case_symbol, vertical; root)
+    isfile(path) || return nothing
+    data = readdlm(path, comments = true)
+    return data[:, 2] .* si_unit(:year)
 end
 
 function replace_case_timesteps(case, timesteps)
@@ -125,12 +106,13 @@ function load_hydrotherm_phase_path(case_symbol)
     return (pressure_mpa = table["pressure_mpa"], enthalpy_kj_per_kg = table["enthalpy_kj_per_kg"])
 end
 
-function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100, cell_size = 10.0)
+
+function simulate_benchmark_case(case_symbol; vertical = false, nx = 100, cell_size = 10.0)
+
     case = benchmark_ht_1d(
         benchmark_case = case_symbol,
         nx = nx,
         cell_size = cell_size,
-        enthalpy_tables = tables,
         vertical = vertical,
     )
     case = replace_case_timesteps(case, load_hydrotherm_timesteps(case_symbol, vertical))
@@ -146,14 +128,14 @@ function simulate_benchmark_case(case_symbol, tables; vertical = false, nx = 100
     return (case = case, results = results)
 end
 
-function simulate_case_family(case_symbols, tables; nx = 100, cell_size = 10.0)
+function simulate_case_family(case_symbols; nx = 100, cell_size = 10.0)
+
     outputs = Dict{Tuple{Symbol, Bool}, Any}()
     for case_symbol in case_symbols
         for vertical in available_vertical_modes(case_symbol)
             @info "Simulating case $(case_symbol) with vertical = $(vertical)"
             outputs[(case_symbol, vertical)] = simulate_benchmark_case(
-                case_symbol,
-                tables;
+                case_symbol;
                 vertical = vertical,
                 nx = nx,
                 cell_size = cell_size,
@@ -204,8 +186,8 @@ function plot_property_maps(tables)
             ax,
             tables;
             variable = spec.variable,
-            pressure_limits = TABLE_PRESSURE_LIMITS,
-            enthalpy_limits = TABLE_ENTHALPY_LIMITS,
+            pressure_limits = (1e5, 52.5e6),
+            enthalpy_limits = (500e3, 3500e3),
             n_pressure = 500,
             n_enthalpy = 500,
             levels = 18,
@@ -279,8 +261,7 @@ end
 
 ##
 # all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
-# all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
-all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
+all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...); nx = nx, cell_size = cell_size)
 
 # ## H2O properties in pressure-enthalpy space
 # We first inspect the steam tables directly. The figure below shows three key
@@ -347,8 +328,8 @@ handles = Fimbul.plot_phase_diagram_contours!(
     ax,
     tables;
     variable = :temperature,
-    pressure_limits = TABLE_PRESSURE_LIMITS,
-    enthalpy_limits = TABLE_ENTHALPY_LIMITS,
+    pressure_limits = (1e5, 52.5e6),
+    enthalpy_limits = (500e3, 3500e3),
     levels = 20,
     lines = true,
 )
