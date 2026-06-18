@@ -5,6 +5,7 @@ using JutulDarcy
 
 println(pathof(Fimbul))
 
+
 field = [
     [ [8.0 8.0; 4.0 4.0; 65.0 65.0], [10.0 10.0; 20.0 20.0; 80.0 80.0] ],   # sector 1: 2 wells
     [ [0.0 5.0; 0.0 15.0; 0.0 30.0], [5.0 5.0; 5.0 5.0; 65.0 65.0] ]    # sector 2: 2 wells
@@ -17,17 +18,6 @@ case = btes(pattern = pattern,num_wells = 49, depths = [0.0, 0.5, 100, 125],
     discharge_period = ["October", "March"],
     num_years = 4,
 );
-
-# Nominal grid positions, straight from the pattern function (no mesh involved)
-nominal_field = Fimbul.rectangular_pattern(48, 5.0; num_sectors = 6, depths = [0.0, 0.5, 100, 125])
-nominal_xy = hcat([w[1:2, 1] for w in vcat(nominal_field...)]...)
-println("First 5 nominal (x,y): ", [nominal_xy[:, i] for i in 1:5])
-
-# Actual positions used by the built wells (cell centroids the well ended up at)
-geo = tpfv_geometry(physical_representation(reservoir_model(case.model).data_domain))
-wells = filter(w -> contains(String(w), "_supply"), well_symbols(case.model))
-actual_xy = [geo.cell_centroids[1:2, case.model.models[w].domain.representation.perforations.reservoir[1]] for w in wells]
-println("First 5 actual (x,y): ", actual_xy[1:5])
 
 # ------- Important: well pattern
 

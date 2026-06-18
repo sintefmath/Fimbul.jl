@@ -89,12 +89,13 @@ function btes(;
     # ## Create mesh
     # Use the (x,y) projection of each well trajectory as a mesh constraint
     well_coordinates = [wc[1:2, :] for wc in well_coords_3d]
+    println(well_coordinates)
     hz = diff(depths)./n_z
     hxy = well_spacing/n_xy
 
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite,
-    # with a styrofoam layer on top
+    # with a styrofoam layer on top                
     domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths,
         (
             rock_density = density,
@@ -124,42 +125,6 @@ function btes(;
         push!(well_names, name)
     end
 
-    #=
-    if ismissing(field)
-        # By default, each well is a straight vertical borehole placed at one
-        # of the constraint points, with its trajectory given by its top and
-        # bottom coordinates.
-        for (wno, xw) in enumerate(well_coordinates)
-            name = Symbol("B$wno")
-            println("Adding well $name ($wno/$num_wells)")
-            xw = xw[:, 1]  # Extract 2D coordinates from 2×1 matrix
-            d = max(norm(xw, 2))
-            v = (d > 0) ? xw./d : (1.0, 0.0)
-            # Shift coordiates a bit to avoid being exactly on the node
-            xw = xw .+ (hxy_min/2) .* v
-            x_top, y_top, z_top = xw[1], xw[2], 0.0 + 1e-3
-            x_bottom, y_bottom, z_bottom = xw[1], xw[2], depths[end] - 1e-3
-            trajectory = permutedims([x_top y_top z_top; x_bottom y_bottom z_bottom])
-            cells = Jutul.find_enclosing_cells(mesh, permutedims(trajectory), n = 100)
-            filter!(c -> layers[c] ∈ well_layers, cells)
-            w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
-            push!(well_models, w_sup, w_ret)
-            push!(well_names, name)
-        end
-    else
-        # Wells are given explicitly through `field`
-        well_coords_3d = vcat(field...)
-        for (wno, wc) in enumerate(well_coords_3d)
-            name = Symbol("B$wno")
-            println("Adding well $name ($wno/$num_wells)")
-            cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), n = 100)
-            filter!(c -> layers[c] ∈ well_layers, cells)
-            w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
-            push!(well_models, w_sup, w_ret)
-            push!(well_names, name)
-        end
-    end
-    =#
     # Make the model
     # Closed-loop wells must not be shut: The supply and return are hydraulically
     # connected, and shutting one of them gives a dead end.
@@ -202,24 +167,6 @@ function btes(;
     end
     control_charge, control_discharge, sectors = setup_controls(model, wells_per_sector,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge);
-
-    #=
-    if ismissing(field)
-        control_charge, control_discharge, sectors = setup_controls(model, num_sectors,
-            rate_charge, rate_discharge, temperature_charge, temperature_discharge);
-    else
-        # Group supply well names by sector, preserving the order given in `field`
-        wells_per_sector = Vector{Vector{Symbol}}()
-        wtot = 0
-        for sector in field
-            sw = [Symbol(well_names[wtot + l], "_supply") for l in 1:length(sector)]
-            wtot += length(sector)
-            push!(wells_per_sector, sw)
-        end
-        control_charge, control_discharge, sectors = setup_controls(model, wells_per_sector,
-            rate_charge, rate_discharge, temperature_charge, temperature_discharge);
-    end
-    =#
     
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
@@ -246,20 +193,17 @@ function btes(;
 
 end
 
-# ## Well placement patterns
+# ## Patterns
 #
 # Each pattern function takes the number of wells and the approximate
-# spacing between neighboring wells, and returns a full `field`
-# (`[sector_1, sector_2, ...]`, with each well a straight vertical borehole),
-# grouped into `num_sectors` sectors by angular position around the origin,
-# ordered from innermost to outermost within each sector.
+# spacing between neighboring wells, and returns a full field
 
 function sunflower_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
     xy = fibonacci_pattern_2d(num_wells; spacing = spacing)
     return field_from_points(xy, num_sectors, depths)
 end
 
-function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65], jitter = 0.001)
+function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65], jitter = 0.003)
     nx = max(1, round(Int, sqrt(num_wells)))
     ny = ceil(Int, num_wells/nx)
     xs = ((0:nx-1) .- (nx-1)/2).*spacing
@@ -274,7 +218,6 @@ function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0,
     # Perturb points slightly to avoid exact co-circularity, which causes an
     # ambiguous Delaunay triangulation (and hence irregular mesh cells) for a
     # perfectly regular grid.
-    perturb_points!(xy, jitter*spacing)
     return field_from_points(xy, num_sectors, depths)
 end
 
@@ -293,18 +236,6 @@ function circular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.
     end
     xy = hcat(points...)
     return field_from_points(xy, num_sectors, depths)
-end
-
-function perturb_points!(xy::AbstractMatrix, magnitude)
-    # Deterministic, non-aligned perturbation (golden-ratio angle step, same
-    # idea as the sunflower pattern) so points are no longer exactly
-    # co-circular/co-linear with each other.
-    φ = (1 + sqrt(5))/2
-    for k in 1:size(xy, 2)
-        θ = 2π*k/φ^2
-        xy[:, k] .+= magnitude.*[cos(θ), sin(θ)]
-    end
-    return xy
 end
 
 function field_from_points(xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector)
