@@ -95,7 +95,6 @@ function btes(;
     # ## Create mesh
     # Use the (x,y) projection of each well trajectory as a mesh constraint
     well_coordinates = [wc[1:2, :] for wc in well_coords_3d]
-    println(well_coordinates)
     hz = diff(depths)./n_z
     hxy = well_spacing/n_xy
 
@@ -282,104 +281,6 @@ function group_into_sectors(xy::AbstractMatrix, num_sectors::Int)
     return sector_indices
 
 end
-
-#=
-function setup_controls(model, number_of_sectors,
-    rate_charge, rate_discharge, temperature_charge, temperature_discharge)
-
-    rho = reservoir_model(model).system.rho_ref[1]
-    rate_target = TotalRateTarget(rate_charge)
-    ctrl_charge = InjectorControl(rate_target, [1.0],
-        density=rho, temperature=temperature_charge)
-    rate_target = TotalRateTarget(rate_discharge)
-    ctrl_discharge = InjectorControl(rate_target, [1.0],
-        density=rho, temperature=temperature_discharge);
-    # BHP control for return side
-    bhp_target = BottomHolePressureTarget(1.0si_unit(:atm))
-    ctrl_ret = ProducerControl(bhp_target);
-    # Set up forces
-    control_charge = Dict()
-    control_discharge = Dict()
-
-    msh = physical_representation(reservoir_model(model).data_domain)
-    geo = tpfv_geometry(msh)
-    xy = geo.cell_centroids[1:2,:]
-    # map from (x,y) to polar coordiates
-    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
-    θ = atan.(xy[2,:], xy[1,:]) .+ π
-    assigned = []
-    # Closed-loop wells, each with a supply and a return part
-    wells = [k for (k, m) in pairs(model.models) if is_closed_loop_well(m.data_domain)]
-    get_supply = (well) -> first(closed_loop_well_names(model.models[well].data_domain))
-    get_return = (well) -> last(closed_loop_well_names(model.models[well].data_domain))
-    sectors = Dict()
-    wells_per_sector = div(length(wells), number_of_sectors)
-    rem = length(wells) - wells_per_sector*number_of_sectors
-    wells_per_sector = fill(wells_per_sector, number_of_sectors)
-    wells_per_sector[1:rem] .+= 1
-    wmodels = [model.models[well] for well in wells]
-    wc = [wm.domain.representation.perforations.reservoir[1] for wm in wmodels]
-    θ = θ[wc]
-    order_θ = sortperm(θ)
-    wtot = 0
-    for sno in 1:number_of_sectors
-        wno = (1:wells_per_sector[sno]) .+ wtot
-        wtot += wells_per_sector[sno]
-        sw = wells[order_θ[wno]]
-        well_radii = r[wc[order_θ[wno]]]
-        order = sortperm(well_radii)
-        sec_wells = Symbol[]
-        for (k, wno) in enumerate(order)
-            well_sup = get_supply(sw[wno])
-            well_ret = get_return(sw[wno])
-            @assert well_sup ∉ assigned
-            @assert well_ret ∉ assigned
-            if k == 1
-                # Water is injected into innermost well during charging
-                control_charge[well_sup] = ctrl_charge
-                # Discharging runs from outer to inner
-                well_prev = get_return(sw[order[k+1]])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_discharge[well_sup] = ctrl
-            elseif k == length(sw)
-                # Water is injected into outermost well during discharging
-                control_discharge[well_sup] = ctrl_discharge
-                # Charging runs from inner to outer
-                well_prev = get_return(sw[order[k-1]])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_charge[well_sup] = ctrl
-            else
-                # Charging runs from inner to outer
-                well_prev = get_return(sw[order[k-1]])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_charge[well_sup] = ctrl
-                # Discharging runs from outer to inner
-                well_prev = get_return(sw[order[k+1]])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_discharge[well_sup] = ctrl
-            end
-            control_charge[well_ret] = ctrl_ret
-            control_discharge[well_ret] = ctrl_ret
-            push!(assigned, well_sup, well_ret)
-            push!(sec_wells, sw[wno])
-        end
-        sectors[Symbol("S$sno")] = sec_wells
-    end
-
-    @assert sort(assigned) == sort(well_symbols(model))
-
-    return control_charge, control_discharge, sectors
-
-end
-=#
 
 function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
     rate_charge, rate_discharge, temperature_charge, temperature_discharge)

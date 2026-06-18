@@ -3,9 +3,6 @@ using Jutul
 using Fimbul
 using JutulDarcy
 
-println(pathof(Fimbul))
-
-
 field = [
     [ [8.0 8.0; 4.0 4.0; 65.0 65.0], [10.0 10.0; 20.0 20.0; 80.0 80.0] ],   # sector 1: 2 wells
     [ [0.0 5.0; 0.0 15.0; 0.0 30.0], [5.0 5.0; 5.0 5.0; 65.0 65.0] ]    # sector 2: 2 wells
