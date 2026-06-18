@@ -17,7 +17,6 @@
 # > behavior rather than an exact point-by-point match.
 
 using Jutul, JutulDarcy, Fimbul, HYPRE, GLMakie
-include("benchmarks_ht.jl")
 
 to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
@@ -25,7 +24,6 @@ to_megapascal(p) = convert_from_si.(p, "megapascal")
 nx = 91
 nz = 30
 
-const HYDROTHERM_2D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_2d")
 const SINGLE_PHASE_TEMPERATURE_LEVELS = collect(0.0:25.0:125.0)
 const TWO_PHASE_TEMPERATURE_LEVELS = collect(0.0:50.0:350.0)
 const SINGLE_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:50.0)
@@ -35,28 +33,6 @@ const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0]
 # We simulate both fluid-source variants from Weis et al. (2014): the
 # moderate-enthalpy single-phase plume and the hotter two-phase plume.
 
-function replace_case_timesteps(case, timesteps)
-    (; model, forces, state0, parameters, input_data) = case
-    return JutulCase(model, timesteps, forces;
-        state0 = state0,
-        parameters = parameters,
-        input_data = input_data,
-    )
-end
-
-hydrotherm_case_name(case) = String(case.input_data[:benchmark_case])
-hydrotherm_path(case_name, name) = joinpath(HYDROTHERM_2D_ROOT, "$(case_name)_$(name).txt")
-
-load_hydrotherm_vector(path) = vec(readdlm(path, comments = true))
-
-load_hydrotherm_matrix(path) = permutedims(readdlm(path, comments = true))
-
-function load_hydrotherm_timesteps(case)
-    path = hydrotherm_path(hydrotherm_case_name(case), "timesteps")
-    data = readdlm(path, comments = true)
-    return data[:, 2] .* si_unit(:year)
-end
-
 function simulate_benchmark_case(benchmark_case; nx = nx, nz = nz)
 
     case = benchmark_ht_2d(
@@ -64,7 +40,7 @@ function simulate_benchmark_case(benchmark_case; nx = nx, nz = nz)
         nx = nx,
         nz = nz,
     )
-    case = replace_case_timesteps(case, load_hydrotherm_timesteps(case))
+    case = Fimbul.replace_case_timesteps(case, Fimbul.load_hydrotherm_2d_timesteps(case))
 
     simulator, config = setup_reservoir_simulator(
         case;
@@ -111,24 +87,7 @@ function section_data(case, values; top_value)
 end
 
 function load_hydrotherm_reference(case)
-    case_name = hydrotherm_case_name(case)
-    x_m = load_hydrotherm_vector(hydrotherm_path(case_name, "x_m"))
-    z_m = load_hydrotherm_vector(hydrotherm_path(case_name, "z_m"))
-    pressure_mpa = load_hydrotherm_matrix(hydrotherm_path(case_name, "pressure_mpa"))
-    temperature_c = load_hydrotherm_matrix(hydrotherm_path(case_name, "temperature_c"))
-    liquid_saturation = load_hydrotherm_matrix(hydrotherm_path(case_name, "liquid_saturation"))
-    vapor_saturation = map(liquid_saturation) do value
-        isnan(value) ? NaN : 1.0 - value
-    end
-
-    x0 = x_m[cld(length(x_m), 2)]
-    return (
-        x_km = (x_m .- x0) ./ 1e3,
-        depth_km = z_m ./ 1e3,
-        pressure = pressure_mpa,
-        temperature = temperature_c,
-        vapor_saturation = vapor_saturation,
-    )
+    return Fimbul.load_hydrotherm_2d_reference(case)
 end
 
 to_vapor_saturation(S) = vec(S[2, :])

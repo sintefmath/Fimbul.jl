@@ -2,6 +2,87 @@ const HYDROTHERM_BENCHMARKS_ROOT = joinpath(artifact"HYDROTHERMBenchmarks", "hyd
 const HYDROTHERM_1D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_1d")
 const HYDROTHERM_2D_ROOT = joinpath(HYDROTHERM_BENCHMARKS_ROOT, "benchmark_2d")
 
+available_vertical_modes_ht_1d(case_symbol) = case_symbol == :e ? (false,) : (false, true)
+
+hydrotherm_1d_profile_path(case_symbol, vertical; root = HYDROTHERM_1D_ROOT) =
+    joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal").txt")
+
+hydrotherm_1d_timestep_path(case_symbol, vertical; root = HYDROTHERM_1D_ROOT) =
+    joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal")_timesteps.txt")
+
+function load_hydrotherm_1d_table(case_symbol, vertical; root = HYDROTHERM_1D_ROOT)
+    path = hydrotherm_1d_profile_path(case_symbol, vertical; root)
+    isfile(path) || return nothing
+    header = split(strip(replace(readline(path), "#" => "")))
+    data = readdlm(path, comments = true)
+    return Dict(name => vec(data[:, i]) for (i, name) in enumerate(header))
+end
+
+function load_hydrotherm_1d_timesteps(case_symbol, vertical; root = HYDROTHERM_1D_ROOT)
+    path = hydrotherm_1d_timestep_path(case_symbol, vertical; root)
+    isfile(path) || return nothing
+    data = readdlm(path, comments = true)
+    return data[:, 2] .* si_unit(:year)
+end
+
+function load_hydrotherm_1d_property(case_symbol, vertical, column; root = HYDROTHERM_1D_ROOT)
+    table = load_hydrotherm_1d_table(case_symbol, vertical; root)
+    table === nothing && return nothing
+    haskey(table, column) || return nothing
+    coordinate_column = vertical ? "depth_m" : "distance_m"
+    return (coordinate_m = table[coordinate_column], values = table[column])
+end
+
+function load_hydrotherm_1d_phase_path(case_symbol; root = HYDROTHERM_1D_ROOT)
+    table = load_hydrotherm_1d_table(case_symbol, false; root)
+    table === nothing && return nothing
+    return (pressure_mpa = table["pressure_mpa"], enthalpy_kj_per_kg = table["enthalpy_kj_per_kg"])
+end
+
+function replace_case_timesteps(case, timesteps; check_sum = false, rtol = 1e-3)
+    timesteps === nothing && return case
+    if check_sum
+        isapprox(sum(timesteps), sum(case.dt); rtol = rtol) ||
+            error("HYDROTHERM timestep sum $(sum(timesteps)) does not match case duration $(sum(case.dt))")
+    end
+
+    (; model, forces, state0, parameters, input_data) = case
+    return JutulCase(model, timesteps, forces; state0 = state0, parameters = parameters, input_data = input_data)
+end
+
+hydrotherm_2d_case_name(case) = String(case.input_data[:benchmark_case])
+hydrotherm_2d_path(case_name, name; root = HYDROTHERM_2D_ROOT) = joinpath(root, "$(case_name)_$(name).txt")
+
+load_hydrotherm_2d_vector(path) = vec(readdlm(path, comments = true))
+load_hydrotherm_2d_matrix(path) = permutedims(readdlm(path, comments = true))
+
+function load_hydrotherm_2d_timesteps(case; root = HYDROTHERM_2D_ROOT)
+    path = hydrotherm_2d_path(hydrotherm_2d_case_name(case), "timesteps"; root)
+    data = readdlm(path, comments = true)
+    return data[:, 2] .* si_unit(:year)
+end
+
+function load_hydrotherm_2d_reference(case; root = HYDROTHERM_2D_ROOT)
+    case_name = hydrotherm_2d_case_name(case)
+    x_m = load_hydrotherm_2d_vector(hydrotherm_2d_path(case_name, "x_m"; root))
+    z_m = load_hydrotherm_2d_vector(hydrotherm_2d_path(case_name, "z_m"; root))
+    pressure_mpa = load_hydrotherm_2d_matrix(hydrotherm_2d_path(case_name, "pressure_mpa"; root))
+    temperature_c = load_hydrotherm_2d_matrix(hydrotherm_2d_path(case_name, "temperature_c"; root))
+    liquid_saturation = load_hydrotherm_2d_matrix(hydrotherm_2d_path(case_name, "liquid_saturation"; root))
+    vapor_saturation = map(liquid_saturation) do value
+        isnan(value) ? NaN : 1.0 - value
+    end
+
+    x0 = x_m[cld(length(x_m), 2)]
+    return (
+        x_km = (x_m .- x0) ./ 1e3,
+        depth_km = z_m ./ 1e3,
+        pressure = pressure_mpa,
+        temperature = temperature_c,
+        vapor_saturation = vapor_saturation,
+    )
+end
+
 """
     benchmark_ht_1d(; <keyword arguments>)
 

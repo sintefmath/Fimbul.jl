@@ -5,7 +5,6 @@
 # [kipp_hydrotherm_2008](@cite) reference solutions.
 
 using Jutul, JutulDarcy, Fimbul, GLMakie
-using DelimitedFiles, LazyArtifacts
 
 to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
@@ -53,53 +52,6 @@ nx = 200
 cell_size = 10.0
 
 ##
-available_vertical_modes(case_symbol) = case_symbol == :e ? (false,) : (false, true)
-
-hydrotherm_profile_path(case_symbol, vertical; root = HYDROTHERM_1D_ROOT) =
-    joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal").txt")
-
-hydrotherm_timestep_path(case_symbol, vertical; root = HYDROTHERM_1D_ROOT) =
-    joinpath(root, "case_$(case_symbol)_$(vertical ? "vertical" : "horizontal")_timesteps.txt")
-
-function load_hydrotherm_table(case_symbol, vertical; root = HYDROTHERM_1D_ROOT)
-    path = hydrotherm_profile_path(case_symbol, vertical; root)
-    isfile(path) || return nothing
-    header = split(strip(replace(readline(path), "#" => "")))
-    data = readdlm(path, comments = true)
-    return Dict(name => vec(data[:, i]) for (i, name) in enumerate(header))
-end
-
-function load_hydrotherm_timesteps(case_symbol, vertical; root = HYDROTHERM_1D_ROOT)
-
-    path = hydrotherm_timestep_path(case_symbol, vertical; root)
-    isfile(path) || return nothing
-    data = readdlm(path, comments = true)
-    return data[:, 2] .* si_unit(:year)
-end
-
-function replace_case_timesteps(case, timesteps)
-    timesteps === nothing && return case
-    isapprox(sum(timesteps), sum(case.dt); rtol = 1e-3) ||
-        error("HYDROTHERM timestep sum $(sum(timesteps)) does not match case duration $(sum(case.dt))")
-
-    (; model, forces, state0, parameters, input_data) = case
-    return JutulCase(model, timesteps, forces; state0 = state0, parameters = parameters, input_data = input_data)
-end
-
-function load_hydrotherm_property(case_symbol, vertical, spec)
-    table = load_hydrotherm_table(case_symbol, vertical)
-    table === nothing && return nothing
-    haskey(table, spec.hydrotherm_column) || return nothing
-
-    coordinate_column = vertical ? "depth_m" : "distance_m"
-    return (coordinate_m = table[coordinate_column], values = table[spec.hydrotherm_column])
-end
-
-function load_hydrotherm_phase_path(case_symbol)
-    table = load_hydrotherm_table(case_symbol, false)
-    table === nothing && return nothing
-    return (pressure_mpa = table["pressure_mpa"], enthalpy_kj_per_kg = table["enthalpy_kj_per_kg"])
-end
 
 
 function simulate_benchmark_case(case_symbol; vertical = false, nx = 100, cell_size = 10.0)
@@ -110,7 +62,11 @@ function simulate_benchmark_case(case_symbol; vertical = false, nx = 100, cell_s
         cell_size = cell_size,
         vertical = vertical,
     )
-    case = replace_case_timesteps(case, load_hydrotherm_timesteps(case_symbol, vertical))
+    case = Fimbul.replace_case_timesteps(
+        case,
+        Fimbul.load_hydrotherm_1d_timesteps(case_symbol, vertical);
+        check_sum = true,
+    )
     simulator, config = setup_reservoir_simulator(
         case;
         tol_cnv = 1e-3,
@@ -127,7 +83,7 @@ function simulate_case_family(case_symbols; nx = 100, cell_size = 10.0)
 
     outputs = Dict{Tuple{Symbol, Bool}, Any}()
     for case_symbol in case_symbols
-        for vertical in available_vertical_modes(case_symbol)
+        for vertical in Fimbul.available_vertical_modes_ht_1d(case_symbol)
             @info "Simulating case $(case_symbol) with vertical = $(vertical)"
             outputs[(case_symbol, vertical)] = simulate_benchmark_case(
                 case_symbol;
@@ -201,8 +157,7 @@ function plot_property_maps(tables)
 end
 
 function plot_case_profiles(case_symbol, results)
-    vertical_modes = available_vertical_modes(case_symbol)
-    hydrotherm_present = true
+    vertical_modes = Fimbul.available_vertical_modes_ht_1d(case_symbol)
     fig_height = 400 * length(vertical_modes)
     fig = Figure(size = (800 + 400*(case_symbol ∈ TWO_PHASE_CASES), fig_height))
 
@@ -218,8 +173,7 @@ function plot_case_profiles(case_symbol, results)
                 continue
             end
             values = spec.transform(state[spec.name])
-            hydrotherm = load_hydrotherm_property(case_symbol, vertical, spec)
-            hydrotherm_present = hydrotherm_present || hydrotherm !== nothing
+            hydrotherm = Fimbul.load_hydrotherm_1d_property(case_symbol, vertical, spec.hydrotherm_column)
             if vertical
                 ax = Axis(
                     fig[row+1, col];
@@ -334,7 +288,7 @@ handles = Fimbul.plot_phase_diagram_contours!(
 )
 
 for case_symbol in (SINGLE_PHASE_CASES..., TWO_PHASE_CASES...)
-    hydrotherm = load_hydrotherm_phase_path(case_symbol)
+    hydrotherm = Fimbul.load_hydrotherm_1d_phase_path(case_symbol)
     lines!(ax, hydrotherm.enthalpy_kj_per_kg, hydrotherm.pressure_mpa; linewidth = 6, linestyle = :dash, color = CASE_COLORS[case_symbol])
     out = all_results[(case_symbol, false)]
     state = out.results.states[end]
