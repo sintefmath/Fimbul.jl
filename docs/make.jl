@@ -359,11 +359,16 @@ function build_fimbul_docs(
                 "Fimbul.jl" => "index.md",
             ],
             "Formulation" => [
-                "Fluid properties" => "man/formulation/fluid_properties.md",
+                "Governing Equations" => "man/formulation/governing_equations.md",
             ],
-            "Cases" => [
-                "man/cases/cases.md",
-                "man/cases/utils.md",
+            "API" => [
+                "Modelling" => [
+                    "man/pvt/fluid_properties.md",
+                ],
+                "Cases" => [
+                    "man/cases/cases.md",
+                    "man/cases/utils.md",
+                ],
             ],
             "References" => [
                 "Bibliography" => "extras/refs.md"
