@@ -12,7 +12,7 @@ pattern = :circular
 
 case = btes(pattern; depths = [0.0, 0.5, 100, 125],
     charge_period = ["April", "September"],
-    discharge_period = ["October", "March"],reversed_discharge = true,
+    discharge_period = ["October", "March"],reversed_discharge = false,
     num_years = 4,
 );
 

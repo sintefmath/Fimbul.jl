@@ -262,7 +262,9 @@ function max_distance(x::AbstractMatrix)
 end
 
 """
-Determines whether a point is inside a polygon.
+Determines whether a point is inside a polygon. Uses the "even-odd" rule to find whether a point is 
+inside or outside a polygon; if a horizontal ray from the point to infinity crosses an edge of the polygon 
+an odd number of times, then a point is inside; else, it is outside. 
 
 # Arguments
 - `point::AbstractVector`: A point (x, y) to check.
