@@ -43,6 +43,162 @@ function get_example_paths(; check_empty = true)
     return examples
 end
 
+function parse_tags(text)
+    m = match(r"<tags:\s*([^>]+)>", text)
+    if !isnothing(m)
+        return strip.(split(m.captures[1], ","))
+    end
+    return nothing
+end
+
+function example_path_jl(cname, pth)
+    fimbul_dir = realpath(joinpath(@__DIR__, ".."))
+    return joinpath(fimbul_dir, "examples", cname, "$pth.jl")
+end
+
+function tags_from_file(pth)
+    lines = readlines(pth)
+    for line in lines
+        t = parse_tags(line)
+        if !isnothing(t)
+            return t
+        end
+    end
+    return nothing
+end
+
+function normalize_tag_name(tag::String)
+    t = lowercase(strip(tag))
+    if t == "production"
+        # Keep compatibility with the requested spelling.
+        return "proudction"
+    end
+    return t
+end
+
+function all_tags()
+    descr = OrderedDict{String, String}()
+    descr["validation"] = "Validation examples that compare Fimbul simulations with analytical or benchmark reference cases."
+    descr["storage"] = "Examples focused on thermal energy storage systems and operating strategies."
+    descr["proudction"] = "Examples focused on geothermal heat production workflows and system performance."
+    descr["ates"] = "Aquifer Thermal Energy Storage (ATES) examples."
+    descr["btes"] = "Borehole Thermal Energy Storage (BTES) examples."
+    descr["ftes"] = "Fracture/Fault Thermal Energy Storage (FTES) examples."
+    descr["egs"] = "Enhanced Geothermal System (EGS) examples."
+    descr["ags"] = "Advanced Geothermal System (AGS) examples."
+
+    palette = [
+        "rgb(228, 26, 28)",
+        "rgb(55, 126, 184)",
+        "rgb(77, 175, 74)",
+        "rgb(152, 78, 163)",
+        "rgb(255, 127, 0)",
+        "rgb(255, 255, 51)",
+        "rgb(166, 86, 40)",
+        "rgb(247, 129, 191)"
+    ]
+
+    out = OrderedDict{String, NamedTuple{(:desc, :color), Tuple{String, String}}}()
+    i = 1
+    for (k, v) in pairs(descr)
+        out[k] = (desc = v, color = palette[mod1(i, length(palette))])
+        i += 1
+    end
+    return out
+end
+
+function infer_tags(category::AbstractString, exname::AbstractString)
+    tags = String[]
+    cat = lowercase(category)
+    name = lowercase(exname)
+
+    if cat == "validation"
+        push!(tags, "validation")
+    elseif cat == "storage"
+        push!(tags, "storage")
+    elseif cat == "production"
+        push!(tags, "proudction")
+    end
+
+    for t in ("ates", "btes", "ftes", "egs", "ags")
+        if occursin(t, name)
+            push!(tags, t)
+        end
+    end
+
+    return unique(tags)
+end
+
+function tags_for_example(category::AbstractString, exname::AbstractString)
+    pth = example_path_jl(category, exname)
+    file_tags = tags_from_file(pth)
+    tags = isnothing(file_tags) ? infer_tags(category, exname) : map(normalize_tag_name, file_tags)
+    return unique(tags)
+end
+
+function tag_str(tag::AbstractString)
+    return tag_str([tag])
+end
+
+function tag_str(tag_names::AbstractVector)
+    tags = all_tags()
+    s = "``` @raw html\n"
+    for tag in tag_names
+        t = normalize_tag_name(tag)
+        @assert haskey(tags, t) "Unknown tag: $t"
+        info = tags[t]
+        s *= "<ExampleTag text=\"$t\" color=\"$(info.color)\" />\n"
+    end
+    s *= "```\n"
+    return s
+end
+
+function collect_examples_by_tag(; check_empty = false)
+    ex_paths = get_example_paths(check_empty = check_empty)
+    out = OrderedDict{String, Vector{Tuple{String, String}}}()
+    for key in keys(all_tags())
+        out[key] = Tuple{String, String}[]
+    end
+    for (category, example_set) in pairs(ex_paths)
+        for exname in example_set
+            extags = tags_for_example(category, exname)
+            for tag in extags
+                @assert haskey(out, tag) "Example $exname in $category has unknown tag $tag"
+                push!(out[tag], (exname, category))
+            end
+        end
+    end
+    return out
+end
+
+function write_tags()
+    tags = all_tags()
+    outdir = joinpath(@__DIR__, "src", "examples", "overview")
+    mkpath(outdir)
+    outpth = joinpath(outdir, "example_overview.md")
+    ex_tags = collect_examples_by_tag(check_empty = false)
+    open(outpth, "w") do io
+        println(io, "# Example overview\n")
+        println(io, "Fimbul.jl examples are categorized by tags. Use the overview below to quickly find relevant examples by topic and system type.\n")
+        for (tag, info) in pairs(tags)
+            println(io, "## $tag\n")
+            println(io, tag_str(tag))
+            println(io, "$(info.desc)\n")
+            println(io, "### Examples with the $(lowercase(tag)) tag:\n")
+            if length(ex_tags[tag]) == 0
+                println(io, "_No examples with this tag yet._\n")
+            else
+                for (exname, category) in ex_tags[tag]
+                    exlink = joinpath("..", "..", "examples", category, "$exname.md")
+                    println(io, "1. [$exname]($exlink) (in $category)")
+                end
+                println(io, "\n")
+            end
+        end
+    end
+    println("Wrote tags to $outpth")
+end
+
 function timer_str()
     start = "example_t_start = time_ns(); # hide\n"
     stop_1 = "\nt_s = (time_ns() - example_t_start) / 1e9 # hide\n"
@@ -80,6 +236,14 @@ function update_footer(content, subdir, exname)
     return new_content
 end
 
+function replace_tags(content, subdir, exname)
+    tags = tags_for_example(subdir, exname)
+    if isempty(tags)
+        return content
+    end
+    return string(tag_str(tags), "\n", content)
+end
+
 function build_fimbul_docs(
         build_format = nothing;
         build_examples = true,
@@ -104,6 +268,7 @@ function build_fimbul_docs(
     # DocMeta.setdocmeta!(JutulDarcy, :DocTestSetup, :(using JutulDarcy); recursive=true)
     # DocMeta.setdocmeta!(Jutul, :DocTestSetup, :(using Jutul); recursive=true)
     bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
+    write_tags()
 
     ## Literate pass
     # Base directory
@@ -154,10 +319,11 @@ function build_fimbul_docs(
             in_pth = example_path(category, exname)
             push!(ex_dest, joinpath("examples", category, "$exname.md"))
             upd(content) = update_footer(content, category, exname)
-            Literate.markdown(in_pth, joinpath(out_dir, category), preprocess = upd)
+            fixt(content) = replace_tags(content, category, exname)
+            Literate.markdown(in_pth, joinpath(out_dir, category), preprocess = upd, postprocess = fixt)
         end
     end
-    examples_markdown = []
+    examples_markdown = Any["examples/overview/example_overview.md"]
     for (k, v) in pairs(examples_by_name)
         push!(examples_markdown, dir_to_doc_name(k) => v)
     end
@@ -200,7 +366,9 @@ function build_fimbul_docs(
             ],
         ],
         "Examples" => examples_markdown,
-        
+        "Validation" => [
+            "Models" => validation_markdown,
+        ]
     ]
     # for (k, subpages) in build_pages
     #     println("$k")
