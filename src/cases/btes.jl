@@ -244,10 +244,10 @@ end
 
 function sunflower_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
     xy = fibonacci_pattern_2d(num_wells; spacing = spacing)
-    return field_from_points(xy, num_sectors, depths)
+    return field_from_points(:angular,xy, num_sectors, depths)
 end
 
-function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65], jitter = 0.003)
+function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
     nx = max(1, round(Int, sqrt(num_wells)))
     ny = ceil(Int, num_wells/nx)
     xs = ((0:nx-1) .- (nx-1)/2).*spacing
@@ -259,10 +259,7 @@ function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0,
         xy[:, k] = [x, y]
     end
     xy = xy[:, 1:num_wells]
-    # Perturb points slightly to avoid exact co-circularity, which causes an
-    # ambiguous Delaunay triangulation (and hence irregular mesh cells) for a
-    # perfectly regular grid.
-    return field_from_points(xy, num_sectors, depths)
+    return field_from_points(:cartesian,xy, num_sectors, depths)
 end
 
 function circular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
@@ -279,7 +276,7 @@ function circular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.
         ring += 1
     end
     xy = hcat(points...)
-    return field_from_points(xy, num_sectors, depths)
+    return field_from_points(:angular,xy, num_sectors, depths)
 end
 
 function polygonal_pattern(num_wells, spacing, num_sides; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
@@ -307,10 +304,10 @@ function polygonal_pattern(num_wells, spacing, num_sides; num_sectors = 6, depth
     order = sortperm(r)[1:min(num_wells, size(xy, 2))]
     xy = xy[:, order]
 
-    return field_from_points(xy, num_sectors, depths)
+    return field_from_points(:angular,xy, num_sectors, depths)
 end
 
-function field_from_points(xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector)
+function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector)
 
     num_wells = size(xy, 2)
     well_coords = Vector{Matrix{Float64}}(undef, num_wells)
@@ -319,13 +316,18 @@ function field_from_points(xy::AbstractMatrix, num_sectors::Int, depths::Abstrac
         x_bottom, y_bottom, z_bottom = xy[1, i], xy[2, i], depths[end] - 1e-3
         well_coords[i] = permutedims([x_top y_top z_top; x_bottom y_bottom z_bottom])
     end
-    sector_indices = group_into_sectors(xy, num_sectors)
+    if sector_division == :angular
+        sector_indices = group_into_sectors_angular(xy, num_sectors)
+    elseif sector_division == :cartesian
+        sector_indices = group_into_sectors_cartesian(xy, num_sectors)
+    end
 
     return [well_coords[idx] for idx in sector_indices]
 
 end
 
-function group_into_sectors(xy::AbstractMatrix, num_sectors::Int)
+function group_into_sectors_angular(xy::AbstractMatrix, num_sectors::Int)
+    # Divide the well field into roughly equal angle sectors
 
     n = size(xy, 2)
     r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
@@ -346,7 +348,66 @@ function group_into_sectors(xy::AbstractMatrix, num_sectors::Int)
     end
 
     return sector_indices
+end
 
+function factor_pair_closest_to_square(n::Int)
+    # Find the divisor pair of n closest to a square (smaller, larger)
+    best = (1, n)
+    for d in 1:floor(Int, sqrt(n))
+        if n % d == 0
+            best = (d, n ÷ d)
+        end
+    end
+    return best
+end
+
+function equal_index_ranges(total::Int, n_groups::Int)
+    # Split `total` items into n_groups contiguous, as-equal-as-possible chunks
+    base = div(total, n_groups)
+    rem = total - base*n_groups
+    sizes = fill(base, n_groups)
+    sizes[1:rem] .+= 1
+
+    ranges = Vector{Tuple{Int,Int}}()
+    s = 0
+    for sz in sizes
+        push!(ranges, (s+1, s+sz))
+        s += sz
+    end
+    return ranges
+end
+
+function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int)
+    # Divide the well field into a grid of roughly equal Cartesian blocks
+    # The order of the wells within a sector is done in a zigzag order, 
+    # where the first column is populated from the top, then the next column is populated 
+    # from the bottom etc. 
+
+    n = size(xy, 2)
+    cols = sort(unique(xy[1, :]))
+    rows = sort(unique(xy[2, :]))
+    n_cols_total, n_rows_total = length(cols), length(rows)
+
+    n_row_bands, n_col_bands = factor_pair_closest_to_square(num_sectors)
+    if n_cols_total < n_rows_total
+        n_row_bands, n_col_bands = n_col_bands, n_row_bands
+    end
+
+    col_bands = equal_index_ranges(n_cols_total, n_col_bands)
+    row_bands = equal_index_ranges(n_rows_total, n_row_bands)
+
+    sector_indices = Vector{Vector{Int}}()
+    for (c0, c1) in col_bands
+        band_cols = cols[c0:c1]
+        col_rank = Dict(xc => j for (j, xc) in enumerate(band_cols))
+        for (r0, r1) in row_bands
+            band_rows = rows[r0:r1]
+            idx = [i for i in 1:n if xy[1, i] in band_cols && xy[2, i] in band_rows]
+            idx = sort(idx, by = i -> (xy[1, i], iseven(col_rank[xy[1, i]]) ? -xy[2, i] : xy[2, i]))
+            push!(sector_indices, idx)
+        end
+    end
+    return sector_indices
 end
 
 function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
