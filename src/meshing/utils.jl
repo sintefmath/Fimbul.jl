@@ -261,6 +261,109 @@ function max_distance(x::AbstractMatrix)
     return min_max_distance(x)[2]
 end
 
+function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector)
+
+    num_wells = size(xy, 2)
+    well_coords = Vector{Matrix{Float64}}(undef, num_wells)
+    for i in 1:num_wells
+        x_top, y_top, z_top = xy[1, i], xy[2, i], 0.0 + 1e-3
+        x_bottom, y_bottom, z_bottom = xy[1, i], xy[2, i], depths[end] - 1e-3
+        well_coords[i] = permutedims([x_top y_top z_top; x_bottom y_bottom z_bottom])
+    end
+    if sector_division == :angular
+        sector_indices = group_into_sectors_angular(xy, num_sectors)
+    elseif sector_division == :cartesian
+        sector_indices = group_into_sectors_cartesian(xy, num_sectors)
+    end
+
+    return [well_coords[idx] for idx in sector_indices]
+
+end
+
+function group_into_sectors_angular(xy::AbstractMatrix, num_sectors::Int)
+    # Divide the well field into roughly equal angle sectors
+
+    n = size(xy, 2)
+    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
+    θ = atan.(xy[2,:], xy[1,:]) .+ π
+    order_θ = sortperm(θ)
+    wells_per_sector = div(n, num_sectors)
+    rem = n - wells_per_sector*num_sectors
+    wells_per_sector = fill(wells_per_sector, num_sectors)
+    wells_per_sector[1:rem] .+= 1
+
+    sector_indices = Vector{Vector{Int}}()
+    wtot = 0
+    for sno in 1:num_sectors
+        idx = order_θ[(1:wells_per_sector[sno]) .+ wtot]
+        wtot += wells_per_sector[sno]
+        order_r = sortperm(r[idx])
+        push!(sector_indices, idx[order_r])
+    end
+
+    return sector_indices
+end
+
+function factor_pair_closest_to_square(n::Int)
+    # Find the divisor pair of n closest to a square (smaller, larger)
+    best = (1, n)
+    for d in 1:floor(Int, sqrt(n))
+        if n % d == 0
+            best = (d, n ÷ d)
+        end
+    end
+    return best
+end
+
+function equal_index_ranges(total::Int, n_groups::Int)
+    # Split `total` items into n_groups contiguous, as-equal-as-possible chunks
+    base = div(total, n_groups)
+    rem = total - base*n_groups
+    sizes = fill(base, n_groups)
+    sizes[1:rem] .+= 1
+
+    ranges = Vector{Tuple{Int,Int}}()
+    s = 0
+    for sz in sizes
+        push!(ranges, (s+1, s+sz))
+        s += sz
+    end
+    return ranges
+end
+
+function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int)
+    # Divide the well field into a grid of roughly equal Cartesian blocks
+    # The order of the wells within a sector is done in a zigzag order, 
+    # where the first column is populated from the top, then the next column is populated 
+    # from the bottom etc. 
+
+    n = size(xy, 2)
+    cols = sort(unique(xy[1, :]))
+    rows = sort(unique(xy[2, :]))
+    n_cols_total, n_rows_total = length(cols), length(rows)
+
+    n_row_bands, n_col_bands = factor_pair_closest_to_square(num_sectors)
+    if n_cols_total < n_rows_total
+        n_row_bands, n_col_bands = n_col_bands, n_row_bands
+    end
+
+    col_bands = equal_index_ranges(n_cols_total, n_col_bands)
+    row_bands = equal_index_ranges(n_rows_total, n_row_bands)
+
+    sector_indices = Vector{Vector{Int}}()
+    for (c0, c1) in col_bands
+        band_cols = cols[c0:c1]
+        col_rank = Dict(xc => j for (j, xc) in enumerate(band_cols))
+        for (r0, r1) in row_bands
+            band_rows = rows[r0:r1]
+            idx = [i for i in 1:n if xy[1, i] in band_cols && xy[2, i] in band_rows]
+            idx = sort(idx, by = i -> (xy[1, i], iseven(col_rank[xy[1, i]]) ? -xy[2, i] : xy[2, i]))
+            push!(sector_indices, idx)
+        end
+    end
+    return sector_indices
+end
+
 """
 Determines whether a point is inside a polygon. Uses the "even-odd" rule to find whether a point is 
 inside or outside a polygon; if a horizontal ray from the point to infinity crosses an edge of the polygon 
@@ -289,16 +392,6 @@ function point_in_polygon(point::AbstractVector, polygon::AbstractMatrix)
     return inside
 end
 
-"""
-Determines whether multiple points are inside a polygon.
-
-# Arguments
-- `points::AbstractMatrix`: Matrix (2×M) of points to check.
-- `polygon::AbstractMatrix`: Matrix (2×N) representing the vertices of the polygon.
-
-# Returns
-- `Vector{Bool}`: Vector where `true` indicates the point is inside the polygon.
-"""
 function points_in_polygon(points::AbstractMatrix, polygon::AbstractMatrix)
     return [point_in_polygon(points[:, i], polygon) for i in 1:size(points, 2)]
 end
