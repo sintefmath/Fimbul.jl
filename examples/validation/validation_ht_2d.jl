@@ -29,7 +29,8 @@ const SINGLE_PHASE_TEMPERATURE_LEVELS = collect(0.0:25.0:125.0)
 const TWO_PHASE_TEMPERATURE_LEVELS = collect(0.0:50.0:350.0)
 const SINGLE_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:50.0)
 const TWO_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:35.0)
-const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0]
+const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0];
+
 # ## Set up and simulate the benchmark cases
 # We simulate both fluid-source variants from Weis et al. (2014): the
 # moderate-enthalpy single-phase plume and the hotter two-phase plume.
@@ -227,7 +228,7 @@ function plot_final_state(case, results)
     is_ax = [f isa Axis for f in fig.content]
     linkaxes!(fig.content[is_ax]...)
     return fig
-end
+end;
 
 # ## Single-phase source case
 # The moderate-enthalpy source generates an upward-rising thermal plume that

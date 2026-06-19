@@ -30,7 +30,7 @@ const PROFILE_SPECS = (
 )
 
 nx = 200
-cell_size = 10.0
+cell_size = 10.0;
 
 # ## Utilities
 function simulate_benchmark_case(case_symbol; vertical = false, nx = 100, cell_size = 10.0)
@@ -185,10 +185,12 @@ function plot_case_profiles(case_symbol, results)
         fig[row, :] = Label(fig, "Case $(case_symbol) ($(vertical_label))"; fontsize = 20)
     end
     return fig
-end
+end;
 
 # ## Simulate all cases
-all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...); nx = nx, cell_size = cell_size)
+all_results = simulate_case_family(
+    (SINGLE_PHASE_CASES..., TWO_PHASE_CASES...);
+    nx = nx, cell_size = cell_size);
 
 # ## H2O properties in pressure-enthalpy space
 # The steam tables have been generated using the `CoolProp` library
