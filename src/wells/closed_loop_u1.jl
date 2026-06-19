@@ -101,7 +101,7 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     args = (
         type = :closed_loop,
         simple_well = false,
-        WI = 0.0
+        # WI = 0.0
     )
     # Set up supply well
     supply_well = setup_well(D, reservoir_cells;
@@ -201,7 +201,7 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         )
        
         hole_volumes[pipe_cell] = vol_p
-        hole_volumes[grout_cell] = 0.0
+        hole_volumes[grout_cell] = 1e-3*vol_g
         casing_volumes[pipe_cell] = 0.0
         casing_volumes[grout_cell] = 0.0
         grout_volumes[pipe_cell] = 0.0

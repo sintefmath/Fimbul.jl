@@ -1,5 +1,57 @@
 import Jutul.CutCellMeshes: PlaneCut, PolygonalSurface, cut_mesh
 
+"""
+    ftes(well_coordinates, fractures; <keyword arguments>)
+
+Fractured Thermal Energy Storage (FTES) simulation case setup.
+
+Sets up a geothermal simulation with an injector and producer well pair(s) in a
+fractured porous medium. The model supports seasonal charging and discharging
+cycles, with coupled flow and heat transport in both the matrix and discrete
+fracture network (DFN).
+
+## Arguments
+
+- `well_coordinates::Vector{Matrix{Float64}}`: List of 3×2 matrices defining
+    well paths. First well is the injector, remaining wells are producer legs.
+    Each column of a matrix represents well coordinates `[x, y, z]`.
+- `fractures::Dict{Symbol, Any}`: Fracture specification with keys:
+    - `:normal`: Vector of normal vectors (one per fracture)
+    - `:centers`: Vector of fracture center points
+    - `:radius`: Vector of fracture radii (use `Inf` for infinite planes)
+    - `:aperture`: Vector of fracture apertures [m]
+    - `:porosity`: Vector of fracture porosities [-]
+
+Alternatively, `wells` can be a `NamedTuple` with keys `:num_producers`,
+`:radius`, and `:depth`, and `fractures` can be an `Int` (number of fractures)
+or a `NamedTuple` with at least the keys `:num`, `:z_min`, `:z_max` -- see
+`setup_ftes_fractures` for details.
+
+## Keyword Arguments
+
+- `depths = nothing`: Vertical layer depths. If `nothing`, automatically
+  generated from well depths.
+- `matrix_properties = NamedTuple()`: Rock properties (default:
+    `permeability=1e-4 darcy`, `porosity=0.01`), passed on to
+    `layered_reservoir_domain`.
+- `rate_charge = missing`: Injection rate during charging [m³/s]. 
+    If missing, computed from `fracture_domain` and `charge_period`.
+- `rate_discharge = missing`: Injection rate during discharging [m³/s]. 
+    If missing, set equal to `rate_charge`.
+- `temperature_charge = 95°C`: Injected temperature during charging [K].
+- `temperature_discharge = 20°C`: Injected temperature during discharging [K].
+- `charge_period = ["April", "November"]`: Months for charging operation.
+- `discharge_period = ["December", "March"]`: Months for discharging operation.
+- `utes_schedule_args = NamedTuple()`: Additional arguments for schedule setup,
+  passed to `make_utes_schedule`.
+- `mesh_args = NamedTuple()`: Additional arguments for mesh generation, passed
+  to `extruded_mesh`.
+- `info_level = 0`: Verbosity level (0 = silent, > 0 = info messages).
+
+## Returns
+
+A `JutulCase` ready for `simulate_reservoir`.
+"""
 function ftes(well_coordinates::Vector{Matrix{Float64}}, fractures::Dict{Symbol, Any};
     depths = nothing,
     matrix_properties = NamedTuple(),
