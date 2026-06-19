@@ -1,4 +1,5 @@
 # # Analytical solutions for closed-loop geothermal wells
+# <tags: validation>
 # This example validates the numerical simulation of a closed-loop geothermal
 # well system against analytical solutions for both U-tube and coaxial
 # closed-loop configurations assuming fixed ground temperature. The validation

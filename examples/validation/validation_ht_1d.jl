@@ -1,4 +1,5 @@
 # # 1D high-temperature geothermal benchmark
+# <tags: validation>
 # This example reproduces the 1D high-temperature geothermal benchmark cases
 # from [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation
 # in Fimbul, and validates the results against HYDROTHERM

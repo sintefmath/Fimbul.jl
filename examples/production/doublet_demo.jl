@@ -1,4 +1,5 @@
 # # Geothermal energy production from a well doublet
+# <tags: proudction>
 # This example demonstrates how to simulate and visualize the production of
 # geothermal energy from a doublet well system. The setup consists of a
 # producer well that extracts hot water from the reservoir, and an injector well

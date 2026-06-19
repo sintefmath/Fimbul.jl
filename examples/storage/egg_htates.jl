@@ -1,4 +1,5 @@
 # # Digital twinning of a high-temperature aquifer thermal energy storage system
+# <tags: storage, ates>
 #
 # The first version of this script was prepared for the [2025 DTE & AICOMAS
 # conference](https://dte_aicomas_2025.iacm.info):

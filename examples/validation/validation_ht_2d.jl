@@ -1,4 +1,5 @@
 # # 2D high-temperature geothermal benchmark
+# <tags: validation>
 # This example demonstrates the 2D high-temperature geothermal benchmark from
 # [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation in
 # Fimbul.
