@@ -1,5 +1,5 @@
 # # 1D high-temperature geothermal benchmark
-# <tags: validation>
+# <tags: Validation>
 # This example reproduces the 1D high-temperature geothermal benchmark cases
 # from [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation
 # in Fimbul, and validates the results against HYDROTHERM
@@ -29,32 +29,10 @@ const PROFILE_SPECS = (
         hydrotherm_column = "liquid_saturation"),
 )
 
-# ## Governing equations for high-temperature H2O flow
-# Across the high-temperature H2O benchmark cases, the conserved quantities are
-# total mass and total energy. Using pressure $p$ and specific enthalpy $h$ as
-# primary variables, the governing equations can be written as
-#
-# ``\frac{\partial}{\partial t}\left(\phi \sum_{\alpha \in \{l, v\}} \rho_\alpha S_\alpha\right)
-# + \nabla \cdot \left(\sum_{\alpha \in \{l, v\}} \rho_\alpha \mathbf{u}_\alpha\right) = q_m``
-#
-# ``\frac{\partial}{\partial t}\left(\phi \sum_{\alpha \in \{l, v\}} \rho_\alpha S_\alpha U_\alpha + (1 - \phi) \rho_r c_r T\right)
-# + \nabla \cdot \left(\sum_{\alpha \in \{l, v\}} \rho_\alpha h_\alpha \mathbf{u}_\alpha - \lambda \nabla T\right) = q_e``
-#
-# where phase velocities follow Darcy's law,
-#
-# ``\mathbf{u}_\alpha = -\frac{k k_{r,\alpha}}{\mu_\alpha}\left(\nabla p - \rho_\alpha g \nabla z\right)``
-#
-# The nonlinear closure is provided by steam-table lookups that map $(p, h)$ to
-# temperature, phase densities, phase viscosities, phase enthalpies, and vapor
-# saturation.
-
-# Shared setup used throughout the example.
 nx = 200
 cell_size = 10.0
 
-##
-
-
+# ## Utilities
 function simulate_benchmark_case(case_symbol; vertical = false, nx = 100, cell_size = 10.0)
 
     case = benchmark_ht_1d(
@@ -209,8 +187,7 @@ function plot_case_profiles(case_symbol, results)
     return fig
 end
 
-##
-# all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...), tables; nx = nx, cell_size = cell_size)
+# ## Simulate all cases
 all_results = simulate_case_family((SINGLE_PHASE_CASES..., TWO_PHASE_CASES...); nx = nx, cell_size = cell_size)
 
 # ## H2O properties in pressure-enthalpy space

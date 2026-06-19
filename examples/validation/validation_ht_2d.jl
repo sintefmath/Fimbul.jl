@@ -1,5 +1,5 @@
 # # 2D high-temperature geothermal benchmark
-# <tags: validation>
+# <tags: Validation>
 # This example demonstrates the 2D high-temperature geothermal benchmark from
 # [weis_hydrothermal_2014](@cite) using the pressure-enthalpy formulation in
 # Fimbul.
@@ -12,10 +12,10 @@
 # bottom boundary. The alternative bottom heat-flux benchmark is not included
 # here because heat-flux boundary conditions are not yet supported in Fimbul.
 #
-# > [!NOTE] Small discrepancies remain because the open-top boundary treatment
-# > in JutulDarcy/Fimbul is not yet fully supported. For now, treat
-# > this example as a qualitative validation of plume structure and phase
-# > behavior rather than an exact point-by-point match.
+# > [!NOTE] Small discrepancies remain because the heat flux boundary conditions
+# > are not yet implemeted in JutulDarcy/Fimbul. For now, treat this example as
+# > a qualitative validation of plume structure and phase behavior rather than
+# > an exact point-by-point match.
 
 using Jutul, JutulDarcy, Fimbul, HYPRE, GLMakie
 
@@ -234,8 +234,8 @@ end
 # stays in the liquid regime. At late time, the deepest part of the plume also
 # carries the highest absolute pressures near the source.
 plot_reservoir(single_phase.case, single_phase.results.states;
-    key = :Temperature, colormap = :seaborn_icefire_gradient,
-    aspect = (9,0.1,3), axis_view = :xz)
+    key = :Temperature, step = length(single_phase.case.dt),
+    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz)
 
 # ### Validate against reference data
 fig_single_phase_final = plot_final_state(single_phase.case, single_phase.results)
@@ -247,8 +247,8 @@ fig_single_phase_final
 # deep pressures near the source and develops a liquid-saturation deficit where
 # vapor forms in the rising core.
 plot_reservoir(two_phase.case, two_phase.results.states;
-    key = :Temperature, colormap = :seaborn_icefire_gradient,
-    aspect = (9,0.1,3), axis_view = :xz)
+    key = :Temperature, step = length(two_phase.case.dt),
+    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz)
 
 # ### Validate against reference data
 fig_two_phase = plot_final_state(two_phase.case, two_phase.results)
