@@ -8,11 +8,11 @@ field = [
     [ [0.0 5.0; 0.0 15.0; 0.0 30.0], [5.0 5.0; 5.0 5.0; 65.0 65.0] ]    # sector 2: 2 wells
 ] 
 
-pattern = :rectangular
+pattern = :circular
 
-case = btes(pattern = pattern,num_wells = 49, depths = [0.0, 0.5, 100, 125],
+case = btes(pattern; depths = [0.0, 0.5, 100, 125],
     charge_period = ["April", "September"],
-    discharge_period = ["October", "March"],
+    discharge_period = ["October", "March"],reversed_discharge = true,
     num_years = 4,
 );
 
@@ -39,4 +39,4 @@ for (sno, sector_key) in enumerate(sector_keys)
     end
 end
 Legend(fig[1, 2], lns, labels);
-fig
+display(fig)

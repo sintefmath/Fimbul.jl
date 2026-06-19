@@ -13,10 +13,10 @@ Setup function for borehole thermal energy storage (BTES) system.
   - Each `well_l` is a `3 x m` matrix containing the coordinates of the well
     trajectory.
   Wells within a sector are coupled in series, in the order they appear in
-  `sector_k`: `well_1` is charged first and discharged last, `well_nk` is
-  charged last and discharged first. A single well (a `3 x m` matrix) can
-  also be passed directly as `field`, representing the special case of a
-  field with a single sector containing a single well.
+  `sector_k`: `well_1` is always charged first and `well_nk` charged last.
+  Discharge order depends on `reversed_discharge`. A single well (a `3 x m`
+  matrix) can also be passed directly as `field`, representing the special
+  case of a field with a single sector containing a single well.
 - `pattern = :sunflower`: Well placement pattern used when `field` is not
   given. One of `:sunflower`, `:rectangular`, `:circular` or `:polygonal`.
 - `num_sides = 6`: Number of sides of the polygon when `pattern = :polygonal`.
@@ -34,6 +34,11 @@ Setup function for borehole thermal energy storage (BTES) system.
 - `temperature_discharge = 10 °C/283.15 K`: Injection temperature during discharging [K].
 - `rate_charge = 0.5 l/s`: Injection rate during charging [m³/s].
 - `rate_discharge = rate_charge`: Injection rate during discharging [m³/s].
+- `reversed_discharge = false`: All sectors are operated in parallel. During
+  charging, flow runs from the first to the last well in each sector. If
+  `reversed_discharge = false`, discharge uses the same direction as charge.
+  If `true`, discharge flow is reversed, so it runs from the last well to the
+  first well in each sector.
 - `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
 - `num_years = 5`: Number of years to run the simulation.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
@@ -44,9 +49,8 @@ Setup function for borehole thermal energy storage (BTES) system.
 - `n_xy = 3`: Number of layers in the horizontal direction for each layer.
 - `mesh_args = NamedTuple()`: Additional arguments for the mesh generation.
 """
-function btes(;
-    field = missing,
-    pattern = :sunflower,
+function btes(
+    pattern::Symbol = :sunflower;
     num_sides = 6,
     num_wells = 48,
     num_sectors = 6,
@@ -61,6 +65,7 @@ function btes(;
     temperature_discharge = convert_to_si(10.0, :Celsius),
     rate_charge = 0.5litre/second,
     rate_discharge = rate_charge,
+    reversed_discharge = false,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 4,
     charge_period = ["June", "September"],
@@ -72,19 +77,52 @@ function btes(;
     mesh_args = NamedTuple(),
     )
 
-    if ismissing(field)
-        if pattern == :sunflower
-            field = sunflower_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
-        elseif pattern == :rectangular
-            field = rectangular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
-        elseif pattern == :circular
-            field = circular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
-        elseif pattern == :polygonal
-            field = polygonal_pattern(num_wells, well_spacing, num_sides; num_sectors = num_sectors, depths = depths)
-        else
-            error("Unknown pattern: $pattern. Supported patterns are :sunflower, :rectangular, :circular and :polygonal.")
-        end
-    elseif field isa AbstractMatrix
+    if pattern == :sunflower
+        field = sunflower_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
+    elseif pattern == :rectangular
+        field = rectangular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
+    elseif pattern == :circular
+        field = circular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
+    elseif pattern == :polygonal
+        field = polygonal_pattern(num_wells, well_spacing, num_sides; num_sectors = num_sectors, depths = depths)
+    else
+        error("Unknown pattern: $pattern. Supported patterns are :sunflower, :rectangular, :circular and :polygonal.")
+    end
+
+    return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,
+    density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,
+    geothermal_gradient = geothermal_gradient,temperature_charge = temperature_charge,temperature_discharge = temperature_discharge,
+    rate_charge = rate_charge,rate_discharge = rate_discharge,reversed_discharge = reversed_discharge,temperature_surface = temperature_surface,num_years = num_years,charge_period = charge_period,
+    discharge_period = discharge_period,report_interval = report_interval,utes_schedule_args = utes_schedule_args,n_z = n_z,n_xy = n_xy,mesh_args = mesh_args)
+
+end
+
+function btes(
+    field::Vector{Vector{Matrix{Float64}}};
+    well_spacing = 5.0,
+    depths = [0.0, 0.5, 50, 65],
+    well_layers = [1, 2],
+    density = [30, 2580, 2580]*kilogram/meter^3,
+    thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
+    heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
+    geothermal_gradient = 0.03Kelvin/meter,
+    temperature_charge = convert_to_si(90.0, :Celsius),
+    temperature_discharge = convert_to_si(10.0, :Celsius),
+    rate_charge = 0.5litre/second,
+    rate_discharge = rate_charge,
+    reversed_discharge = false,
+    temperature_surface = convert_to_si(10.0, :Celsius),
+    num_years = 4,
+    charge_period = ["June", "September"],
+    discharge_period = ["December", "March"],
+    report_interval = 14day,
+    utes_schedule_args = NamedTuple(),
+    n_z = [3, 8, 3],
+    n_xy = 3,
+    mesh_args = NamedTuple(),
+    )
+
+    if field isa AbstractMatrix
         # Special case: a single well, given as a single 3 x m matrix
         field = [[field]]
     end
@@ -171,7 +209,8 @@ function btes(;
         push!(wells_per_sector, sw)
     end
     control_charge, control_discharge, sectors = setup_controls(model, wells_per_sector,
-        rate_charge, rate_discharge, temperature_charge, temperature_discharge);
+        rate_charge, rate_discharge, temperature_charge, temperature_discharge;
+        reversed_discharge = reversed_discharge);
     
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
@@ -243,6 +282,34 @@ function circular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.
     return field_from_points(xy, num_sectors, depths)
 end
 
+function polygonal_pattern(num_wells, spacing, num_sides; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
+    # Regular polygon with an area roughly matching num_wells points at the
+    # given spacing
+    R = sqrt(2*num_wells*spacing^2/(num_sides*sin(2π/num_sides)))
+    θ = range(0.0, 2π, length = num_sides + 1)[1:num_sides]
+    polygon = vcat((R*cos.(θ))', (R*sin.(θ))')
+
+    # Build a rectangular grid covering the polygon with some margin, and
+    # keep only the points that fall inside it
+    margin = 1.2
+    nxy = 2*ceil(Int, margin*R/spacing) + 1
+    xs = ((0:nxy-1) .- (nxy-1)/2).*spacing
+    xy = Matrix{Float64}(undef, 2, nxy^2)
+    k = 0
+    for y in xs, x in xs
+        k += 1
+        xy[:, k] = [x, y]
+    end
+    xy = xy[:, points_in_polygon(xy, polygon)]
+
+    # Keep the num_wells points closest to the center
+    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
+    order = sortperm(r)[1:min(num_wells, size(xy, 2))]
+    xy = xy[:, order]
+
+    return field_from_points(xy, num_sectors, depths)
+end
+
 function field_from_points(xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector)
 
     num_wells = size(xy, 2)
@@ -283,7 +350,8 @@ function group_into_sectors(xy::AbstractMatrix, num_sectors::Int)
 end
 
 function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
-    rate_charge, rate_discharge, temperature_charge, temperature_discharge)
+    rate_charge, rate_discharge, temperature_charge, temperature_discharge;
+    reversed_discharge::Bool = false)
 
     rho = reservoir_model(model).system.rho_ref[1]
     rate_target = TotalRateTarget(rate_charge)
@@ -312,37 +380,27 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
                 # Single well in sector: charge and discharge it directly
                 control_charge[well_sup] = ctrl_charge
                 control_discharge[well_sup] = ctrl_discharge
-            elseif k == 1
-                # Water is injected into innermost well during charging
-                control_charge[well_sup] = ctrl_charge
-                # Discharging runs from outer to inner
-                well_prev = get_return(sw[k+1])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_discharge[well_sup] = ctrl
-            elseif k == length(sw)
-                # Water is injected into outermost well during discharging
-                control_discharge[well_sup] = ctrl_discharge
-                # Charging runs from inner to outer
-                well_prev = get_return(sw[k-1])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_charge[well_sup] = ctrl
             else
-                # Charging runs from inner to outer
-                well_prev = get_return(sw[k-1])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_charge[well_sup] = ctrl
-                # Discharging runs from outer to inner
-                well_prev = get_return(sw[k+1])
-                target = JutulDarcy.ReinjectionTarget([well_prev])
-                ctrl = InjectorControl(target, [1.0],
-                    density=rho, temperature=NaN; check=false)
-                control_discharge[well_sup] = ctrl
+                # Charging always runs from the first to the last well in the sector
+                if k == 1
+                    control_charge[well_sup] = ctrl_charge
+                else
+                    well_prev = get_return(sw[k-1])
+                    target = JutulDarcy.ReinjectionTarget([well_prev])
+                    control_charge[well_sup] = InjectorControl(target, [1.0],
+                        density=rho, temperature=NaN; check=false)
+                end
+                # Discharging runs from first to last (reversed_discharge = false)
+                # or from last to first (reversed_discharge = true)
+                discharge_first = reversed_discharge ? length(sw) : 1
+                if k == discharge_first
+                    control_discharge[well_sup] = ctrl_discharge
+                else
+                    well_prev = get_return(sw[reversed_discharge ? k+1 : k-1])
+                    target = JutulDarcy.ReinjectionTarget([well_prev])
+                    control_discharge[well_sup] = InjectorControl(target, [1.0],
+                        density=rho, temperature=NaN; check=false)
+                end
             end
             control_charge[well_ret] = ctrl_ret
             control_discharge[well_ret] = ctrl_ret
