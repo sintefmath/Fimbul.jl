@@ -393,7 +393,7 @@ function build_fimbul_docs(
             plugins = [bib],
             format = build_format,
             pages = build_pages,
-            draft = get(ENV, "JUTULDARCY_DOCS_DRAFT_MODE", "0") == "1"
+            draft = get(ENV, "FIMBUL_DOCS_DRAFT_MODE", "0") == "1"
         )
     end
     if build_notebooks
@@ -423,13 +423,13 @@ end
 # To preview, go to the docs folder and run:
 # # DocumenterVitepress.dev_docs("build")
 # To only build some examples you can set
-# ENV["JUTULDARCY_DOCS_EXAMPLES_SKIP"] = 1
+# ENV["FIMBUL_DOCS_EXAMPLES_SKIP"] = 1
 # You can also enable build after (Linux only):
-# ENV["JUTULDARCY_RUN_VITEPRESS"] = 1
+# ENV["FIMBUL_RUN_VITEPRESS"] = 1
 # To use the standard documenter draft mode you can set
-# ENV["JUTULDARCY_DOCS_DRAFT_MODE"] = 1
+# ENV["FIMBUL_DOCS_DRAFT_MODE"] = 1
 # This skips all examples, including the inline ones.
-if get(ENV, "JUTULDARCY_DOCS_EXAMPLES_SKIP", "0") == "1"
+if get(ENV, "FIMBUL_DOCS_EXAMPLES_SKIP", "0") == "1"
     # You can add a list of examples to build by running
     # examples_to_build = ["geothermal_1well"]
     if isdefined(Main, :examples_to_build)
@@ -448,6 +448,6 @@ else
     build_fimbul_docs()
 end
 
-if get(ENV, "JUTULDARCY_RUN_VITEPRESS", "0") == "1" && !Sys.iswindows()
+if get(ENV, "FIMBUL_RUN_VITEPRESS", "0") == "1" && !Sys.iswindows()
     DocumenterVitepress.dev_docs("build")
 end
