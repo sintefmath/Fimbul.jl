@@ -64,7 +64,7 @@ the [`CoolProp`](https://www.coolprop.org/) library [bell_pure_2014](@cite) via
 the `FimbulCoolPropExt` extension. They are stored as `Artifacts` that are
 loaded automatically when using the high-enthalpy formulation. The tables can
 also be loaded directly using the `Artifacts` API. To generate your own tables,
-see `build_steam_tables_h2o` in `FimbulCoolPropExt`.
+see [`build_steam_tables_h2o`](@ref) in `FimbulCoolPropExt`.
 
 For the low-enthalpy (single-phase liquid) regime, Fimbul uses PVT tables from
 JutulDarcy generated using the NIST database.
@@ -74,7 +74,7 @@ H<sub>2</sub>O as functions of pressure and specific enthalpy, covering the
 full range of both single-phase and two-phase states. The saturation line
 separates the single-phase liquid region (left), two-phase region (center), and
 single-phase vapor region (right). These phase diagram contours can be
-visualized using [Fimbul.plot_phase_diagram_contours](@ref).
+visualized using [`Fimbul.plot_phase_diagram_contours`](@ref).
 
 ![H₂O phase diagram: temperature, density, and vapor saturation in pressure–enthalpy space](../../assets/phase_diagram_h2o.png)
 
