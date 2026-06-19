@@ -1,5 +1,5 @@
 # # Aquifer Thermal Energy Storage (ATES)
-# <tags: storage, ates>
+# <tags: Storage, ATES>
 # This example demonstrates comprehensive simulation and analysis of an Aquifer
 # Thermal Energy Storage (ATES) system using Fimbul.jl. ATES systems store
 # thermal energy by injecting hot water into subsurface aquifers during charging

@@ -1,5 +1,5 @@
 # # Heat equation in 1D
-# <tags: validation>
+# <tags: Validation>
 # This example demonstrates the classical solution of the heat equation in 1D
 # and compares the analytical solution to the numerical solution obtained using
 # JutulDarcy to verify the accuracy and convergence properties of the numerical

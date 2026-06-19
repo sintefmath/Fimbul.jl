@@ -1,5 +1,5 @@
 # # Borehole Thermal Energy Storage (BTES)
-# <tags: storage, btes>
+# <tags: Storage, BTES>
 # This example demonstrates how to set up and simulate seasonal Borehole Thermal
 # Energy Storage (BTES) using Fimbul. The BTES system consists of multiple
 # boreholes coupled in series and parallel.
