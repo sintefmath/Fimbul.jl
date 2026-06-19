@@ -7,6 +7,7 @@ using OrderedCollections
 
 using DocumenterCitations
 using DocumenterVitepress
+
 ##
 cd(@__DIR__)
 
@@ -73,14 +74,14 @@ end
 
 function all_tags()
     descr = OrderedDict{String, String}()
-    descr["validation"] = "Validation examples that compare Fimbul simulations with analytical or benchmark reference cases."
-    descr["storage"] = "Examples focused on thermal energy storage systems and operating strategies."
-    descr["production"] = "Examples focused on geothermal heat production workflows and system performance."
-    descr["ates"] = "Aquifer Thermal Energy Storage (ATES) examples."
-    descr["btes"] = "Borehole Thermal Energy Storage (BTES) examples."
-    descr["ftes"] = "Fracture/Fault Thermal Energy Storage (FTES) examples."
-    descr["egs"] = "Enhanced Geothermal System (EGS) examples."
-    descr["ags"] = "Advanced Geothermal System (AGS) examples."
+    descr["Validation"] = "Validation examples that compare Fimbul simulations with analytical or benchmark reference cases."
+    descr["Storage"] = "Examples focused on thermal energy storage systems and operating strategies."
+    descr["Production"] = "Examples focused on geothermal heat production workflows and system performance."
+    descr["ATES"] = "Aquifer Thermal Energy Storage (ATES) examples."
+    descr["BTES"] = "Borehole Thermal Energy Storage (BTES) examples."
+    descr["FTES"] = "Fracture/Fault Thermal Energy Storage (FTES) examples."
+    descr["EGS"] = "Enhanced Geothermal System (EGS) examples."
+    descr["AGS"] = "Advanced Geothermal System (AGS) examples."
 
     palette = [
         "rgb(228, 26, 28)",
@@ -108,11 +109,11 @@ function infer_tags(category::AbstractString, exname::AbstractString)
     name = lowercase(exname)
 
     if cat == "validation"
-        push!(tags, "validation")
+        push!(tags, "Validation")
     elseif cat == "storage"
-        push!(tags, "storage")
+        push!(tags, "Storage")
     elseif cat == "production"
-        push!(tags, "production")
+        push!(tags, "Production")
     end
 
     for t in ("ates", "btes", "ftes", "egs", "ags")
