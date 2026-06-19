@@ -56,6 +56,10 @@ function example_path_jl(cname, pth)
     return joinpath(fimbul_dir, "examples", cname, "$pth.jl")
 end
 
+function example_path_md(cname, pth)
+    return joinpath(@__DIR__, "src", "examples", cname, "$pth.md")
+end
+
 function tags_from_file(pth)
     lines = readlines(pth)
     for line in lines
@@ -161,6 +165,7 @@ function collect_examples_by_tag(; check_empty = false)
     end
     for (category, example_set) in pairs(ex_paths)
         for exname in example_set
+            isfile(example_path_md(category, exname)) || continue
             extags = tags_for_example(category, exname)
             for tag in extags
                 @assert haskey(out, tag) "Example $exname in $category has unknown tag $tag"
@@ -268,7 +273,6 @@ function build_fimbul_docs(
     # DocMeta.setdocmeta!(JutulDarcy, :DocTestSetup, :(using JutulDarcy); recursive=true)
     # DocMeta.setdocmeta!(Jutul, :DocTestSetup, :(using Jutul); recursive=true)
     bib = CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))
-    write_tags()
 
     ## Literate pass
     # Base directory
@@ -328,6 +332,10 @@ function build_fimbul_docs(
         push!(examples_markdown, dir_to_doc_name(k) => v)
     end
 
+    # Must run before makedocs so Documenter validates links against the
+    # current set of generated example pages.
+    write_tags()
+
     ## Docs
     if isnothing(build_format)
         println("Use vitepress? ", use_vitepress)
@@ -385,6 +393,7 @@ function build_fimbul_docs(
             plugins = [bib],
             format = build_format,
             pages = build_pages,
+            draft = get(ENV, "JUTULDARCY_DOCS_DRAFT_MODE", "0") == "1"
         )
     end
     if build_notebooks
@@ -400,6 +409,7 @@ function build_fimbul_docs(
             end
         end
     end
+
     if deploy
         DocumenterVitepress.deploydocs(;
             repo="github.com/sintefmath/Fimbul.jl.git",
@@ -416,6 +426,9 @@ end
 # ENV["JUTULDARCY_DOCS_EXAMPLES_SKIP"] = 1
 # You can also enable build after (Linux only):
 # ENV["JUTULDARCY_RUN_VITEPRESS"] = 1
+# To use the standard documenter draft mode you can set
+# ENV["JUTULDARCY_DOCS_DRAFT_MODE"] = 1
+# This skips all examples, including the inline ones.
 if get(ENV, "JUTULDARCY_DOCS_EXAMPLES_SKIP", "0") == "1"
     # You can add a list of examples to build by running
     # examples_to_build = ["geothermal_1well"]
