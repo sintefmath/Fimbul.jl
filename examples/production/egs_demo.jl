@@ -1,5 +1,5 @@
 # # Enhanced Geothermal System (EGS)
-# <tags: proudction, egs>
+# <tags: production, egs>
 # This example demonstrates simulation and analysis of energy production from an
 # Enhanced Geothermal System (EGS). EGS technology enables geothermal energy
 # extraction from hot dry rock formations where natural permeability is

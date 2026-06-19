@@ -71,20 +71,11 @@ function tags_from_file(pth)
     return nothing
 end
 
-function normalize_tag_name(tag::String)
-    t = lowercase(strip(tag))
-    if t == "production"
-        # Keep compatibility with the requested spelling.
-        return "proudction"
-    end
-    return t
-end
-
 function all_tags()
     descr = OrderedDict{String, String}()
     descr["validation"] = "Validation examples that compare Fimbul simulations with analytical or benchmark reference cases."
     descr["storage"] = "Examples focused on thermal energy storage systems and operating strategies."
-    descr["proudction"] = "Examples focused on geothermal heat production workflows and system performance."
+    descr["production"] = "Examples focused on geothermal heat production workflows and system performance."
     descr["ates"] = "Aquifer Thermal Energy Storage (ATES) examples."
     descr["btes"] = "Borehole Thermal Energy Storage (BTES) examples."
     descr["ftes"] = "Fracture/Fault Thermal Energy Storage (FTES) examples."
@@ -121,7 +112,7 @@ function infer_tags(category::AbstractString, exname::AbstractString)
     elseif cat == "storage"
         push!(tags, "storage")
     elseif cat == "production"
-        push!(tags, "proudction")
+        push!(tags, "production")
     end
 
     for t in ("ates", "btes", "ftes", "egs", "ags")
@@ -136,7 +127,7 @@ end
 function tags_for_example(category::AbstractString, exname::AbstractString)
     pth = example_path_jl(category, exname)
     file_tags = tags_from_file(pth)
-    tags = isnothing(file_tags) ? infer_tags(category, exname) : map(normalize_tag_name, file_tags)
+    tags = isnothing(file_tags) ? infer_tags(category, exname) : String.(file_tags)
     return unique(tags)
 end
 
@@ -148,7 +139,7 @@ function tag_str(tag_names::AbstractVector)
     tags = all_tags()
     s = "``` @raw html\n"
     for tag in tag_names
-        t = normalize_tag_name(tag)
+        t = String(tag)
         @assert haskey(tags, t) "Unknown tag: $t"
         info = tags[t]
         s *= "<ExampleTag text=\"$t\" color=\"$(info.color)\" />\n"
@@ -242,11 +233,16 @@ function update_footer(content, subdir, exname)
 end
 
 function replace_tags(content, subdir, exname)
-    tags = tags_for_example(subdir, exname)
-    if isempty(tags)
-        return content
+    content_lines = split(content, "\n")
+    for (i, line) in enumerate(content_lines)
+        t = parse_tags(line)
+        if !isnothing(t)
+            content_lines[i] = tag_str(String.(t))
+            break
+        end
     end
-    return string(tag_str(tags), "\n", content)
+    content = join(content_lines, "\n")
+    return content
 end
 
 function build_fimbul_docs(

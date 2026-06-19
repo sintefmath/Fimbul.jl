@@ -1,5 +1,5 @@
 # # Advanced Geothermal System (AGS)
-# <tags: proudction, ags>
+# <tags: production, ags>
 # This example demonstrates simulation and analysis of energy production from an
 # Advanced Geothermal System (AGS). AGS technology utilizes closed-loop
 # circulation systems to extract geothermal energy from deep hot rock
