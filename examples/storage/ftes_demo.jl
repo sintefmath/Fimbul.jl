@@ -1,4 +1,5 @@
 # # Fractured Thermal Energy Storage (FTES)
+# <tags: Storage, FTES>
 # This example demonstrates how to set up and simulate a Fractured Thermal
 # Energy Storage (FTES) system using Fimbul. FTES systems exploit natural or
 # induced fractures in low-permeability rock to store and recover thermal energy
