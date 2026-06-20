@@ -103,8 +103,6 @@ boundary pressures and a uniform producer-side temperature.
 | :d   | 20          | 1            | 400        | 150         | optional |
 | :e   | 4           | 1            | 300        | 150         | no       |
 
-Case `:test` is also accepted as a lightweight internal sanity-check case.
-
 ## Grid orientation
 
 - `vertical = false`: flow in x, grid `(nx, 1, 1)`. Injector at cell 1 (left),
@@ -115,7 +113,7 @@ Case `:test` is also accepted as a lightweight internal sanity-check case.
 ## Keyword arguments
 
 - `benchmark_case = :a`: Case selector. Benchmark cases are `:a`, `:b`, `:c`,
-    `:d`, `:e`; `:test` is a lightweight internal case.
+    `:d`, `:e`.
 - `vertical = false`: Enable vertical flow (not available for case `:e`).
 - `nx = 200`: Number of cells along the active flow direction.
 - `domain_length = 2000.0*meter`: Length of the 1D domain [m].
@@ -151,7 +149,7 @@ function benchmark_ht_1d(;
     dt_target       :: Float64 = 5.0*year,
 )
 
-    benchmark_case in (:a, :b, :c, :d, :e, :test) ||
+    benchmark_case in (:a, :b, :c, :d, :e) ||
         throw(ArgumentError("benchmark_case must be one of :a, :b, :c, :d, :e"))
     (benchmark_case == :e && vertical) &&
         throw(ArgumentError("Case :e is only defined without vertical flow (vertical = false)"))
@@ -285,9 +283,7 @@ conditions are not yet supported in Fimbul.
 
 ## Keyword arguments
 
-- `benchmark_case = :fluid_source`: Case selector. `:fluid_source` is kept as
-    an alias for the moderate-enthalpy single-phase source case.
-    `:single_phase_source`, `:two_phase_source`, and `:test` are supported.
+- `benchmark_case = :single_phase_source`: Case selector. `:single_phase_source` and `:two_phase_source` are supported.
 - `nx = 90`: Number of cells in the horizontal direction.
 - `nz = 60`: Number of cells in the vertical direction.
 - `domain_width = 9000.0*meter`: Horizontal domain extent [m].
@@ -321,7 +317,7 @@ numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 347–371. https://doi.org/10.1111/gfl.12080
 """
 function benchmark_ht_2d(;
-    benchmark_case :: Symbol = :fluid_source,
+    benchmark_case :: Symbol = :single_phase_source,
     nx :: Int = 90,
     nz :: Int = 60,
     domain_width :: Float64 = 9000.0*meter,
@@ -341,9 +337,8 @@ function benchmark_ht_2d(;
     total_time :: Float64 = 5000.0*year,
     dt_target :: Float64 = 10.0*year,
 )
-    benchmark_case == :fluid_source && (benchmark_case = :single_phase_source)
     benchmark_case in (:single_phase_source, :two_phase_source) ||
-        throw(ArgumentError("benchmark_case must be :fluid_source, :single_phase_source, or :two_phase_source"))
+        throw(ArgumentError("benchmark_case must be :single_phase_source or :two_phase_source"))
     1 <= source_i <= nx || throw(ArgumentError("source_i must satisfy 1 <= source_i <= nx"))
     1 <= source_k <= nz || throw(ArgumentError("source_k must satisfy 1 <= source_k <= nz"))
 

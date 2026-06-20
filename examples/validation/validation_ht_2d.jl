@@ -32,8 +32,8 @@ const TWO_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:35.0)
 const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0];
 
 # ## Set up and simulate the benchmark cases
-# We simulate both fluid-source variants from Weis et al. (2014): the
-# moderate-enthalpy single-phase plume and the hotter two-phase plume.
+# We simulate both fluid-source variants from [weis_hydrothermal_2014](@cite):
+# the moderate-enthalpy single-phase plume and the hotter two-phase plume.
 
 function simulate_benchmark_case(benchmark_case; nx = nx, nz = nz)
 
