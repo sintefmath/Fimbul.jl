@@ -70,11 +70,14 @@ For the low-enthalpy (single-phase liquid) regime, Fimbul uses PVT tables from
 JutulDarcy generated using the NIST database.
 
 The figure below shows the temperature, density, and vapor saturation of
-$\text{H}_2\text{O}$ as functions of pressure and specific enthalpy, covering the
-full range of both single-phase and two-phase states. The saturation line
-separates the single-phase liquid region (left), two-phase region (center), and
-single-phase vapor region (right). These phase diagram contours can be
-visualized using `plot_phase_diagram_contours`.
+$\text{H}_2\text{O}$ as functions of pressure and specific enthalpy, zoomed in
+around the two-phase region. Precomputed PVT tables cover pressures from 0.0004
+to 100.8 MPa and enthalpues from 0.0 to 5029 kJ/kg, or 0.0 to 1207
+$^\circ\text{C}$ The saturation line separates the single-phase liquid region
+(left), two-phase region (center), and single-phase vapor region (right). These
+phase diagram contours can be visualized using `plot_phase_diagram_contours`.
+
+![selected water properties](../../assets/h2o-props.png)
 
 ## Single- and two-phase systems
 Most Fimbul examples currently operate in the low-enthalpy regime, i.e.,
