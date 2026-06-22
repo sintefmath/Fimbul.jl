@@ -1,6 +1,6 @@
 # Governing equations in geothermal energy
 
-Fimbul currently supports pure H<sub>2</sub>O as a single-component, two-phase
+setup_Fimbul currently supports pure $\text{H}_2\text{O}$ as a single-component, two-phase
 fluid system. Water may be present in a liquid phase ($L$) and/or a vapor phase
 ($V$).
 
@@ -28,7 +28,7 @@ relative permeability to viscosity), $\mathbf{K}$ is absolute permeability, $p$
 is pressure, $g$ is gravitational acceleration, and $z$ is elevation.
 
 > NOTE: In practice, the interface between liquid and vapor phases in an
-> H<sub>2</sub>O system may exhibit non-negligible capillary pressure effects.
+> $\text{H}_2\text{O}$ system may exhibit non-negligible capillary pressure effects.
 > This is currently not modeled in Fimbul; support is planned for a future
 > release.
 
@@ -55,7 +55,7 @@ phases; the third term is conductive heat transport via Fourier's law,
 The term $Q_H$ denotes thermal energy sources and sinks.
 
 ## Fluid properties
-The fluid properties of H<sub>2</sub>O—such as density, viscosity, enthalpy,
+The fluid properties of $\text{H}_2\text{O}$—such as density, viscosity, enthalpy,
 and phase state—depend on both pressure and enthalpy and are provided through
 precomputed lookup tables.
 
@@ -70,7 +70,7 @@ For the low-enthalpy (single-phase liquid) regime, Fimbul uses PVT tables from
 JutulDarcy generated using the NIST database.
 
 The figure below shows the temperature, density, and vapor saturation of
-H<sub>2</sub>O as functions of pressure and specific enthalpy, covering the
+$\text{H}_2\text{O}$ as functions of pressure and specific enthalpy, covering the
 full range of both single-phase and two-phase states. The saturation line
 separates the single-phase liquid region (left), two-phase region (center), and
 single-phase vapor region (right). These phase diagram contours can be
