@@ -26,7 +26,7 @@ FimbulGLMakieExt = "GLMakie"
 FimbulSteamTablesExt = "SteamTables"
 
 [compat]
-Artifacts = "1.11.0"
+Artifacts = "1.11.0, 1"
 Dates = "1.11.0"
 DelimitedFiles = "1.9.1"
 Gmsh = "0.3.1"
