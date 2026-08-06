@@ -58,6 +58,7 @@ module Fimbul
     include("wells/closed_loop_analytical.jl")
     # Cases
     include("cases/cases.jl")
+    include("cases/utils/analytical.jl")
     # Optimization
     include("optimization/objectives.jl")
     # Other utilities
