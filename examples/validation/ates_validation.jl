@@ -12,36 +12,46 @@ using DataFrames
 using CSV
 using CairoMakie, GLMakie
 
+##
 function state_temperature_c(state)
     return convert_from_si.(state[:Temperature], :Celsius)
 end
 
-function radial_index_cell_map(g)
-    ncell = number_of_cells(g)
-    mapping = Dict{Int, Vector{Int}}()
-    # for rix in 0:100
-    #     r = 
-    #     cells = findall(isapprox.(radii, r; atol = 0.1))
-    #     mapping[rix + 1] = cells
-    # end
-    # return radii
-    for c in 1:ncell
-        ijk = cell_ijk(g, c)
-        j = ijk[2]
-        push!(get!(mapping, j, Int[]), c)
+function radial_index_cell_map(g; max_radius = 100, origin = (-0.5, -0.5))
+    geo = tpfv_geometry(g)
+    x = geo.cell_centroids[1, :]
+    y = geo.cell_centroids[2, :]
+    radii = vec(sqrt.((x .- origin[1]).^2 .+ (y .- origin[2]).^2))
+
+    shell_values = sort(unique(round.(radii; digits = 6)))
+    shell_cells = Dict{Float64, Vector{Int}}()
+    for rs in shell_values
+        shell_cells[rs] = findall(isapprox.(radii, rs; atol = 1e-6))
     end
-    return mapping
+
+    mapping = Dict{Int, Vector{Int}}()
+    actual_radii = Dict{Int, Float64}()
+    for r in 0:max_radius
+        i = argmin(abs.(shell_values .- r))
+        rs = shell_values[i]
+        cells = shell_cells[rs]
+        isempty(cells) && error("No cells found for radial bin r=$(r).")
+        mapping[r] = cells
+        actual_radii[r] = rs
+    end
+
+    return mapping, actual_radii
 end
 
 function layer_index_cell_map(g)
-    ncell = number_of_cells(g)
+    geo = tpfv_geometry(g)
+    z = vec(geo.cell_centroids[3, :])
+    z_levels = sort(unique(round.(z; digits = 6)); rev = true)
     mapping = Dict{Int, Vector{Int}}()
-    for c in 1:ncell
-        ijk = cell_ijk(g, c)
-        k = ijk[3]
-        push!(get!(mapping, k, Int[]), c)
+    for (k, zk) in enumerate(z_levels)
+        mapping[k] = findall(isapprox.(z, zk; atol = 1e-6))
     end
-    return mapping
+    return mapping, z_levels
 end
 
 # function layer_index_cell_map(g)
@@ -57,7 +67,7 @@ end
 # end
 
 function extract_layer_averaged_radial_profile(states, g; max_radius = 100)
-    rmap = radial_index_cell_map(g)
+    rmap, _ = radial_index_cell_map(g; max_radius = max_radius)
     out = DataFrame(time_d = Float64[])
     for r in 0:max_radius
         out[!, Symbol("T_r$(lpad(string(r), 3, '0'))")] = Float64[]
@@ -77,9 +87,8 @@ function extract_layer_averaged_radial_profile(states, g; max_radius = 100)
 end
 
 function extract_cross_section(states, g, target_day; max_radius = 100)
-    rmap = radial_index_cell_map(g)
-    lmap = layer_index_cell_map(g)
-    zmid = [-2.5, -7.5, -12.5, -17.5]
+    rmap, _ = radial_index_cell_map(g; max_radius = max_radius)
+    lmap, zmid = layer_index_cell_map(g)
     out = DataFrame(elevation_m = zmid)
     state_offset = length(states) == 91 ? 1 : 0
     s = states[target_day + state_offset]
@@ -177,7 +186,16 @@ function radial_column_name(r)
     return "T_r$(lpad(string(r), 3, '0'))"
 end
 
-function write_timeseries_plot(outdir, reference_dir; distances = 0:10:100, report_days = [10, 30, 50, 70, 90])
+function radial_column_actual_radii(g; max_radius = 100)
+    _, actual_radii = radial_index_cell_map(g; max_radius = max_radius)
+    out = Dict{String, Float64}()
+    for r in 0:max_radius
+        out[radial_column_name(r)] = actual_radii[r + 1]
+    end
+    return out
+end
+
+function write_timeseries_plot(outdir, reference_dir; distances = 0:10:100, report_days = [10, 30, 50, 70, 90], radial_positions = Dict{String, Float64}())
     ref_dir = joinpath(reference_dir, "mf6_cross_sections")
     sample_cross = CSV.read(joinpath(outdir, "cross_section_$(first(report_days))d.csv"), DataFrame)
     sample_ref = CSV.read(joinpath(ref_dir, "mf6_cross_section_t0$(lpad(string(first(report_days)), 2, '0'))d.csv"), DataFrame)
@@ -194,7 +212,7 @@ function write_timeseries_plot(outdir, reference_dir; distances = 0:10:100, repo
     ax = Axis(fig[1, 1], xlabel = "time [d]", ylabel = "temperature [°C]", title = "Analytical ATES validation: temperature vs time")
 
     for (i, col) in enumerate(columns)
-        distance = parse(Int, col[end-2:end])
+        distance = get(radial_positions, col, Float64(parse(Int, col[end-2:end])))
         color = colors[mod1(i, length(colors))]
         numerical_values = Float64[]
         reference_values = Float64[]
@@ -204,7 +222,7 @@ function write_timeseries_plot(outdir, reference_dir; distances = 0:10:100, repo
             push!(numerical_values, mean(skipmissing(cross[!, col])))
             push!(reference_values, mean(skipmissing(ref[!, col])))
         end
-        lines!(ax, report_days, numerical_values, color = color, linewidth = 2, label = "r = $(distance) m")
+        lines!(ax, report_days, numerical_values, color = color, linewidth = 2, label = "r = $(round(distance; digits = 2)) m")
         lines!(ax, report_days, reference_values, color = color, linewidth = 4, linestyle = :dash, label = i == 1 ? "reference" : nothing)
     end
 
@@ -213,7 +231,7 @@ function write_timeseries_plot(outdir, reference_dir; distances = 0:10:100, repo
     return fig
 end
 
-function write_vertical_average_time_plot(daily, outdir, reference_dir; distances = 0:10:100)
+function write_vertical_average_time_plot(daily, outdir, reference_dir; distances = 0:10:100, radial_positions = Dict{String, Float64}())
     ref_daily_path = joinpath(reference_dir, "mf6_results_analytical_T_radial.csv")
     isfile(ref_daily_path) || error("Missing reference file: $(ref_daily_path)")
     ref_daily = CSV.read(ref_daily_path, DataFrame)
@@ -241,9 +259,9 @@ function write_vertical_average_time_plot(daily, outdir, reference_dir; distance
     )
 
     for (i, col) in enumerate(columns)
-        distance = parse(Int, col[end-2:end])
+        distance = get(radial_positions, col, Float64(parse(Int, col[end-2:end])))
         color = colors[mod1(i, length(colors))]
-        lines!(ax, daily.time_d, daily[!, col], color = color, linewidth = 2, label = "r = $(distance) m")
+        lines!(ax, daily.time_d, daily[!, col], color = color, linewidth = 2, label = "r = $(round(distance; digits = 2)) m")
         lines!(ax, ref_daily.time_d, ref_daily[!, col], color = color, linewidth = 4, linestyle = :dash, label = i == 1 ? "reference" : nothing)
     end
 
@@ -255,11 +273,18 @@ end
 function run_ates_validation(; outdir = joinpath(pwd(), "ates_validation_outputs"), reference_dir = default_reference_dir(), nang = 32)
     mkpath(outdir)
 
-    case = Fimbul.analytical_ates(nang = nang)
+    case = Fimbul.analytical_ates(nang = nang; thermal_dispersivity = K)
     mesh = physical_representation(reservoir_model(case.model).data_domain)
 
     sim, cfg = setup_reservoir_simulator(case; info_level = 2, transport_scheme = :tvd)
     result = simulate_reservoir(case, simulator = sim, config = cfg)
+
+    radial_positions = radial_column_actual_radii(mesh)
+    radius_rows = DataFrame(column = String[], radius_m = Float64[])
+    for c in sort(collect(keys(radial_positions)))
+        push!(radius_rows, (c, radial_positions[c]))
+    end
+    CSV.write(joinpath(outdir, "radial_column_positions.csv"), radius_rows)
 
     daily = extract_layer_averaged_radial_profile(result.states, mesh)
     CSV.write(joinpath(outdir, "daily_layer_averaged_radial_temperatures.csv"), daily)
@@ -276,8 +301,8 @@ function run_ates_validation(; outdir = joinpath(pwd(), "ates_validation_outputs
     CSV.write(joinpath(outdir, "summary.csv"), summary)
 
     daily_max, daily_mean, comparison = compare_to_reference(daily, outdir, reference_dir)
-    fig = write_timeseries_plot(outdir, reference_dir)
-    fig_vertical_avg = write_vertical_average_time_plot(daily, outdir, reference_dir)
+    # fig = write_timeseries_plot(outdir, reference_dir; radial_positions = radial_positions)
+    fig_vertical_avg = write_vertical_average_time_plot(daily, outdir, reference_dir; radial_positions = radial_positions)
 
     println("Validation outputs written to: $(outdir)")
     println("Reference directory: $(reference_dir)")
@@ -290,7 +315,7 @@ function run_ates_validation(; outdir = joinpath(pwd(), "ates_validation_outputs
         daily = daily,
         comparison = comparison,
         summary = summary,
-        figure = fig,
+        # figure = fig,
         figure_vertical_average = fig_vertical_avg,
         outdir = outdir,
         reference_dir = reference_dir,
@@ -303,44 +328,217 @@ end
 #   ENV["FIMBUL_ATES_REFERENCE_DIR"] = "<path to Results_analytical>"
 
 GLMakie.closeall()
-validation = run_ates_validation(nang = 64)
+validation = run_ates_validation(nang = 32)
 # validation.figure
 validation.figure_vertical_average
 
 ##
-
-
-
-
-
-##
-# using GLMakie
-# mesh, geometry, well_cells = analytical_ates(nang = 32)
-
-# ##
-mesh = physical_representation(reservoir_model(validation.case.model).data_domain)
-geo = tpfv_geometry(mesh)
-radii = vec(sqrt.(sum((geo.cell_centroids[1:2, :] .+ 0.5).^2, dims = 1)))
-
-##
-
-radii = radial_index_cell_map(mesh)
-bc_cells = [bc.cell for bc in validation.case.forces[1][:Reservoir].bc]
+using JutulDarcy.Sequential
 
 mesh = physical_representation(reservoir_model(validation.case.model).data_domain)
-plot_mesh(mesh, cells = bc_cells)
+
+state = Jutul.evaluate_all_secondary_variables(validation.case.model.models[:Reservoir], validation.result.states[end])
+state = JutulStorage(state)
+
+flux = JutulDarcy.Sequential.store_phase_fluxes(validation.case.model.models[:Reservoir], state)
+velocity = flux_to_velocity(validation.case.model.models[:Reservoir].data_domain, flux)
+
+v_norm = vec(sqrt.(sum(velocity.^2, dims = 1)))
+αT = 0.1
+αL = 1.0
+ρ = 998
+Cp = 4184.0
+
+A = [αL αT αT; αT αL αT; αT αT αL]
+
+
+
+K = ρ*Cp*αL*v_norm
+K[1] = maximum(K)
 
 ##
-state = Jutul.evaluate_all_secondary_variables(validation.case.model, validation.case.state0)
+K = zeros(6, number_of_cells(mesh))
+
+for (c, v) in enumerate(eachcol(velocity))
+    Id = SMatrix{3,3,Float64}(I)
+    Kc = ρ*Cp*(αT*Id + (αL - αT)*(v*v')/(v'*v)).*sqrt((v'*v))
+    # display(Kc)
+    K[:, c] = vec(Kc)[[1, 2, 3, 5, 6, 9]]
+end
 
 ##
-mesh = physical_representation(reservoir_model(validation.case.model).data_domain)
+if true
+    # Scratch/debug area (kept for interactive exploration, disabled by default)
+    mesh = physical_representation(reservoir_model(validation.case.model).data_domain)
+    geo = tpfv_geometry(mesh)
+    radii = vec(sqrt.(sum((geo.cell_centroids[1:2, :] .+ 0.5).^2, dims = 1)))
 
-rix = radial_index_cell_map(mesh)
+    rmap, _ = radial_index_cell_map(mesh)
+    bc_cells = [bc.cell for bc in validation.case.forces[1][:Reservoir].bc]
 
-rix_vec = zeros(number_of_cells(mesh))
-for (r, cells) in rix
-    for c in cells
-        rix_vec[c] = r
+    mesh = physical_representation(reservoir_model(validation.case.model).data_domain)
+    plot_mesh(mesh, cells = bc_cells)
+
+    state = Jutul.evaluate_all_secondary_variables(validation.case.model, validation.case.state0)
+
+    mesh = physical_representation(reservoir_model(validation.case.model).data_domain)
+    rix_vec = zeros(number_of_cells(mesh))
+    for (r, cells) in rmap
+        for c in cells
+            rix_vec[c] = r
+        end
     end
+end
+
+##
+αT = 0.1
+αL = 1.0
+ρ = 998
+Cp = 4184.0
+q = 400/si_unit(:day)
+r = 1.0
+h = 20.0
+v = q/(2*π*r*h)
+
+rmodel = reservoir_model(validation.case.model)
+state = validation.result.states[end]
+state = Jutul.evaluate_all_secondary_variables(rmodel, state)
+state = JutulStorage(state)
+nf = number_of_faces(mesh)
+faces = 1:nf
+nph = 1
+ϕ = 0.35
+neighbors = get_neighborship(mesh)
+v = zeros(length(faces))
+geo = tpfv_geometry(mesh)
+A = geo.areas
+flux = zeros(nf)
+for (i, face) in enumerate(faces)
+    l, r = neighbors[:, face]
+    q = Jutul.StaticArrays.@MVector zeros(1)
+    flux_type = Jutul.DefaultFlux()
+    upw = Jutul.SPU(l, r)
+    kgrad = Jutul.TPFA(l, r, 1)
+    q = JutulDarcy.component_mass_fluxes!(q, face, state, rmodel, flux_type, kgrad, upw)
+    flux[i] = q[1]
+    v[i] = q[1]/(A[face]*ρ)
+    # flux_s[:, i] = JutulDarcy.component_mass_fluxes!(q, face, state, rmodel, flux_type_s, kgrad, upw)
+end
+
+##
+# nc = number_of_cells(mesh)
+# v_cell = zeros(nc)
+# for c in 1:nc
+#     faces = mesh.faces.cells_to_faces[c]
+#     v_cell[c] = maximum(abs.(v[faces]))
+# end
+# v = maximum(abs.(v))
+
+
+
+
+##
+GLMakie.closeall()
+display(GLMakie.Screen(), validation.figure_vertical_average)
+display(GLMakie.Screen(), vv.figure_vertical_average)
+
+##
+K = 0.0
+
+##
+case = Fimbul.analytical_ates(nang = 32, nrad = 3200; thermal_dispersivity = K, layer_depths = [0.0, 20.0])
+sim, cfg = setup_reservoir_simulator(
+    case; info_level = 2, max_timestep = 0.1*si"day")
+results = simulate_reservoir(case; simulator = sim, config = cfg)
+
+##
+mesh = physical_representation(reservoir_model(case.model).data_domain)
+rmap, radii = radial_index_cell_map(mesh; max_radius = 100.0)
+T_sim = Dict{Int, Vector{Float64}}()
+
+for state in results.states
+    for r in 0:100
+        cells = rmap[r]
+        T = state_temperature_c(state)
+        if !haskey(T_sim, r)
+            T_sim[r] = Float64[]
+        end
+        push!(T_sim[r], mean(T[cells]))
+    end
+end
+
+##
+ϕ = 0.35
+α_L = 0.0
+b = 20.0
+ρ_f = 998
+ρ_r = 2650
+C_r = 800
+C_f = 4184
+
+ρ_b = ρ_f*ϕ + ρ_r*(1-ϕ)
+C_b = C_f*ϕ + C_r*(1-ϕ)
+
+K_DT = C_r/(ρ_f*C_f)
+R = 1 + (ρ_b/ϕ)*K_DT
+
+ρ_bC_b = ρ_f*C_f*ϕ + ρ_r*C_r*(1-ϕ)
+R = ρ_bC_b/(ϕ*ρ_f*C_f)
+
+λ_f = 0.59
+λ_r = 2.0
+λ_b = ϕ*λ_f + (1-ϕ)*λ_r
+D = λ_b/(ϕ*ρ_f*C_f)
+
+Q = 400.0*si"meter^3/day"
+T_0 = 10.0
+T_i = 20.0
+
+##
+fig = Figure()
+ax = Axis(fig[1, 1], xlabel = "time [d]", ylabel = "temperature [°C]", title = "ATES validation: temperature vs time")
+
+t = (1:90).*si"day"
+
+plot_radii = 0:5:40
+colors = cgrad(:BrBG_4, length(plot_radii), categorical=true)
+
+for (k, r) in enumerate(plot_radii)
+    r_real = radii[r]
+    
+    T_a = Fimbul.radial_analytical.(r_real, t, Q, T_i, T_0, α_L, b, ϕ, D, R)
+    time = collect((1:90))
+    lines!(ax, time, T_sim[r], color = colors[k], linewidth = 2, label = "r=$(round(r_real, digits = 0)) m")
+    lines!(ax, time, T_a, color = colors[k], linewidth = 6, linestyle = :dash)
+    
+end
+Legend(fig[1, 2], ax)
+fig
+
+##
+using JutulDarcy.Sequential
+mesh = physical_representation(reservoir_model(case.model).data_domain)
+
+state = Jutul.evaluate_all_secondary_variables(case.model.models[:Reservoir], results.states[end])
+state = JutulStorage(state)
+
+flux = JutulDarcy.Sequential.store_phase_fluxes(case.model.models[:Reservoir], state)
+velocity = flux_to_velocity(case.model.models[:Reservoir].data_domain, flux)
+
+v_norm = vec(sqrt.(sum(velocity.^2, dims = 1)))
+αT = 0.1
+αL = 1.0
+ρ = 998
+Cp = 4184.0
+
+K = ρ*Cp*αL*v_norm
+K[1] = maximum(K)
+
+K = zeros(6, number_of_cells(mesh))
+
+for (c, v) in enumerate(eachcol(velocity))
+    Id = SMatrix{3,3,Float64}(I)
+    Kc = ρ*Cp*(αT*Id + (αL - αT)*(v*v')/(v'*v)).*sqrt((v'*v))
+    # display(Kc)
+    K[:, c] = vec(Kc)[[1, 2, 3, 5, 6, 9]]
 end
