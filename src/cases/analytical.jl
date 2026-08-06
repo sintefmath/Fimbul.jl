@@ -116,12 +116,14 @@ A `JutulCase` for the analytical radial ATES benchmark.
 """
 function analytical_ates(;
     nang::Int = 32,
-    radii = vcat(collect(0.5:99.5), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14])),
+    nrad::Int = 100,
+    # radii = vcat(collect(0.5:99.5), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14])),
     layer_depths = [0.0, 5.0, 10.0, 15.0, 20.0],
     permeability_horizontal = 2.31e-11*meter^2,
     permeability_vertical = permeability_horizontal/3,
     porosity = 0.35,
     rock_thermal_conductivity = 2.0*watt/(meter*Kelvin),
+    thermal_dispersivity = 0.0*watt/(meter*Kelvin),
     fluid_thermal_conductivity = 0.59*watt/(meter*Kelvin),
     rock_heat_capacity = 800.0*joule/(kilogram*Kelvin),
     rock_density = 2650.0*kilogram/meter^3,
@@ -134,8 +136,10 @@ function analytical_ates(;
     num_steps::Int = 90,
     step_size = day,
 )
-    @assert length(radii) == 114 "Expected 114 radial cells for the benchmark discretization."
-    @assert length(layer_depths) == 5 "Expected 4 vertical layers for the benchmark discretization."
+
+    radii = vcat(range(0.5, 99.5, length = nrad), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14]))
+    # @assert length(radii) == 250 + 14 "Expected 250 + 14 radial cells for the benchmark discretization."
+    # @assert length(layer_depths) == 5 "Expected 4 vertical layers for the benchmark discretization."
 
     mesh_2d = Jutul.RadialMeshes.radial_mesh(nang, radii; centerpoint = false)
     mesh = Jutul.extrude_mesh(mesh_2d, layer_depths)
@@ -143,6 +147,7 @@ function analytical_ates(;
     domain = reservoir_domain(mesh;
         permeability = [permeability_horizontal, permeability_horizontal, permeability_vertical],
         porosity = porosity,
+        # rock_thermal_conductivity = rock_thermal_conductivity .+ thermal_dispersivity*porosity/(1-porosity),
         rock_thermal_conductivity = rock_thermal_conductivity,
         fluid_thermal_conductivity = fluid_thermal_conductivity,
         rock_heat_capacity = rock_heat_capacity,
@@ -161,6 +166,7 @@ function analytical_ates(;
         name = :Well,
         simple_well = false,
         radius = well_radius,
+        WIth = 10
     )
     control = Dict(
         :Well => InjectorControl(TotalRateTarget(injection_rate), [1.0];
@@ -173,6 +179,16 @@ function analytical_ates(;
     # system = :geothermal
 
     model = setup_reservoir_model(domain, system; wells = [well], thermal = true)
+    λ = fluid_thermal_conductivity' .+ thermal_dispersivity
+    # model.models[:Reservoir].data_domain[:fluid_thermal_conductivity] = fluid_thermal_conductivity
+
+    # ϕ = model.models[:Reservoir].data_domain[:porosity]
+    # λ = model.models[:Reservoir].data_domain[:fluid_thermal_conductivity]
+    T = compute_face_trans(domain, porosity.*λ)
+    T = repeat(T', 1, 1)
+    model.models[:Reservoir].data_domain[:fluid_thermal_conductivities, Faces()] = T
+
+
     density = ConstantCompressibilityDensities(system, si_unit(:atm), [ρ], [1e-10/si_unit(:bar)]) # Replace density with a lighter pair
     replace_variables!(model, PhaseMassDensities = density);
     
