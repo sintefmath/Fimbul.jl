@@ -229,10 +229,12 @@ function analytical_radial(;
         :grid => (nang = nang, nr = length(radii), nz = length(layer_depths) - 1),
         :radii => radii,
         :layer_depths => layer_depths,
+        :porosity => porosity,
         :boundary_pressure => boundary_pressure,
         :boundary_temperature => boundary_temperature,
         :injection_rate => injection_rate,
         :injection_temperature => injection_temperature,
+        :well_radius => well_radius,
         :well_name => :Well,
     )
 
