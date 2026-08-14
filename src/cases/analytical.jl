@@ -85,7 +85,7 @@ function analytical_1d(;
 end
 
 """
-    analytical_ates(; <keyword arguments>)
+    analytical_radial(; <keyword arguments>)
 
 Create the radial ATES benchmark case used for comparison against the Gelhar &
 Collins analytical heat-transport solution.
@@ -112,9 +112,9 @@ Collins analytical heat-transport solution.
 - `step_size = day`: Length of each report step.
 
 # Returns
-A `JutulCase` for the analytical radial ATES benchmark.
+A `JutulCase` for the analytical radial benchmark.
 """
-function analytical_ates(;
+function analytical_radial(;
     nang::Int = 32,
     nrad::Int = 100,
     # radii = vcat(collect(0.5:99.5), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14])),
@@ -123,7 +123,7 @@ function analytical_ates(;
     permeability_vertical = permeability_horizontal/3,
     porosity = 0.35,
     rock_thermal_conductivity = 2.0*watt/(meter*Kelvin),
-    thermal_dispersivity = 0.0*watt/(meter*Kelvin),
+    thermal_dispersivity = nothing,
     fluid_thermal_conductivity = 0.59*watt/(meter*Kelvin),
     rock_heat_capacity = 800.0*joule/(kilogram*Kelvin),
     rock_density = 2650.0*kilogram/meter^3,
@@ -155,6 +155,10 @@ function analytical_ates(;
         component_heat_capacity = component_heat_capacity,
     )
 
+    if !isnothing(thermal_dispersivity)
+        JutulDarcy.add_thermal_dispersion!(domain, thermal_dispersivity)
+    end
+
     geometry = tpfv_geometry(mesh)
     well_cells = isapprox.(geometry.cell_centroids[1,:], -0.5) .&& isapprox.(geometry.cell_centroids[2,:], -0.5)
     well_cells = findall(well_cells)
@@ -179,14 +183,14 @@ function analytical_ates(;
     # system = :geothermal
 
     model = setup_reservoir_model(domain, system; wells = [well], thermal = true)
-    λ = fluid_thermal_conductivity' .+ thermal_dispersivity
-    # model.models[:Reservoir].data_domain[:fluid_thermal_conductivity] = fluid_thermal_conductivity
+    # λ = fluid_thermal_conductivity' .+ thermal_dispersivity
+    # # model.models[:Reservoir].data_domain[:fluid_thermal_conductivity] = fluid_thermal_conductivity
 
-    # ϕ = model.models[:Reservoir].data_domain[:porosity]
-    # λ = model.models[:Reservoir].data_domain[:fluid_thermal_conductivity]
-    T = compute_face_trans(domain, porosity.*λ)
-    T = repeat(T', 1, 1)
-    model.models[:Reservoir].data_domain[:fluid_thermal_conductivities, Faces()] = T
+    # # ϕ = model.models[:Reservoir].data_domain[:porosity]
+    # # λ = model.models[:Reservoir].data_domain[:fluid_thermal_conductivity]
+    # T = compute_face_trans(domain, porosity.*λ)
+    # T = repeat(T', 1, 1)
+    # model.models[:Reservoir].data_domain[:fluid_thermal_conductivities, Faces()] = T
 
 
     density = ConstantCompressibilityDensities(system, si_unit(:atm), [ρ], [1e-10/si_unit(:bar)]) # Replace density with a lighter pair
@@ -221,7 +225,7 @@ function analytical_ates(;
     forces = fill(force, num_steps)
 
     info = Dict{Symbol, Any}(
-        :description => "Analytical radial ATES benchmark case generated using Fimbul.analytical_ates()",
+        :description => "Analytical radial benchmark case generated using Fimbul.analytical_radial()",
         :grid => (nang = nang, nr = length(radii), nz = length(layer_depths) - 1),
         :radii => radii,
         :layer_depths => layer_depths,
