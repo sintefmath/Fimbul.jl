@@ -17,6 +17,7 @@ module Fimbul
     export well_mismatch_thermal
     # Cases
     export analytical_1d
+    export analytical_radial
     export analytical_ates
     export benchmark_ht_1d
     export benchmark_ht_2d
