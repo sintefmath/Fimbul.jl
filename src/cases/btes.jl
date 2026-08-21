@@ -1,12 +1,17 @@
 """
-    btes(; <keyword arguments>)
+    btes(pattern::Symbol = :sunflower; <keyword arguments>)
+    btes(field; <keyword arguments>)
 
 Setup function for borehole thermal energy storage (BTES) system.
 
-# Keyword arguments
-- `field = missing`: Explicit wells for the system. If given, this overrides
-  `num_wells`, `num_sectors` and `well_spacing`. The wells are given using
-  the following structure:
+The first form places the wells using one of the built-in patterns. The second
+form takes an explicit well field, and does not accept `num_sides`, `num_wells`
+or `num_sectors`, since the placement and grouping are given by `field` itself.
+
+# Arguments
+- `pattern = :sunflower`: Well placement pattern. One of `:sunflower`,
+  `:rectangular`, `:circular` or `:polygonal`.
+- `field`: Explicit wells for the system, given using the following structure:
   - A full field is represented as `[sector_1, sector_2, ..., sector_n]`.
   - `sector_k` contains all wells in sector `k`, represented as
     `[well_1, well_2, ..., well_nk]`.
@@ -17,12 +22,15 @@ Setup function for borehole thermal energy storage (BTES) system.
   Discharge order depends on `reversed_discharge`. A single well (a `3 x m`
   matrix) can also be passed directly as `field`, representing the special
   case of a field with a single sector containing a single well.
-- `pattern = :sunflower`: Well placement pattern used when `field` is not
-  given. One of `:sunflower`, `:rectangular`, `:circular` or `:polygonal`.
+
+# Keyword arguments
 - `num_sides = 6`: Number of sides of the polygon when `pattern = :polygonal`.
-- `num_wells = 48`: Number of wells in the BTES system.
-- `num_sections = 6`: Number of sections in the BTES system. The system is
-  divided into equal circle sectors, and all wells in each sector are coupled in series.
+  Only used with the `pattern` form.
+- `num_wells = 48`: Number of wells in the BTES system. Only used with the
+  `pattern` form.
+- `num_sectors = 6`: Number of sectors in the BTES system. The system is
+  divided into equal circle sectors, and all wells in each sector are coupled in
+  series. Only used with the `pattern` form.
 - `well_spacing = 5.0`: Horizontal spacing between wells [m].
 - `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [1, 2]`: Layers in which the wells are placed
@@ -40,7 +48,7 @@ Setup function for borehole thermal energy storage (BTES) system.
   If `true`, discharge flow is reversed, so it runs from the last well to the
   first well in each sector.
 - `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
-- `num_years = 5`: Number of years to run the simulation.
+- `num_years = 4`: Number of years to run the simulation.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
 - `discharge_period = ["December", "March"]`: Period during which the system is discharged.
 - `report_interval = 14 day`: Reporting interval for the simulation.
@@ -121,11 +129,6 @@ function btes(
     n_xy = 3,
     mesh_args = NamedTuple(),
     )
-
-    if field isa AbstractMatrix
-        # Special case: a single well, given as a single 3 x m matrix
-        field = [[field]]
-    end
 
     well_coords_3d = vcat(field...)
     num_wells = length(well_coords_3d)
@@ -232,6 +235,12 @@ function btes(
     case = JutulCase(model, dt, forces, state0 = state0, input_data = info)
     return case
 
+end
+
+function btes(field::AbstractMatrix; kwargs...)
+    # Special case: a single well, given as a single 3 x m matrix, representing
+    # a field with a single sector containing a single well
+    return btes([[Matrix{Float64}(field)]]; kwargs...)
 end
 
 # ## Patterns
