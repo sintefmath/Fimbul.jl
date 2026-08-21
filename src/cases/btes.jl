@@ -42,11 +42,24 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
 - `temperature_discharge = 10 °C/283.15 K`: Injection temperature during discharging [K].
 - `rate_charge = 0.5 l/s`: Injection rate during charging [m³/s].
 - `rate_discharge = rate_charge`: Injection rate during discharging [m³/s].
-- `reversed_discharge = false`: All sectors are operated in parallel. During
-  charging, flow runs from the first to the last well in each sector. If
-  `reversed_discharge = false`, discharge uses the same direction as charge.
-  If `true`, discharge flow is reversed, so it runs from the last well to the
-  first well in each sector.
+- `topology = :sectors_parallel`: How the boreholes are connected.
+  - `:sectors_parallel`: the sectors are operated in parallel, and the
+    boreholes within each sector are coupled in series. Each sector receives
+    `rate_charge`, so the field circulates `num_sectors*rate_charge` in total.
+    Each borehole is its own pair of wells, `B<n>_supply` and `B<n>_return`.
+  - `:sectors_series`: the sectors are coupled in series, and the boreholes
+    within each sector are coupled in parallel off a shared wellhead. The field
+    circulates `rate_charge` in total, or `rate_charge/wells_per_sector` per
+    borehole on average. Each sector is a single pair of wells, `S<n>_supply`
+    and `S<n>_return`, holding all its boreholes between a shared inlet and a
+    shared outlet node. The split between the boreholes is resolved from
+    wellbore friction, while the manifold itself is treated as resistance-free.
+    Per-borehole results are reached through the `borehole` field of the well
+    domain, since a sector rather than a borehole is the unit of well output.
+- `reversed_discharge = false`: During charging, flow runs from the first to the
+  last well in each sector, or from the first to the last sector when
+  `topology = :sectors_series`. If `reversed_discharge = false`, discharge uses
+  the same direction as charge. If `true`, discharge flow is reversed.
 - `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
 - `num_years = 4`: Number of years to run the simulation.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
@@ -74,6 +87,7 @@ function btes(
     rate_charge = 0.5litre/second,
     rate_discharge = rate_charge,
     reversed_discharge = false,
+    topology = :sectors_parallel,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 4,
     charge_period = ["June", "September"],
@@ -97,7 +111,7 @@ function btes(
         error("Unknown pattern: $pattern. Supported patterns are :sunflower, :rectangular, :circular and :polygonal.")
     end
 
-    return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,
+    return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,
     density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,
     geothermal_gradient = geothermal_gradient,temperature_charge = temperature_charge,temperature_discharge = temperature_discharge,
     rate_charge = rate_charge,rate_discharge = rate_discharge,reversed_discharge = reversed_discharge,temperature_surface = temperature_surface,num_years = num_years,charge_period = charge_period,
@@ -119,6 +133,7 @@ function btes(
     rate_charge = 0.5litre/second,
     rate_discharge = rate_charge,
     reversed_discharge = false,
+    topology = :sectors_parallel,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 4,
     charge_period = ["June", "September"],
@@ -129,6 +144,10 @@ function btes(
     n_xy = 3,
     mesh_args = NamedTuple(),
     )
+
+    topology in (:sectors_parallel, :sectors_series) ||
+        error("Unknown topology: $topology. Supported topologies are \
+            :sectors_parallel and :sectors_series.")
 
     well_coords_3d = vcat(field...)
     num_wells = length(well_coords_3d)
@@ -158,17 +177,50 @@ function btes(
     hxy_min = metrics.hxy_min
     well_models = []
     well_names = Symbol[]
+    manifold_segments = Vector{Vector{Int}}()
     nl = length(layers)
     geo = tpfv_geometry(mesh)
 
-    for (wno, wc) in enumerate(well_coords_3d)
-        name = Symbol("B$wno")
-        println("Adding well $name ($wno/$num_wells)")
+    # Reservoir cells traversed by a well trajectory, top to bottom
+    function trajectory_cells(wc)
         cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), n = 100)
         filter!(c -> layers[c] ∈ well_layers, cells)
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
-        push!(well_models, w_sup, w_ret)
-        push!(well_names, name)
+        return cells
+    end
+
+    if topology == :sectors_parallel
+        # One pair of wells per borehole
+        for (wno, wc) in enumerate(well_coords_3d)
+            name = Symbol("B$wno")
+            println("Adding well $name ($wno/$num_wells)")
+            cells = trajectory_cells(wc)
+            w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
+            push!(well_models, w_sup, w_ret)
+            push!(well_names, name)
+        end
+    else
+        # One pair of wells per sector, with the boreholes of the sector hung in
+        # parallel between a shared inlet and a shared outlet node
+        for (sno, sector) in enumerate(field)
+            name = Symbol("S$sno")
+            println("Adding sector $name ($sno/$(length(field))) with \
+                $(length(sector)) wells")
+            cells = [trajectory_cells(wc) for wc in sector]
+            disc = discretize_closed_loop_u1_manifold(cells, geo.cell_centroids)
+            w_sup, w_ret = setup_closed_loop_well_u1(domain, disc.reservoir_cells;
+                name                  = name,
+                neighborship          = disc.neighborship,
+                pipe_cells            = disc.pipe_cells,
+                grout_cells           = disc.grout_cells,
+                well_cell_centers     = disc.well_cell_centers,
+                end_nodes             = disc.end_nodes,
+                return_reservoir_cell = disc.return_reservoir_cell,
+                tag                   = disc.tag,
+                borehole              = disc.borehole)
+            push!(well_models, w_sup, w_ret)
+            push!(well_names, name)
+            push!(manifold_segments, disc.manifold_segments)
+        end
     end
 
     # Make the model
@@ -200,17 +252,29 @@ function btes(
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    # Group supply well names by sector, preserving the order given in `field`
-    wells_per_sector = Vector{Vector{Symbol}}()
-    wtot = 0
-    for sector in field
-        sw = [Symbol(well_names[wtot + l], "_supply") for l in 1:length(sector)]
-        wtot += length(sector)
-        push!(wells_per_sector, sw)
+    if topology == :sectors_parallel
+        # Group supply well names by sector, preserving the order given in `field`
+        wells_per_sector = Vector{Vector{Symbol}}()
+        wtot = 0
+        for sector in field
+            sw = [Symbol(well_names[wtot + l], "_supply") for l in 1:length(sector)]
+            wtot += length(sector)
+            push!(wells_per_sector, sw)
+        end
+    else
+        # A single chain running through the sectors, in the order given in `field`
+        wells_per_sector = [[Symbol(name, "_supply") for name in well_names]]
     end
     control_charge, control_discharge, sectors = setup_controls(model, wells_per_sector,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge;
         reversed_discharge = reversed_discharge);
+    if topology == :sectors_series
+        # setup_controls saw one chain, and so returned a single group. Restore
+        # one entry per sector.
+        sectors = Dict(Symbol("S$sno") =>
+            [Symbol(name, "_supply"), Symbol(name, "_return")]
+            for (sno, name) in enumerate(well_names))
+    end
     
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
@@ -230,9 +294,23 @@ function btes(
     info[:description] = "Borehole thermal energy storage (BTES) case set up using Fimbul.btes()"
     info[:sectors] = sectors
     info[:timestamps] = timestamps
+    info[:topology] = topology
+
+    # ## Set parameters
+    parameters = nothing
+    if topology == :sectors_series
+        # The manifold is treated as resistance-free: its segment lengths, which
+        # would otherwise be the distance from the wellhead to each borehole,
+        # are set to zero so that node placement does not bias the flow split.
+        parameters = setup_parameters(model)
+        for (sno, segments) in enumerate(manifold_segments)
+            parameters[Symbol("S$sno", "_supply")][:SegmentLength][segments] .= 0.0
+        end
+    end
 
     # ## Assemble and return model
-    case = JutulCase(model, dt, forces, state0 = state0, input_data = info)
+    case = JutulCase(model, dt, forces,
+        state0 = state0, parameters = parameters, input_data = info)
     return case
 
 end
