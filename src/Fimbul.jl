@@ -14,6 +14,7 @@ module Fimbul
     export well_mismatch_thermal
     # Cases
     export analytical_1d
+    export analytical_radial
     export geothermal_doublet
     export egs, egs_well_coordinates
     export ags

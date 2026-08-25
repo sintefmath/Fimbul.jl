@@ -3,6 +3,7 @@
 ## Cases with analytical solutions
 ```@docs
 analytical_1d
+analytical_radial
 ```
 
 ## Generic cases
