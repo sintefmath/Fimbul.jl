@@ -17,8 +17,6 @@ using GLMakie
 
 const DAYS = collect(1:90)
 
-to_celsius(T) = convert_from_si.(T, :Celsius)
-
 # ## Utilities
 function radial_shell_lookup(case)
     mesh = physical_representation(reservoir_model(case.model).data_domain)
@@ -33,7 +31,7 @@ end
 
 function numerical_temperature_timeseries(results, cells)
     return [
-        [to_celsius(state[:Temperature][cell]) for state in results.states]
+        [convert_from_si(state[:Temperature][cell], :Celsius) for state in results.states]
         for cell in cells
     ]
 end
@@ -174,7 +172,7 @@ end
 # ## Part 1: No dispersion
 # Baseline radial benchmark with thermal dispersion disabled.
 case_no_disp = Fimbul.analytical_radial(
-    nrad = 800,
+    nrad = 3200,
     nang = 32,
     thermal_dispersivity = nothing,
     layer_depths = [0.0, 20.0],
@@ -183,7 +181,7 @@ sim_no_disp, cfg_no_disp = setup_reservoir_simulator(
     case_no_disp;
     initial_dt = 1.0,
     info_level = 0,
-    max_timestep = Inf,
+    max_timestep = 0.1*si"day",
 )
 push!(cfg_no_disp[:timestep_selectors], VariableChangeTimestepSelector(:Temperature, 0.25, model = :Reservoir, relative = false))
 results_no_disp = simulate_reservoir(case_no_disp; simulator = sim_no_disp, config = cfg_no_disp)
@@ -210,8 +208,8 @@ fig_conv_no_disp
 αL_disp = 1.0
 αT_disp = 0.1
 case_disp = Fimbul.analytical_radial(
-    nrad = 800,
-    nang = 32,
+    nrad = 3200,
+    nang = 64,
     thermal_dispersivity = permutedims([αL_disp αT_disp]),
     layer_depths = [0.0, 20.0],
 )
@@ -219,7 +217,7 @@ sim_disp, cfg_disp = setup_reservoir_simulator(
     case_disp;
     initial_dt = 1.0,
     info_level = 0,
-    max_timestep = Inf,
+    max_timestep = 0.1*si"day",
 )
 push!(cfg_disp[:timestep_selectors], VariableChangeTimestepSelector(:Temperature, 0.25, model = :Reservoir, relative = false))
 results_disp = simulate_reservoir(case_disp; simulator = sim_disp, config = cfg_disp)
@@ -235,7 +233,7 @@ fig_disp
 conv_disp = convergence_study(
     with_dispersion = true,
     nrad_values = [100, 200, 400, 800],
-    nang = 4,
+    nang = 64,
     α_L = αL_disp,
     α_T = αT_disp,
 )
