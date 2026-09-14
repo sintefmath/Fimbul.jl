@@ -37,6 +37,7 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
 - `density = [30, 2580, 2580]: Rock density in the layers [kg/m³].
 - `thermal_conductivity = [0.034, 3.7, 3.7]: Thermal conductivity in the layers [W/(m⋅K)].
 - `heat_capacity = [1500, 900, 900]`: Heat capacity in the layers [J/(kg⋅K)].
+- `permeability = 1e-6 darcy`: Rock permeability [m²].
 - `geothermal_gradient = 0.03 K/m`: Geothermal gradient [K/m].
 - `temperature_charge = 90 °C/363.15 K`: Injection temperature during charging [K].
 - `temperature_discharge = 10 °C/283.15 K`: Injection temperature during discharging [K].
@@ -81,6 +82,7 @@ function btes(
     density = [30, 2580, 2580]*kilogram/meter^3,
     thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
     heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
+    permeability = 1e-6darcy,
     geothermal_gradient = 0.03Kelvin/meter,
     temperature_charge = convert_to_si(90.0, :Celsius),
     temperature_discharge = convert_to_si(10.0, :Celsius),
@@ -112,7 +114,7 @@ function btes(
     end
 
     return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,
-    density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,
+    density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,permeability = permeability,
     geothermal_gradient = geothermal_gradient,temperature_charge = temperature_charge,temperature_discharge = temperature_discharge,
     rate_charge = rate_charge,rate_discharge = rate_discharge,reversed_discharge = reversed_discharge,temperature_surface = temperature_surface,num_years = num_years,charge_period = charge_period,
     discharge_period = discharge_period,report_interval = report_interval,utes_schedule_args = utes_schedule_args,n_z = n_z,n_xy = n_xy,mesh_args = mesh_args)
@@ -127,6 +129,7 @@ function btes(
     density = [30, 2580, 2580]*kilogram/meter^3,
     thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
     heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
+    permeability = 1e-6darcy,
     geothermal_gradient = 0.03Kelvin/meter,
     temperature_charge = convert_to_si(90.0, :Celsius),
     temperature_discharge = convert_to_si(10.0, :Celsius),
@@ -168,7 +171,7 @@ function btes(
             rock_heat_capacity = heat_capacity
         );
         mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
-        permeability = 1e-6darcy,
+        permeability = permeability,
         porosity = 0.01,
         component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
     )
