@@ -229,9 +229,10 @@ function btes(
         end
     end
 
-    # Make the model
-    # Closed-loop wells must not be shut: The supply and return are hydraulically
-    # connected, and shutting one of them gives a dead end.
+    # Make the model. The facility must not shut wells on its own: a closed loop
+    # whose return is shut while its supply injects is sealed and infeasible,
+    # and the chained reinjection controls start every period from zero rate,
+    # which is exactly when the facility would shut them.
     model = setup_reservoir_model(
         domain, :geothermal,
         wells = well_models,
