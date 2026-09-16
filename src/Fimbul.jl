@@ -5,6 +5,7 @@ module Fimbul
     export extruded_mesh, horizontal_fractured_mesh
     # Wells
     export setup_btes_well, setup_vertical_btes_well
+    export ClosedLoopRestControl
     # Utils for setting up cases
     export make_schedule, make_utes_schedule
     export set_dirichlet_bcs
@@ -55,6 +56,7 @@ module Fimbul
     include("wells/closed_loop_u1.jl")
     include("wells/closed_loop_coaxial.jl")
     include("wells/closed_loop_analytical.jl")
+    include("wells/rest_control.jl")
     # Cases
     include("cases/cases.jl")
     # Optimization

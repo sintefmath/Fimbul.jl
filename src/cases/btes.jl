@@ -66,6 +66,9 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
 - `discharge_period = ["December", "March"]`: Period during which the system is discharged.
 - `report_interval = 14 day`: Reporting interval for the simulation.
+  During rest periods the supply wells are put under
+  [`ClosedLoopRestControl`](@ref) at the wellhead pressure, and the return wells
+  are disabled.
 - `utes_schedule_args = NamedTuple()`: Additional arguments for the UTES schedule.
 - `n_z = [3, 8, 3]`: Number of layers in the vertical direction for each layer.
 - `n_xy = 3`: Number of layers in the horizontal direction for each layer.
@@ -268,7 +271,8 @@ function btes(
         # A single chain running through the sectors, in the order given in `field`
         wells_per_sector = [[Symbol(name, "_supply") for name in well_names]]
     end
-    control_charge, control_discharge, sectors = setup_controls(model, wells_per_sector,
+    control_charge, control_discharge, control_rest, sectors = setup_controls(
+        model, wells_per_sector,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge;
         reversed_discharge = reversed_discharge);
     if topology == :sectors_series
@@ -281,7 +285,7 @@ function btes(
     
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
-    forces_rest = setup_reservoir_forces(model, bc=bc)
+    forces_rest = setup_reservoir_forces(model, control=control_rest, bc=bc)
     # Make schedule
     dt, forces, timestamps = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest;
@@ -408,9 +412,15 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
     # BHP control for return side
     bhp_target = BottomHolePressureTarget(1.0si_unit(:atm))
     ctrl_ret = ProducerControl(bhp_target);
+    # Rest: the loops are not circulating. Holding the wellhead pressure lets the
+    # fluid in each loop expand and contract freely with temperature, as an
+    # expansion vessel would. Disabling every well instead seals the loops, and
+    # a cooling loop then cannot converge (see ClosedLoopRestControl).
+    ctrl_rest = ClosedLoopRestControl(bhp_target)
     # Set up forces
     control_charge = Dict()
     control_discharge = Dict()
+    control_rest = Dict()
     assigned = []
     get_return = (well) -> Symbol(replace(String(well), "_supply" => "_return"))
     sectors = Dict()
@@ -449,6 +459,8 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
             end
             control_charge[well_ret] = ctrl_ret
             control_discharge[well_ret] = ctrl_ret
+            control_rest[well_sup] = ctrl_rest
+            control_rest[well_ret] = DisabledControl()
             push!(assigned, well_sup, well_ret)
             push!(sec_wells, well_sup, well_ret)
         end
@@ -457,6 +469,6 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
 
     @assert sort(assigned) == sort(well_symbols(model))
 
-    return control_charge, control_discharge, sectors
+    return control_charge, control_discharge, control_rest, sectors
 
 end

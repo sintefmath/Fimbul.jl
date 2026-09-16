@@ -164,6 +164,25 @@ end
     end
     simulate_reservoir(case[1:1])
 
+    # ## Rest periods
+    # The loops stop circulating, but are not sealed: the supply side holds the
+    # wellhead pressure so that the loop fluid can expand and contract with
+    # temperature. A sealed, cooling loop does not converge.
+    forces = case.forces
+    rest = findfirst(i -> forces[i][:Facility].control[:S1_supply] isa ClosedLoopRestControl, eachindex(forces))
+    @test !isnothing(rest)
+    @test rest > 1
+    control = forces[rest][:Facility].control
+    for sno in 1:kw.num_sectors
+        ctrl = control[Symbol("S$sno", "_supply")]
+        @test ctrl isa ClosedLoopRestControl
+        @test ctrl.target isa BottomHolePressureTarget
+        @test ctrl.target.value ≈ 1.0si_unit(:atm)
+        @test control[Symbol("S$sno", "_return")] isa DisabledControl
+    end
+    # Charge, then take the first rest step from the charged state
+    simulate_reservoir(case[1:rest]; error_on_incomplete = true, info_level = -1)
+
     @test_throws ErrorException btes(:sunflower; topology = :nonsense, kw...)
 
 end
