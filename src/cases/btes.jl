@@ -33,7 +33,9 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
   series. Only used with the `pattern` form.
 - `well_spacing = 5.0`: Horizontal spacing between wells [m].
 - `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
-- `well_layers = [1, 2]`: Layers in which the wells are placed
+- `well_layers = [2]`: Layers in which the wells are perforated. Layer 1 is the
+  insulation cover; the pipes pass through it but exchange nothing with it, so
+  by default the boreholes start below it.
 - `density = [30, 2580, 2580]: Rock density in the layers [kg/m³].
 - `thermal_conductivity = [0.034, 3.7, 3.7]: Thermal conductivity in the layers [W/(m⋅K)].
 - `heat_capacity = [1500, 900, 900]`: Heat capacity in the layers [J/(kg⋅K)].
@@ -81,7 +83,7 @@ function btes(
     num_sectors = 6,
     well_spacing = 5.0,
     depths = [0.0, 0.5, 50, 65],
-    well_layers = [1, 2],
+    well_layers = [2],
     density = [30, 2580, 2580]*kilogram/meter^3,
     thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
     heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
@@ -128,7 +130,7 @@ function btes(
     field::Vector{Vector{Matrix{Float64}}};
     well_spacing = 5.0,
     depths = [0.0, 0.5, 50, 65],
-    well_layers = [1, 2],
+    well_layers = [2],
     density = [30, 2580, 2580]*kilogram/meter^3,
     thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
     heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
@@ -187,9 +189,24 @@ function btes(
     nl = length(layers)
     geo = tpfv_geometry(mesh)
 
-    # Reservoir cells traversed by a well trajectory, top to bottom
+    # Reservoir cells traversed by a well trajectory, top to bottom.
+    #
+    # find_enclosing_cells samples the trajectory and tests each sample point
+    # against the cells, so the spacing must be finer than the thinnest cell
+    # along the well or that cell is skipped. The end points are also pulled a
+    # hair inside the trajectory: a point exactly on the outer boundary of the
+    # mesh sits on the boundary face where the inside test has no margin, and
+    # whether it counts is then decided by roundoff.
+    z_nodes = sort(unique(round.(getindex.(mesh.node_points, 3), digits = 6)))
+    hz_min = minimum(diff(z_nodes))
     function trajectory_cells(wc)
-        cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), n = 100)
+        wc = copy(wc)
+        L = sum(norm(wc[:, i+1] - wc[:, i]) for i in 1:size(wc, 2)-1)
+        ε = min(1e-3, 1e-3*L)
+        t = (wc[:, 2] - wc[:, 1]); wc[:, 1] += ε*t/norm(t)
+        t = (wc[:, end] - wc[:, end-1]); wc[:, end] -= ε*t/norm(t)
+        n = max(100, ceil(Int, 4*L/hz_min))
+        cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), n = n)
         filter!(c -> layers[c] ∈ well_layers, cells)
         return cells
     end
