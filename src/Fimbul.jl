@@ -9,6 +9,7 @@ module Fimbul
     export closed_loop_well_names
     export AbstractClosedLoopWell, ClosedLoopGenericWell
     export ClosedLoop1UWell, ClosedLoopCoaxialWell
+    export ClosedLoopRestControl
     # Utils for setting up cases
     export make_schedule, make_utes_schedule
     export set_dirichlet_bcs
@@ -61,6 +62,7 @@ module Fimbul
     include("wells/closed_loop_u1.jl")
     include("wells/closed_loop_coaxial.jl")
     include("wells/closed_loop_analytical.jl")
+    include("wells/rest_control.jl")
     # Cases
     include("cases/cases.jl")
     # Optimization
