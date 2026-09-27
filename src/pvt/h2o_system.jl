@@ -2,6 +2,13 @@ const WATER_CRITICAL_PRESSURE = 22.064e6
 const WATER_CRITICAL_TEMPERATURE = 647.096
 const WATER_CRITICAL_ENTHALPY = 2085e3
 
+struct H2OEquationOfState
+
+end
+
+# A hack...
+JutulDarcy.MultiComponentFlash.number_of_components(::H2OEquationOfState) = 1
+
 """
     H2OSystem
 
@@ -25,6 +32,7 @@ struct H2OSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.CompositionalSystemLV
     rho_ref :: F
     reference_phase_index::Int
     pvt_tables::Dict
+    equation_of_state::H2OEquationOfState
 end
 
 """
@@ -39,7 +47,7 @@ function H2OSystem(pvt_tables::Dict;
     phases  = (AqueousPhase(), VaporPhase())
     rho_ref = tuple(Float64.(reference_densities)...)
     reference_phase_index = 1
-    return H2OSystem(phases, rho_ref, reference_phase_index, pvt_tables)
+    return H2OSystem(phases, rho_ref, reference_phase_index, pvt_tables, H2OEquationOfState())
 end
 
 function H2OSystem(; kwargs...)
@@ -60,7 +68,7 @@ JutulDarcy.phase_indices(sys::H2OSystem)        = (1, 2)
 JutulDarcy.component_names(sys::H2OSystem)      = (:H₂O,)
 
 # Convenience const for easy dispatching on models with this H2OSystem.
-const GeothermalModel = SimulationModel{<:Any, <:H2OSystem, <:Any, <:Any}
+const GeothermalModel = SimulationModel{<:Any, <:H2OSystem, <:Any, <:Any, <:Any, <:Any, <:Any, <:Any, <:Any, <:Any, <:Any}
 Jutul.default_value(model::GeothermalModel, ::JutulDarcy.PhaseMassFractions) = 1.0
 
 # Only Pressure is selected here. The Enthalpy primary variable is added by add_thermal_to_model!.

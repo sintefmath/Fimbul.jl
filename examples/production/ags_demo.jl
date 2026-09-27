@@ -105,7 +105,6 @@ results = simulate_reservoir(case; simulator = sim, config = cfg)
 # for all timesteps.
 Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
 plot_res_args = (
-    resolution = (600, 800), aspect = :data, 
     colormap = :seaborn_icefire_gradient, key = :Temperature,
     well_arg = (markersize = 0.0, ),
 )
