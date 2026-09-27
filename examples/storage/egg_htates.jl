@@ -39,7 +39,7 @@ hifi = egg_ates(; use_bc = false, num_reports = 12)
 
 # ## Visualize the model
 # We visualize the model interactively using `plot_reservoir`.
-plot_reservoir(hifi, reservoir_model(hifi.model).data_domain)
+plot_reservoir(hifi)
 
 # ## Simulate high-fidelity model
 # We set up a simulator for the high-fidelity model and simulate the system.

@@ -32,7 +32,7 @@ fig
 
 # ### Plot reservoir properties
 # Next, we visualize the reservoir interactively.
-plot_reservoir(case.model; aspect = :data)
+plot_reservoir(case.model)
 
 # ## Simulate geothermal energy production
 # We simulate the geothermal doublet for 200 years. The producer is set to
@@ -48,7 +48,7 @@ results = simulate_reservoir(case; info_level = 0)
 # We first plot the reservoir state interactively. You can notice how the
 # cold front propagates from the injector well by filtering out high values.
 plot_reservoir(case.model, results.states;
-colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
+colormap = :seaborn_icefire_gradient, key = :Temperature)
 
 # ### Plot well output
 # Next, we plot the well output to examine the production rates and temperatures.
@@ -92,7 +92,7 @@ fig
 # as it shows the evolution of the cold front in the aquifer
 Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
 plot_reservoir(case.model, Δstates;
-colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
+colormap = :seaborn_icefire_gradient, key = :Temperature)
 
 # ### 3D visualization of temperature changes
 # Finally, we plot the change in temperature at the same timesteps highlighted in

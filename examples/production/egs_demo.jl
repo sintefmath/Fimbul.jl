@@ -255,7 +255,7 @@ y_range = diff(vcat(extrema(geo.cell_centroids[2, :])...))[1]
 z_range = diff(vcat(extrema(geo.cell_centroids[3, :])...))[1]
 aspect  = (x_range, y_range, z_range) ./ max.(x_range, y_range, z_range)
 plot_res_args = (
-    resolution = (600, 800), aspect = aspect,
+    aspect = aspect,
     colormap   = :seaborn_icefire_gradient, key = :Temperature,
     well_arg   = (markersize = 0.0,),
 )

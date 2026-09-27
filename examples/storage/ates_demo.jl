@@ -76,7 +76,7 @@ fig
 # ### Visualize reservoir properties
 # Next, we examine the geological heterogeneity and porosity distribution that
 # controls fluid flow and thermal transport within the aquifer system
-plot_reservoir(case.model, key = :porosity, aspect = :data, colormap = :bilbao100)
+plot_reservoir(case.model, key = :porosity, colormap = :bilbao100)
 
 # ## Simulate the ATES system
 # Transitions between injection and production modes are numerically challenging,
@@ -94,7 +94,6 @@ results = simulate_reservoir(case, simulator = sim, config = cfg)
 # and migration patterns around the well doublet system.
 plot_reservoir(case, results.states, 
     key = :Temperature, 
-    aspect = :data,
     colormap = :seaborn_icefire_gradient)
 
 # ### Visualize thermal plume
