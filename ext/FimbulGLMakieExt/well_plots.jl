@@ -26,9 +26,8 @@ function Fimbul.plot_well_data!(ax, time, reference, other;
     if legend
         axislegend(ax, loc = :best)
     end
-
+    
 end
-
 function get_field(data, well, field)
 
     getter = (data, field) -> [d[well][field][1] for d in data]
@@ -88,35 +87,3 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
     
 end
 
-function dfs_branches(edges)
-    # Build adjacency list
-    from_nodes = edges[1,:]
-    to_nodes = edges[2,:]
-    nodes = unique(vcat(from_nodes, to_nodes))
-    adj = Dict(n => Int[] for n in nodes)
-    for (f, t) in zip(from_nodes, to_nodes)
-        push!(adj[f], t)
-    end
-
-    # Find root nodes (nodes that never appear as a "to" node)
-    roots = setdiff(from_nodes, to_nodes)
-    branches = Vector{Vector{Int}}()
-
-    function dfs(node, path)
-        push!(path, node)
-        if isempty(adj[node])
-            push!(branches, copy(path))
-        else
-            for child in adj[node]
-                dfs(child, path)
-            end
-        end
-        pop!(path)
-    end
-
-    for root in roots
-        dfs(root, Int[])
-    end
-
-    return branches
-end
