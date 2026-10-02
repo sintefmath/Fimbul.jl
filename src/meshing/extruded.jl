@@ -119,7 +119,7 @@ function extruded_mesh(cell_constraints::Vector{<:AbstractMatrix}, depths;
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
     # Cell size transition
     dist_min = min_cc_distance*dist_min_factor
-    dist_max = (max_cc_distance/2 + offset)*dist_max_factor
+    dist_max = max((max_cc_distance/2 + offset)*dist_max_factor, dist_min*2)
     @assert dist_min < dist_max
     "dist_min must be smaller than dist_max"
     if dist_max > radius_outer
