@@ -106,7 +106,7 @@ function coaxial_bhe(;
     end
 
     # ## Create mesh constraints from well trajectory
-    constraints = get_well_constraints(well_trajectory; hxy_min = hxy_min)
+    constraints = get_well_constraints(well_trajectory, hxy_min)
 
     # ## Create domain
     domain, layers, metrics = layered_reservoir_domain(constraints, depths,
@@ -219,20 +219,21 @@ end
 Generate 2D mesh constraints from a well trajectory. The unique (x,y)
 footprint of the trajectory is used as constraints for mesh refinement.
 """
-function get_well_constraints(well_trajectory; hxy_min)
+function get_well_constraints(well_trajectory, hxy_min)
 
     Δ = hxy_min / 2
-    well_coords_2x = []
-    wc_left = copy(well_trajectory)
-    wc_left[:, 1] .-= Δ / 2
-    push!(well_coords_2x, wc_left)
-    wc_right = copy(well_trajectory)
-    wc_right[:, 1] .+= Δ / 2
-    push!(well_coords_2x, wc_right)
+    # well_coords_2x = []
+    # wc_left = copy(well_trajectory)
+    # wc_left[:, 1] .-= Δ / 2
+    # push!(well_coords_2x, wc_left)
+    # wc_right = copy(well_trajectory)
+    # wc_right[:, 1] .+= Δ / 2
+    # push!(well_coords_2x, wc_right)
 
     cell_constraints = Vector{Matrix{Float64}}()
-    for wc in well_coords_2x
+    for wc in [well_trajectory]
         cc_new = unique(wc[:, 1:2], dims = 1)'  # 2×N matrix
+        cc_new = cc_new .+ [hxy_min, hxy_min]./2
         if !isempty(cell_constraints)
             for cc in cell_constraints
                 remove = falses(size(cc_new, 2))
