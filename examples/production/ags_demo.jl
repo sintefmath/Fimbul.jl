@@ -108,6 +108,8 @@ plot_res_args = (
     resolution = (600, 800), aspect = :data, 
     colormap = :seaborn_icefire_gradient, key = :Temperature,
     well_arg = (markersize = 0.0, ),
+    axis_args = (perspectiveness = 0.75, ),
+    fancy = false
 )
 plot_reservoir(case.model, Δstates; plot_res_args...)
 
