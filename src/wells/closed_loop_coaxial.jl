@@ -110,7 +110,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     args = (
         type = :closed_loop,
         simple_well = false,
-        WI = 0.0
+        # WI = 0.0
     )
 
     # Setup supply well
