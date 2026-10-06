@@ -29,7 +29,12 @@ case = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
 # flowing from the outermost well back to the innermost well.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (800, 800))
-ax = Axis3(fig[1, 1]; zreversed = true, aspect = :data,
+axis_args = (
+    zreversed = true,
+    perspectiveness = 0.75,
+    aspect = :data,
+)
+ax = Axis3(fig[1, 1]; axis_args...,
 azimuth = 0, elevation = π/2)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 colors = Makie.wong_colors()
@@ -87,8 +92,10 @@ simulator=simulator, config=config, info_level=0);
 # around each well sector, while the well results show the temperature and flow
 # rate evolution throughout the simulation.
 plot_reservoir(case.model, results.states;
-well_fontsize = 0, key = :Temperature, step = length(case.dt),
-colormap = :seaborn_icefire_gradient)
+    well_fontsize = 0, key = :Temperature, step = length(case.dt),
+    axis_args = axis_args,
+    colormap = :seaborn_icefire_gradient,
+    fancy = false)
 
 plot_well_results(results.wells, field = :temperature)
 
@@ -108,8 +115,9 @@ bottom = geo.cell_centroids[3,:] .>= 50.0
 T_min, T_max = Inf, -Inf
 for (sno, step) in enumerate(steps)
     ax_sno = Axis3(fig[(sno-1)÷2+1, (sno-1)%2+1];
-    limits = (-50, 50, -50, 50, 40, 125),
-    title = "Charge $sno", zreversed = true, aspect = :data)
+        axis_args...,
+        limits = (-50, 50, -50, 50, 40, 125),
+        title = "Charge $sno")
     T = convert_from_si.(results.states[step][:Temperature], :Celsius)
     cells = bottom .& (T .>= 15.0)
     global T_min = min(T_min, minimum(T[cells]))
