@@ -50,7 +50,7 @@ common_args = (
     rate            = 9250meter^3/day,               # Water injection rate
     temperature_inj = convert_to_si(25.0, :Celsius), # Injection temperature
     num_years       = num_years,
-    hxy_min         = 40.0,
+    hxy_min         = 30.0,
     schedule_args   = (report_interval = si_unit(:year)/4,),
 )
 
@@ -258,8 +258,11 @@ plot_res_args = (
     resolution = (600, 800), aspect = aspect,
     colormap   = :seaborn_icefire_gradient, key = :Temperature,
     well_arg   = (markersize = 0.0,),
+    axis_args = (perspectiveness = 0.75,),
+    fancy = false
 )
-plot_reservoir(case.model, results.states; plot_res_args...)
+plot_reservoir(case.model, results.states;
+    plot_res_args...)
 
 # Temperature deviation from initial conditions highlights thermal depletion.
 Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
