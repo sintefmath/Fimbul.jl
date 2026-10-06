@@ -33,9 +33,10 @@ axis_args = (
     zreversed = true,
     perspectiveness = 0.75,
     aspect = :data,
+    elevation = 0.2π,
 )
 ax = Axis3(fig[1, 1]; axis_args...,
-azimuth = 0, elevation = π/2)
+azimuth = 0, elevation = π/2, perspectiveness = 0.0)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 colors = Makie.wong_colors()
 lns, labels = [], String[]
@@ -92,7 +93,10 @@ simulator=simulator, config=config, info_level=0);
 # around each well sector, while the well results show the temperature and flow
 # rate evolution throughout the simulation.
 plot_reservoir(case.model, results.states;
-    well_fontsize = 0, key = :Temperature, step = length(case.dt),
+    resolution = (1000, 800),
+    well_fontsize = 0,
+    key = :Temperature,
+    step = length(case.dt),
     axis_args = axis_args,
     colormap = :seaborn_icefire_gradient,
     fancy = false)
