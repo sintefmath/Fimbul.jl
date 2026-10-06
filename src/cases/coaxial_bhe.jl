@@ -12,7 +12,9 @@ well trajectory given as an m×3 matrix. The well is set up using
 ## Well trajectory
 - `well_trajectory`: An m×3 matrix defining the well path as (x, y, z) 
   coordinates [m]. Defaults to a vertical well from the surface to 2500 m
-  depth.
+  depth. For purely vertical trajectories (constant x and y), perforation
+  lengths are taken from reservoir cell `dz` to avoid sampled sliver lengths
+  in thin layers.
 
 ## Geological parameters
 - `depths = [0.0, 500.0, 1500.0, 2000.0, 2500.0, 3000.0]`: Depth boundaries
@@ -74,6 +76,7 @@ function coaxial_bhe(;
     schedule_args = NamedTuple(),
     # Mesh parameters
     hz = missing,
+    hz_min = 15.0,
     hxy_min = 2.5,
     hxy_max = 20*hxy_min,
     mesh_args = NamedTuple(),
@@ -86,8 +89,8 @@ function coaxial_bhe(;
     @assert inject_into ∈ (:inner, :outer) "inject_into must be :inner or :outer"
 
     # ## Set up vertical mesh sizing with refinement where the well is
+    num_layers = length(depths) - 1
     if ismissing(hz)
-        num_layers = length(depths) - 1
         dz = diff(depths)
         hz = fill(250.0, num_layers)
         # Determine which layers the well trajectory passes through
@@ -99,11 +102,15 @@ function coaxial_bhe(;
             well_in_layer = z_max_well >= layer_top && z_min_well <= layer_bot
             if well_in_layer
                 # Finer resolution in layers containing the wellbore
-                hz[i] = min(hz[i], d / 10, 25.0)
+                n = ceil(Int, dz[i]/hz_min)
+                hz[i] = d/n
             end
             hz[i] = min(hz[i], d / 5)
         end
     end
+    println("hz = ", hz)
+    interpolation = fill(:nothing, num_layers)
+    interpolation[end] = :top
 
     # ## Create mesh constraints from well trajectory
     constraints = get_well_constraints(well_trajectory, hxy_min)
@@ -122,6 +129,7 @@ function coaxial_bhe(;
             hxy_min = hxy_min,
             hxy_max = hxy_max,
             offset_rel = 1.0,
+            interpolation = interpolation,
             mesh_args...
         )
     )
@@ -130,7 +138,15 @@ function coaxial_bhe(;
     mesh = physical_representation(domain)
     cells, extra = Jutul.find_enclosing_cells(mesh, well_trajectory, n = 1_000,
         extra_out = true)
-    dir = Vector.(extra[:direction] .* extra[:lengths])
+    # For vertical trajectories, derive perforation length from reservoir cell
+    # z-size to avoid tiny sampled sliver segments in thin layers.
+    vertical_trajectory = isapprox(maximum(well_trajectory[:, 1]) - minimum(well_trajectory[:, 1]), 0.0) &&
+        isapprox(maximum(well_trajectory[:, 2]) - minimum(well_trajectory[:, 2]), 0.0)
+    if vertical_trajectory
+        dir = :z
+    else
+        dir = Vector.(extra[:direction] .* extra[:lengths])
+    end
 
     wells = setup_closed_loop_well(domain, cells;
         name = well_name,
@@ -222,13 +238,13 @@ footprint of the trajectory is used as constraints for mesh refinement.
 function get_well_constraints(well_trajectory, hxy_min)
 
     Δ = hxy_min / 2
-    # well_coords_2x = []
-    # wc_left = copy(well_trajectory)
-    # wc_left[:, 1] .-= Δ / 2
-    # push!(well_coords_2x, wc_left)
-    # wc_right = copy(well_trajectory)
-    # wc_right[:, 1] .+= Δ / 2
-    # push!(well_coords_2x, wc_right)
+    well_coords_2x = []
+    wc_left = copy(well_trajectory)
+    wc_left[:, 1] .-= Δ / 2
+    push!(well_coords_2x, wc_left)
+    wc_right = copy(well_trajectory)
+    wc_right[:, 1] .+= Δ / 2
+    push!(well_coords_2x, wc_right)
 
     cell_constraints = Vector{Matrix{Float64}}()
     for wc in [well_trajectory]
