@@ -82,6 +82,7 @@ fig
 # Next, we examine the geological heterogeneity and porosity distribution that
 # controls fluid flow and thermal transport within the aquifer system
 plot_reservoir(case.model;
+    resolution = (1000, 800),
     key = :porosity,
     colormap = :bilbao100,
     axis_args = axis_args,
@@ -102,6 +103,7 @@ results = simulate_reservoir(case, simulator = sim, config = cfg)
 # Interactive visualization allows exploration of thermal plume development
 # and migration patterns around the well doublet system.
 plot_reservoir(case, results.states;
+    resolution = (1000, 800),
     key = :Temperature, 
     colormap = :seaborn_icefire_gradient,
     axis_args = axis_args,
