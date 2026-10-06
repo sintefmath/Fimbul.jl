@@ -108,7 +108,6 @@ function coaxial_bhe(;
             hz[i] = min(hz[i], d / 5)
         end
     end
-    println("hz = ", hz)
     interpolation = fill(:nothing, num_layers)
     interpolation[end] = :top
 
