@@ -45,11 +45,13 @@ plot_res_args = (
         zreversed = true,
         perspectiveness = 0.75,
     ),
+    aspect = (4,4,1),
     fancy = false,
 )
-plot_reservoir(hifi, reservoir_model(hifi.model).data_domain;
+plot_reservoir(hifi;
     key = :permeability,
-    plot_res_args...)
+    plot_res_args...,
+)
 
 # ## Simulate high-fidelity model
 # We set up a simulator for the high-fidelity model and simulate the system.
