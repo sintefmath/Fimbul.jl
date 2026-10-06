@@ -683,7 +683,7 @@ function get_ags_trajectory()
     ]
 
     well_coords = [injector, lateral1, lateral2, producer];
-    well_coords = [[wc[:, 1] wc[:, 2] .-wc[:, 3]] for wc in well_coords];
+    well_coords = [[wc[:, 1] wc[:, 2] -wc[:, 3]] for wc in well_coords];
 
     well_connectivity = [
         0 0;
