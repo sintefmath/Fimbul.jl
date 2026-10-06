@@ -66,12 +66,12 @@ end
 # inner pipe vs. the outer annulus.
 homogeneous_args = (;
     base_args...,
-    depths = [0.0, 2550.0, 3000.0],
-    permeability = [1e-2, 1e-2]*si_unit(:darcy),
-    porosity = [0.01, 0.01],
-    rock_thermal_conductivity = [2.5, 2.5]*watt/(meter*Kelvin),
-    rock_heat_capacity = [900, 900]*joule/(kilogram*Kelvin),
-    rock_density = [2600, 2600]*kilogram/meter^3,
+    depths = [0.0, 2500.0 + 1e-3, 2550.0, 3000.0],
+    permeability = 1e-2*si_unit(:darcy),
+    porosity = 0.01,
+    rock_thermal_conductivity = 2.5*watt/(meter*Kelvin),
+    rock_heat_capacity = 900*joule/(kilogram*Kelvin),
+    rock_density = 2600*kilogram/meter^3,
 );
 
 case_hom_inner = coaxial_bhe(; inject_into = :inner, homogeneous_args...);
@@ -168,12 +168,12 @@ fig_hom
 # the impact of layering on the well temperature profiles.
 layered_args = (;
     base_args...,
-    depths = [0.0, 250.0, 750.0, 1250.0, 3000.0],
-    permeability  = [1e-3, 1e-1, 1e-4, 1e-1]*si_unit(:darcy),
-    porosity      = [0.15, 0.20, 0.01, 0.20],
-    rock_thermal_conductivity = [1.0, 2.0, 4.0, 2.0]*watt/(meter*Kelvin),
-    rock_heat_capacity = [800, 900, 950, 900]*joule/(kilogram*Kelvin),
-    rock_density       = [2650, 2600, 2580, 2600]*kilogram/meter^3,
+    depths = [0.0, 250.0, 750.0, 1250.0, 2500.0+1e-3, 3000.0],
+    permeability  = [1e-3, 1e-1, 1e-4, 1e-1, 1e-1]*si_unit(:darcy),
+    porosity      = [0.15, 0.20, 0.01, 0.20, 0.20],
+    rock_thermal_conductivity = [1.0, 2.0, 4.0, 2.0, 2.0]*watt/(meter*Kelvin),
+    rock_heat_capacity = [800, 900, 950, 900, 900]*joule/(kilogram*Kelvin),
+    rock_density       = [2650, 2600, 2580, 2600, 2600]*kilogram/meter^3,
 );
 
 case_layered = coaxial_bhe(; inject_into = :outer, layered_args...);
@@ -181,7 +181,11 @@ case_layered = coaxial_bhe(; inject_into = :outer, layered_args...);
 # ### Plot reservoir properties
 # The interactive viewer shows how conductivity and other properties vary with
 # depth across the four layers.
-plot_reservoir(case_layered.model)
+plot_reservoir(case_layered;
+    resolution = (1000, 800),
+    key = :rock_thermal_conductivity,
+    fancy = false, aspect = (1, 1, 3),
+    axis_args = (perspectiveness = 0.5, ))
 
 # ### Simulate
 results_layered = run_case(case_layered);
