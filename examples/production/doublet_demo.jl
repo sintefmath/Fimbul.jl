@@ -21,8 +21,9 @@ case = geothermal_doublet();
 # the wells in the horizontal plane and vertically in and near the target
 # aquifer.
 msh = physical_representation(reservoir_model(case.model).data_domain)
-fig = Figure(size = (1200, 800))
-ax = Axis3(fig[1, 1], zreversed = true, aspect = :data)
+fig = Figure(size = (1000, 800))
+axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75)
+ax = Axis3(fig[1, 1]; axis_args...)
 Jutul.plot_mesh_edges!(ax, msh, alpha = 1.0)
 wells = get_model_wells(case.model)
 for (k, w) in wells
@@ -32,7 +33,11 @@ fig
 
 # ### Plot reservoir properties
 # Next, we visualize the reservoir interactively.
-plot_reservoir(case.model; aspect = :data)
+plot_reservoir(case.model;
+    resolution = (1000, 800),
+    key = :permeability,
+    axis_args = axis_args,
+    fancy = false)
 
 # ## Simulate geothermal energy production
 # We simulate the geothermal doublet for 200 years. The producer is set to
@@ -48,7 +53,10 @@ results = simulate_reservoir(case; info_level = 0)
 # We first plot the reservoir state interactively. You can notice how the
 # cold front propagates from the injector well by filtering out high values.
 plot_reservoir(case.model, results.states;
-colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
+    colormap = :seaborn_icefire_gradient,
+    key = :Temperature,
+    axis_args = axis_args,
+    fancy = false)
 
 # ### Plot well output
 # Next, we plot the well output to examine the production rates and temperatures.
@@ -92,7 +100,10 @@ fig
 # as it shows the evolution of the cold front in the aquifer
 Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
 plot_reservoir(case.model, Δstates;
-colormap = :seaborn_icefire_gradient, key = :Temperature, aspect = :data)
+    colormap = :seaborn_icefire_gradient,
+    key = :Temperature,
+    axis_args = axis_args,
+    fancy = false)
 
 # ### 3D visualization of temperature changes
 # Finally, we plot the change in temperature at the same timesteps highlighted in
@@ -108,7 +119,7 @@ cells = cells .|| geo.cell_centroids[3, :] .> 2475.0;
 fig = Figure(size = (800, 800))
 for (i, n) in enumerate(timesteps)
     ax_i = Axis3(fig[(i-1)÷2+1, (i-1)%2+1]; title = "$(times[n]) years",
-    zreversed = true, elevation = pi/8, aspect = :data)
+    elevation = pi/8, axis_args...)
 
     ΔT = Δstates[n][:Temperature]
 
