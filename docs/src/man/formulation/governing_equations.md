@@ -89,4 +89,4 @@ dominated by fractures or other high-contrast heterogeneities.
 
 To model fractured systems, Fimbul can be combined with the discrete fracture
 modeling framework in JutulDarcy—see e.g., 
-[ftes](@ref).
+[the FTES setup function](@ref ftes).
