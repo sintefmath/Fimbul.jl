@@ -60,7 +60,12 @@ case = Fimbul.ates(;
 # aquifer layer to capture thermal and hydraulic interactions accurately.
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (800, 800))
-ax = Axis3(fig[1, 1], zreversed = true, aspect = :data,
+axis_args = (
+    zreversed = true,
+    perspectiveness = 0.75,
+    aspect = :data,
+)
+ax = Axis3(fig[1, 1]; axis_args...,
     title = "ATES system: mesh structure and well configuration")
 Jutul.plot_mesh_edges!(ax, msh, alpha = 0.2)
 wells = get_model_wells(case.model)
@@ -76,7 +81,12 @@ fig
 # ### Visualize reservoir properties
 # Next, we examine the geological heterogeneity and porosity distribution that
 # controls fluid flow and thermal transport within the aquifer system
-plot_reservoir(case.model, key = :porosity, aspect = :data, colormap = :bilbao100)
+plot_reservoir(case.model;
+    resolution = (1000, 800),
+    key = :porosity,
+    colormap = :bilbao100,
+    axis_args = axis_args,
+    fancy = false)
 
 # ## Simulate the ATES system
 # Transitions between injection and production modes are numerically challenging,
@@ -92,10 +102,12 @@ results = simulate_reservoir(case, simulator = sim, config = cfg)
 # We examine the temperature field evolution throughout the simulation timeline.
 # Interactive visualization allows exploration of thermal plume development
 # and migration patterns around the well doublet system.
-plot_reservoir(case, results.states, 
+plot_reservoir(case, results.states;
+    resolution = (1000, 800),
     key = :Temperature, 
-    aspect = :data,
-    colormap = :seaborn_icefire_gradient)
+    colormap = :seaborn_icefire_gradient,
+    axis_args = axis_args,
+    fancy = false)
 
 # ### Visualize thermal plume
 # We plot temperature deviation from the initial state around the wells after

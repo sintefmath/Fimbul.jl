@@ -35,6 +35,11 @@ function extruded_mesh(cell_constraints::Vector{<:AbstractMatrix}, depths;
     end
 
     min_cc_distance, max_cc_distance = min_max_distance(x_cc)
+    if !isfinite(min_cc_distance) || !isfinite(max_cc_distance)
+        min_cc_distance = hxy_min
+        max_cc_distance = hxy_max
+    end
+    @assert isfinite(min_cc_distance) && isfinite(max_cc_distance) "Failed to compute min and max distances for cell constraints"
 
     if ismissing(boundary)
         if ismissing(offset)
@@ -119,9 +124,8 @@ function extruded_mesh(cell_constraints::Vector{<:AbstractMatrix}, depths;
     gmsh.model.mesh.field.setNumber(2, "SizeMax", hxy_max)
     # Cell size transition
     dist_min = min_cc_distance*dist_min_factor
-    dist_max = (max_cc_distance/2 + offset)*dist_max_factor
-    @assert dist_min < dist_max
-    "dist_min must be smaller than dist_max"
+    dist_max = max((max_cc_distance/2 + offset)*dist_max_factor, dist_min*2)
+    @assert dist_min < dist_max "dist_min must be smaller than dist_max"
     if dist_max > radius_outer
         @warn "Warning: dist_max is larger than outer radius"
     end

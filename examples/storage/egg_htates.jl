@@ -39,7 +39,19 @@ hifi = egg_ates(; use_bc = false, num_reports = 12)
 
 # ## Visualize the model
 # We visualize the model interactively using `plot_reservoir`.
-plot_reservoir(hifi, reservoir_model(hifi.model).data_domain)
+plot_res_args = (
+    resolution = (1000, 800),
+    axis_args = (
+        zreversed = true,
+        perspectiveness = 0.75,
+    ),
+    aspect = (4,4,1),
+    fancy = false,
+)
+plot_reservoir(hifi;
+    key = :permeability,
+    plot_res_args...,
+)
 
 # ## Simulate high-fidelity model
 # We set up a simulator for the high-fidelity model and simulate the system.
@@ -52,7 +64,9 @@ results_hifi = simulate_reservoir(hifi)
 # cycles, the plumes start to interact slightly.
 plot_reservoir(hifi, results_hifi.states;
     key = :Temperature, step = length(hifi.dt),
-    colormap = :seaborn_icefire_gradient)
+    colormap = :seaborn_icefire_gradient,
+    plot_res_args...,
+    )
 
 # ### Inspect well output
 # We can also inspect the well output using `plot_well_results`.
@@ -70,7 +84,9 @@ proxy = JutulDarcy.coarsen_reservoir_case(hifi, coarsening,
 results_proxy = simulate_reservoir(proxy, info_level=0)
 plot_reservoir(proxy, results_proxy.states;
     key = :Temperature, step = length(hifi.dt),
-    colormap = :seaborn_icefire_gradient)
+    colormap = :seaborn_icefire_gradient,
+    plot_res_args...
+    )
 
 # ### Compare proxy models to high-fidelity model
 # We compare the well output of the proxy models to the high-fidelity model.

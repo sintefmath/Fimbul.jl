@@ -99,7 +99,10 @@ states_m = [s[:Reservoir] for s in states]
 plot_reservoir(case.model, states_m;
     key = :Temperature,
     aspect = aspect,
-    colormap = :seaborn_icefire_gradient)
+    colormap = :seaborn_icefire_gradient,
+    axis_args = axis_args,
+    fancy = false,
+    )
 
 # ### Fracture temperature distribution
 # The fractures are the primary heat transport pathway. We also interactively
@@ -109,7 +112,10 @@ states_f = [s[:Fractures] for s in states]
 plot_reservoir(case.model.models[:Fractures], states_f;
     key = :Temperature,
     aspect = aspect,
-    colormap = :seaborn_icefire_gradient)
+    colormap = :seaborn_icefire_gradient,
+    axis_args = axis_args,
+    fancy = false,
+    )
 
 # ### Well performance over time
 # Plot injection/production temperatures and flow rates throughout the
