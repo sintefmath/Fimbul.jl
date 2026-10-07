@@ -236,7 +236,8 @@ end;
 # carries the highest absolute pressures near the source.
 plot_reservoir(single_phase.case, single_phase.results.states;
     key = :Temperature, step = length(single_phase.case.dt),
-    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz)
+    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz,
+    fancy = false)
 
 # ### Validate against reference data
 fig_single_phase_final = plot_final_state(single_phase.case, single_phase.results)
@@ -249,7 +250,8 @@ fig_single_phase_final
 # vapor forms in the rising core.
 plot_reservoir(two_phase.case, two_phase.results.states;
     key = :Temperature, step = length(two_phase.case.dt),
-    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz)
+    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz,
+    fancy = false)
 
 # ### Validate against reference data
 fig_two_phase = plot_final_state(two_phase.case, two_phase.results)
