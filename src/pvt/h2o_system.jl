@@ -143,6 +143,33 @@ function JutulDarcy.degrees_of_freedom_per_entity(
     return 1
 end
 
+"""
+    JutulDarcy.face_average_density(model::GeothermalModel, state, tpfa, phase, ρ)
+
+Saturation-weighted face density for the gravity term of an `H2OSystem` model.
+
+The compositional default in JutulDarcy switches abruptly from the two-cell
+average to the one-sided density when a phase vanishes in one of the cells. For
+pure H₂O, the table density of an absent phase is the saturated density, so
+this switch makes the gravity term discontinuous when a cell crosses a
+saturation line. Close to the critical point this causes the Newton iterations
+to cycle. The saturation-weighted average gives the same values when a phase is
+absent from one of the cells, but varies continuously in between.
+"""
+@inline function JutulDarcy.face_average_density(model::GeothermalModel, state, tpfa, phase, ρ = state.PhaseMassDensities)
+    l = tpfa.left
+    r = tpfa.right
+    s = state.Saturations
+    @inbounds ρ_l = ρ[phase, l]
+    @inbounds ρ_r = ρ[phase, r]
+    @inbounds s_l = s[phase, l]
+    @inbounds s_r = s[phase, r]
+    # Small regularization to fall back to the arithmetic average when the
+    # phase is absent from both cells
+    δ = 1e-8
+    return (s_l*ρ_l + s_r*ρ_r + δ*0.5*(ρ_l + ρ_r))/(s_l + s_r + δ)
+end
+
 # For H2OSystem the (P,H)-based property evaluators (PhaseMassDensities,
 # Saturations) already provide the correct per-phase values — no additional
 # flash calculation is needed. We read them directly from the well state at the
