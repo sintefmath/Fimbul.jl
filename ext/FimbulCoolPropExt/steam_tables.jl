@@ -72,6 +72,8 @@ function Fimbul.build_steam_tables_h2o(;
     μ_v_itp = make_table_1d(μ_v)
 
     # Complete the grid with single-phase points if the max pressure and enthalpy exceed the critical point
+    p = p_sat
+    h = vec(h_sat)
     if p_max > Fimbul.WATER_CRITICAL_PRESSURE
         p_sc = collect(range(Fimbul.WATER_CRITICAL_PRESSURE, p_max; length = n_pressure))
         p = sort(unique(vcat(p_sat, p_sc)))
@@ -115,7 +117,13 @@ function Fimbul.build_steam_tables_h2o(;
                 μ_vap_ph[i, j] = μ_tab[i, j]
                 h_liq_ph[i, j] = h_j
                 h_vap_ph[i, j] = h_j
-                S_vap_ph[i, j] = 0.0
+                # Label supercritical states by the critical enthalpy, where the
+                # two-phase envelope closes. This keeps the phase label
+                # continuous across the critical pressure: labelling all
+                # supercritical states as liquid flips vapor-like states from
+                # vapor to liquid at p = p_c, which the interpolation turns
+                # into a spurious two-phase band.
+                S_vap_ph[i, j] = h_j >= Fimbul.WATER_CRITICAL_ENTHALPY ? 1.0 : 0.0
             end
             continue
         end

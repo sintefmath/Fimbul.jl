@@ -18,12 +18,12 @@ using HYPRE
 using GLMakie
 
 # Useful SI units
-meter, year, bar = si_units(:meter, :year, :bar);
+meter, year = si_units(:meter, :year);
 
 # ## Set up the case
 # The domain is 10 km × 10 km × 5 km, with a cylindrical intrusion of radius
-# 1.5 km centered horizontally. We use a coarse mesh to keep the runtime
-# moderate. The producer is open between 750 and 1750 m depth, above the
+# 1.5 km centered horizontally. We use a relatively coarse mesh to keep the
+# runtime moderate. The producer is open between 750 and 1750 m depth, above the
 # intrusion, and the injector is open between 2050 and 2300 m depth, in the top
 # of the intrusion.
 dims = (51, 51, 40)
@@ -63,24 +63,35 @@ Colorbar(fig[1, 4], hm; label = "log₁₀ K (m²)")
 fig
 
 # ## Simulate the natural state
-# During the natural state, both wells are shut. We remove the default
-# maximum timestep of one year, since the system evolves slowly once the
-# convection pattern is established.
-
-sim, cfg = setup_reservoir_simulator(case; max_timestep = Inf, info_level = 2, relaxation = true, tol_cnv = 1e-2, tol_mb = 1e-5)
+# During the natural state, both wells are shut. We use the same solver
+# settings for all simulations in this example: we remove the default maximum
+# timestep of one year, since the system evolves slowly once the convection
+# pattern is established, use relaxation of the Newton updates, and use
+# slightly relaxed convergence tolerances. Close to the critical point of
+# water, the fluid properties change rapidly, and these settings help the
+# nonlinear solver through this region.
+function run_case(case)
+    return simulate_reservoir(case;
+        max_timestep = Inf,
+        relaxation = true,
+        tol_cnv = 1e-2,
+        tol_mb = 1e-5,
+        info_level = 2)
+end
 
 case_ns = case[1:n_ns]
-results_ns = simulate_reservoir(case_ns; simulator = sim, config = cfg);
+results_ns = run_case(case_ns);
 
 # ### Development of the convection plume
 # The hot intrusion heats the surrounding water, which rises buoyantly and is
 # replaced by colder water flowing in from the sides. We plot temperature in a
 # vertical cross-section through the intrusion center at selected times.
 t_ns = cumsum(case_ns.dt)
-plot_times = [100.0, 250.0, 500.0, 2400.0].*year
+nearest_step(t) = argmin(abs.(t_ns .- t))
+plot_times = [100.0, 300.0, 600.0, 2400.0].*year
 fig = Figure(size = (1200, 800))
 for (i, t) in enumerate(plot_times)
-    step = findfirst(t_ns .>= t - 1.0)
+    step = nearest_step(t)
     T = convert_from_si.(results_ns.states[step][:Temperature], :Celsius)
     ax = Axis(fig[(i-1)÷2 + 1, (i-1)%2 + 1];
         title = "t = $(round(Int, t_ns[step]/year)) years",
@@ -98,8 +109,8 @@ fig
 # rapidly. This is the most challenging part of the simulation.
 fig = Figure(size = (1200, 500))
 handles = nothing
-for (i, t) in enumerate([250.0, 2400.0].*year)
-    step = findfirst(t_ns .>= t - 1.0)
+for (i, t) in enumerate([300.0, 2400.0].*year)
+    step = nearest_step(t)
     ax = Axis(fig[1, i]; title = "t = $(round(Int, t_ns[step]/year)) years")
     global handles = plot_reservoir_state_phase_diagram!(ax, case.model, results_ns.states[step];
         pressure_limits = (0.0, 50e6), enthalpy_limits = (0.0, 3.2e6),
@@ -129,8 +140,8 @@ case_noinj = JutulCase(case_inj.model, case_noinj.dt, case_noinj.forces;
     state0 = state_ns, parameters = case.parameters);
 
 # ### Simulate
-results_noinj = simulate_reservoir(case_noinj; max_timestep = Inf, info_level = -1);
-results_inj = simulate_reservoir(case_inj; max_timestep = Inf, info_level = -1);
+results_noinj = run_case(case_noinj);
+results_inj = run_case(case_inj);
 
 # ### Well performance
 # The production rate drops quickly in the first years as the pressure around
@@ -156,9 +167,9 @@ fig
 # ### Reservoir temperature change
 # Finally, we plot the temperature change after 100 years of production in
 # vertical cross-sections through the producer (top) and the injector
-# (bottom). Production draws hot fluid from the plume upwards and colder water
-# in from the sides, while reinjection creates a cold zone around the
-# injector.
+# (bottom). The region along the producer cools, while hot fluid drawn up from
+# the plume warms the rock next to it. Reinjection creates a cold zone around
+# the injector, which has not reached the producer after 100 years.
 T_ns = convert_from_si.(results_ns.states[end][:Temperature], :Celsius)
 ΔT_all = [convert_from_si.(res.states[end][:Temperature], :Celsius) .- T_ns
     for res in (results_noinj, results_inj)]
