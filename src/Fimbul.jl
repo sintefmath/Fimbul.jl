@@ -26,6 +26,7 @@ module Fimbul
     export btes
     export ftes
     export coaxial_bhe
+    export magmatic_intrusion
     export egg_geothermal, egg_geothermal_doublet, egg_ates
     # Other utilities
     export thermal_radius_aquifer
