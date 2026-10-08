@@ -1,16 +1,19 @@
 """
-    JutulDarcy.add_thermal_to_model!(model::GeothermalModel)
+    JutulDarcy.add_thermal_to_model!(model::GeothermalModel; kwargs...)
 
 Activate the pressure-enthalpy thermal formulation for an `H2OSystem` model.
 
 This replaces `Temperature` as a primary variable with `Enthalpy`, registers
 temperature and phase enthalpy as secondary variables derived from the
 pressure-enthalpy tables, and stores the `(P, T) -> H` lookup table in
-`model.extra[:enthalpy]` for later use.
+`model.extra[:enthalpy]` for later use. Keyword arguments are passed on to the
+generic JutulDarcy method.
 """
-function JutulDarcy.add_thermal_to_model!(model::GeothermalModel)
+function JutulDarcy.add_thermal_to_model!(model::GeothermalModel; kwargs...)
 
-    invoke(JutulDarcy.add_thermal_to_model!, Tuple{SimulationModel}, model)
+    # Accept keyword arguments: keyword calls only dispatch to methods that
+    # accept keywords, so without them this overload is silently bypassed.
+    invoke(JutulDarcy.add_thermal_to_model!, Tuple{SimulationModel}, model; kwargs...)
     Jutul.delete_variable!(model, :Temperature)
 
     pvt = model.system.pvt_tables
