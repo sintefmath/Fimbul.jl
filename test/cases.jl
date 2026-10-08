@@ -90,4 +90,19 @@ using Dates
 
 end
 
-##
+@testset "H2O pressure-enthalpy formulation" begin
+    case = benchmark_ht_1d(benchmark_case = :a, nx = 10)
+    rmodel = reservoir_model(case.model)
+    @test haskey(rmodel.primary_variables, :Enthalpy)
+    @test !haskey(rmodel.primary_variables, :Temperature)
+end
+
+@testset "Magmatic intrusion" begin
+    case = magmatic_intrusion(dims = (6, 6, 10), num_years = 1,
+        report_interval = si_unit(:year)/4,
+        injector_position = (-100.0, 250.0))
+    rmodel = reservoir_model(case.model)
+    @test haskey(rmodel.primary_variables, :Enthalpy)
+    res = simulate_reservoir(case[1:3], info_level = -1)
+    @test length(res.states) == 3
+end
