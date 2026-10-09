@@ -130,7 +130,6 @@ for (i, (c, r, l)) in enumerate(zip(
         title = l,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
-        xticks = 0:5:100,
         yreversed = true)
 
     well = r.model.models[:CoaxialWell_supply].data_domain
@@ -268,7 +267,6 @@ for (i, (results, case, label)) in enumerate(
         title = label,
         xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
-        xticks = 0:5:100,
         yreversed = true)
 
     well = case.model.models[:CoaxialWell_supply].data_domain
