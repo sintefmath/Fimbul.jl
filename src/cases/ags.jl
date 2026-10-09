@@ -98,8 +98,10 @@ function ags(;
     # ## Set up model
     wells, section_info = setup_ags_wells(domain, well_coords, well_connectivity)
 
+    # Closed-loop wells must not be shut: The supply and return are hydraulically
+    # connected, and shutting one of them gives a dead end.
     model = setup_reservoir_model(
-        domain, :geothermal; wells = wells)
+        domain, :geothermal; wells = wells, can_shut_wells = false)
     bc, state0 = set_dirichlet_bcs(model;
         pressure_surface = 10atm,
         temperature_surface = temperature_surface,
