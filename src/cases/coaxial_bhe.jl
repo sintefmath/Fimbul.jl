@@ -154,8 +154,11 @@ function coaxial_bhe(;
         well_args...
     )
 
+    # Closed-loop wells must not be shut: The supply and return are hydraulically
+    # connected, and shutting one of them gives a dead end.
     model = setup_reservoir_model(
-        domain, :geothermal; wells = wells)
+        domain, :geothermal; wells = wells, energy_formulation = :total,
+        can_shut_wells = false)
     bc, state0, p, T = set_dirichlet_bcs(model;
         pressure_surface = 10atm,
         temperature_surface = temperature_surface,

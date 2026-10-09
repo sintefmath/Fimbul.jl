@@ -94,9 +94,12 @@ function btes(;
         push!(well_models, w_sup, w_ret)
     end
     # Make the model
+    # Closed-loop wells must not be shut: The supply and return are hydraulically
+    # connected, and shutting one of them gives a dead end.
     model = setup_reservoir_model(
         domain, :geothermal,
         wells = well_models,
+        can_shut_wells = false,
     );
 
     # ## Set up initial state and boundary conditions
