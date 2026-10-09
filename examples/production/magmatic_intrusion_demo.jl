@@ -37,29 +37,42 @@ n_ns = case.input_data[:natural_state_steps]
 model = reservoir_model(case.model)
 mesh = physical_representation(model.data_domain);
 
-# ### Inspect initial conditions
-# The initial temperature follows a linear geothermal gradient of 37.5 °C/km,
-# with the intrusion at 500 °C. A low-permeability cap rock covers the top
-# 500 m of the domain.
-nx, ny, nz = dims
-Lx, Ly, Lz = 10000.0, 10000.0, 5000.0
-x = range(Lx/nx/2, Lx - Lx/nx/2, length = nx)
-z = range(Lz/nz/2, Lz - Lz/nz/2, length = nz)
-j_mid = cld(ny, 2)
-cross_section(v) = reshape(v, nx, ny, nz)[:, j_mid, :]
+# ### Plot reservoir properties
+# We first inspect the model interactively. A low-permeability cap rock covers
+# the top 500 m of the domain.
+plot_res_args = (
+    resolution = (1000, 800), aspect = :data,
+    well_arg = (markersize = 0.0, ),
+    axis_args = (perspectiveness = 0.5, ),
+    fancy = false
+)
+plot_reservoir(case.model; key = :permeability, plot_res_args...)
 
-fig = Figure(size = (1200, 450))
+# ### Initial temperature
+# The initial temperature follows a linear geothermal gradient of 37.5 °C/km,
+# with the intrusion at 500 °C. For the 3D plots in this example, we cut away
+# the quadrant of the domain facing the viewer, so that the cut planes pass
+# through the center of the intrusion.
+xc = model.data_domain[:cell_centroids]
+x_mid = sum(extrema(xc[1, :]))/2
+y_mid = sum(extrema(xc[2, :]))/2
+cutaway = .!(xc[1, :] .< x_mid .&& xc[2, :] .< y_mid)
+axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.5, elevation = π/8)
+wells = get_model_wells(case.model)
+function plot_wells!(ax)
+    for well in values(wells)
+        plot_well!(ax, mesh, well;
+            color = :black, linewidth = 3, markersize = 0.0, fontsize = 0.0)
+    end
+end
+
+fig = Figure(size = (900, 700))
+ax = Axis3(fig[1, 1]; title = "Initial temperature", axis_args...)
 T0 = convert_from_si.(case.state0[:Reservoir][:Temperature], :Celsius)
-ax = Axis(fig[1, 1]; title = "Initial temperature", xlabel = "x (m)",
-    ylabel = "Depth (m)", yreversed = true)
-hm = heatmap!(ax, x, z, cross_section(T0); colormap = :inferno)
-Colorbar(fig[1, 2], hm; label = "T (°C)")
-K = model.data_domain[:permeability]
-K = K isa AbstractMatrix ? K[1, :] : K
-ax = Axis(fig[1, 3]; title = "Permeability", xlabel = "x (m)",
-    ylabel = "Depth (m)", yreversed = true)
-hm = heatmap!(ax, x, z, cross_section(log10.(K)); colormap = :viridis)
-Colorbar(fig[1, 4], hm; label = "log₁₀ K (m²)")
+plt = plot_cell_data!(ax, mesh, T0;
+    cells = cutaway, colormap = :seaborn_icefire_gradient)
+plot_wells!(ax)
+Colorbar(fig[1, 2], plt; label = "T (°C)")
 fig
 
 # ## Simulate the natural state
@@ -82,23 +95,34 @@ end
 case_ns = case[1:n_ns]
 results_ns = run_case(case_ns);
 
+# ### Interactive visualization of the natural state
+# The interactive viewer shows the temperature at each report step of the
+# natural state. Filtering out low temperatures shows how the hot plume
+# develops above the intrusion.
+plot_reservoir(case.model, results_ns.states;
+    key = :Temperature, colormap = :seaborn_icefire_gradient, plot_res_args...)
+
 # ### Development of the convection plume
 # The hot intrusion heats the surrounding water, which rises buoyantly and is
-# replaced by colder water flowing in from the sides. We plot temperature in a
-# vertical cross-section through the intrusion center at selected times.
+# replaced by colder water flowing in from the sides. We plot the temperature
+# at selected times.
 t_ns = cumsum(case_ns.dt)
 nearest_step(t) = argmin(abs.(t_ns .- t))
 plot_times = [100.0, 300.0, 600.0, 2400.0].*year
-fig = Figure(size = (1200, 800))
+T_range = (10.0, 500.0)
+fig = Figure(size = (1000, 900))
 for (i, t) in enumerate(plot_times)
     step = nearest_step(t)
     T = convert_from_si.(results_ns.states[step][:Temperature], :Celsius)
-    ax = Axis(fig[(i-1)÷2 + 1, (i-1)%2 + 1];
-        title = "t = $(round(Int, t_ns[step]/year)) years",
-        xlabel = "x (m)", ylabel = "Depth (m)", yreversed = true)
-    heatmap!(ax, x, z, cross_section(T); colormap = :inferno, colorrange = (10, 500))
+    ax = Axis3(fig[(i-1)÷2 + 1, (i-1)%2 + 1];
+        title = "$(round(Int, t_ns[step]/year)) years", axis_args...)
+    plot_cell_data!(ax, mesh, T; cells = cutaway,
+        colormap = :seaborn_icefire_gradient, colorrange = T_range)
+    plot_wells!(ax)
+    hidedecorations!(ax)
 end
-Colorbar(fig[1:2, 3]; colormap = :inferno, colorrange = (10, 500), label = "T (°C)")
+Colorbar(fig[3, 1:2]; colormap = :seaborn_icefire_gradient, colorrange = T_range,
+    label = "T (°C)", vertical = false)
 fig
 
 # ### Phase diagram
@@ -164,29 +188,32 @@ end
 axislegend(ax_q; position = :rt)
 fig
 
+# ### Interactive visualization of temperature changes
+# The interactive viewer shows the temperature change relative to the natural
+# state for the scenario with reinjection. Filtering out values close to zero
+# shows the cold zone developing around the injector.
+Δstates_inj = JutulDarcy.delta_state(results_inj.states, results_ns.states[end])
+plot_reservoir(case.model, Δstates_inj;
+    key = :Temperature, colormap = :seaborn_icefire_gradient, plot_res_args...)
+
 # ### Reservoir temperature change
-# Finally, we plot the temperature change after 100 years of production in
-# vertical cross-sections through the producer (top) and the injector
-# (bottom). The region along the producer cools, while hot fluid drawn up from
+# Finally, we plot the temperature change after 100 years of production for
+# both scenarios, showing only cells where the temperature change exceeds 10% of
+# the largest change. The region along the producer cools, while hot fluid drawn up from
 # the plume warms the rock next to it. Reinjection creates a cold zone around
 # the injector, which has not reached the producer after 100 years.
-T_ns = convert_from_si.(results_ns.states[end][:Temperature], :Celsius)
-ΔT_all = [convert_from_si.(res.states[end][:Temperature], :Celsius) .- T_ns
-    for res in (results_noinj, results_inj)]
+T_ns = results_ns.states[end][:Temperature]
+ΔT_all = [res.states[end][:Temperature] .- T_ns for res in (results_noinj, results_inj)]
 ΔT_max = maximum(maximum.(abs, ΔT_all))
-fig = Figure(size = (1200, 800))
-for (i, (dT, title)) in enumerate(zip(ΔT_all, ["Production only", "With reinjection"]))
-    ΔT = reshape(dT, nx, ny, nz)
-    ## Rows through the producer and injector, respectively
-    yp, yi = Ly/2 - 250.0, Ly/2 + 250.0
-    for (k, (yw, wname)) in enumerate(zip([yp, yi], ["producer", "injector"]))
-        jw = clamp(Int(floor(yw/(Ly/ny))) + 1, 1, ny)
-        ax = Axis(fig[k, i]; title = "$title – through $wname",
-            xlabel = "x (m)", ylabel = "Depth (m)", yreversed = true)
-        heatmap!(ax, x, z, ΔT[:, jw, :]; colormap = Reverse(:RdBu),
-            colorrange = (-ΔT_max, ΔT_max))
-    end
+ΔT_range = (-ΔT_max, ΔT_max)
+lims = (extrema(xc[1, :])..., extrema(xc[2, :])..., extrema(xc[3, :])...)
+fig = Figure(size = (1200, 600))
+for (i, (ΔT, title)) in enumerate(zip(ΔT_all, ["Production only", "With reinjection"]))
+    ax = Axis3(fig[1, i]; title = title, limits = lims, axis_args...)
+    plot_cell_data!(ax, mesh, ΔT; cells = abs.(ΔT) .> 0.1*ΔT_max,
+        colormap = :seaborn_icefire_gradient, colorrange = ΔT_range)
+    plot_wells!(ax)
 end
-Colorbar(fig[1:2, 3]; colormap = Reverse(:RdBu),
-    colorrange = (-ΔT_max, ΔT_max), label = "ΔT (°C)")
+Colorbar(fig[2, 1:2]; colormap = :seaborn_icefire_gradient, colorrange = ΔT_range,
+    label = "ΔT (°C)", vertical = false)
 fig
