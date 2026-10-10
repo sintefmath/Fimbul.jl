@@ -7,7 +7,7 @@
 # the reservoir may contain liquid, vapor, two-phase and supercritical water.
 #
 # The example consists of two parts:
-# 1. **Natural state**: A 500 °C intrusion is emplaced 2–3 km below the surface
+# 1. **Natural state**: A 900 °C intrusion is emplaced 2–3 km below the surface
 #    and left to develop a hydrothermal convection system for 2400 years.
 # 2. **Production**: Starting from the natural state, we compare 100 years of
 #    production with and without reinjection of cold water.
@@ -21,11 +21,11 @@ using GLMakie
 meter, year = si_units(:meter, :year);
 
 # ## Set up the natural-state case
-# The domain is 10 km × 10 km × 5 km, with a cylindrical intrusion of radius
-# 1.5 km centered horizontally. We use a relatively coarse mesh to keep the
-# runtime moderate. Fluid can flow along the wellbore of a shut well, so we
-# simulate the natural state without wells by setting `num_years = 0`. The
-# wells are added when we set up the production scenarios.
+# The domain is 10 km × 10 km × 5 km, with an ellipsoidal intrusion of
+# horizontal radius 1.5 km centered horizontally. We use a relatively coarse
+# mesh to keep the runtime moderate. Fluid can flow along the wellbore of a shut
+# well, so we simulate the natural state without wells by setting `num_years =
+# 0`. The wells are added when we set up the production scenarios.
 dims = (51, 51, 40)
 case_args = (
     dims = dims,
@@ -51,7 +51,7 @@ plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
 
 # ### Initial temperature
 # The initial temperature follows a linear geothermal gradient of 37.5 °C/km,
-# with the intrusion at 500 °C. For the 3D plots in this example, we cut away
+# with the intrusion at 900 °C. For the 3D plots in this example, we cut away
 # the quadrant of the domain facing the viewer, so that the cut planes pass
 # through the center of the intrusion.
 xc = model.data_domain[:cell_centroids]
