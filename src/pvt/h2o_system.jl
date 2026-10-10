@@ -170,6 +170,26 @@ absent from one of the cells, but varies continuously in between.
     return (s_l*ρ_l + s_r*ρ_r + δ*0.5*(ρ_l + ρ_r))/(s_l + s_r + δ)
 end
 
+# The compositional flux in JutulDarcy takes the number of components from the
+# equation of state, which H2OSystem does not have. Pure H₂O has one component.
+# TODO: Remove this overload once JutulDarcy's `component_mass_fluxes!` uses
+# `number_of_components(sys)` instead of the equation of state.
+@inline function JutulDarcy.component_mass_fluxes!(q, face, state, model::GeothermalModel, flux_type, kgrad, upw)
+    sys = model.system
+    aqua = Val(JutulDarcy.has_other_phase(sys))
+    component_count = Val(1)
+    ph_ix = JutulDarcy.phase_indices(sys)
+
+    X = state.LiquidMassFractions
+    Y = state.VaporMassFractions
+    S = state.Saturations
+    ρ = state.PhaseMassDensities
+    D = haskey(state, :Diffusivities) ? state.Diffusivities : nothing
+    mass_fluxes = JutulDarcy.darcy_phase_mass_fluxes(face, state, model, flux_type, kgrad, upw)
+    return JutulDarcy.compositional_fluxes!(q, face, state, S, ρ, X, Y, D, model,
+        flux_type, kgrad, mass_fluxes, upw, aqua, ph_ix, component_count)
+end
+
 # For H2OSystem the (P,H)-based property evaluators (PhaseMassDensities,
 # Saturations) already provide the correct per-phase values — no additional
 # flash calculation is needed. We read them directly from the well state at the
