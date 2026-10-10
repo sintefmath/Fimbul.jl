@@ -44,10 +44,10 @@ mesh = physical_representation(model.data_domain);
 plot_res_args = (
     resolution = (1000, 800), aspect = :data,
     well_arg = (markersize = 0.0, ),
-    axis_args = (perspectiveness = 0.5, ),
+    axis_args = (perspectiveness = 0.75, ),
     fancy = false
 )
-plot_reservoir(case_ns.model; key = :permeability, plot_res_args...)
+plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
 
 # ### Initial temperature
 # The initial temperature follows a linear geothermal gradient of 37.5 °C/km,
@@ -58,7 +58,7 @@ xc = model.data_domain[:cell_centroids]
 x_mid = sum(extrema(xc[1, :]))/2
 y_mid = sum(extrema(xc[2, :]))/2
 cutaway = .!(xc[1, :] .< x_mid .&& xc[2, :] .< y_mid)
-axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π/8)
+axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π/16)
 
 fig = Figure(size = (900, 700))
 ax = Axis3(fig[1, 1]; title = "Initial temperature", axis_args...)
@@ -91,7 +91,7 @@ results_ns = run_case(case_ns);
 # natural state. Filtering out low temperatures shows how the hot plume
 # develops above the intrusion.
 plot_reservoir(case_ns.model, results_ns.states;
-    key = :Temperature, colormap = :seaborn_icefire_gradient, plot_res_args...)
+    key = :Temperature, colormap = :seaborn_icefire_gradient, cells = cutaway, plot_res_args...)
 
 # ### Development of the convection plume
 # The hot intrusion heats the surrounding water, which rises buoyantly and is
@@ -99,16 +99,21 @@ plot_reservoir(case_ns.model, results_ns.states;
 # at selected times.
 t_ns = cumsum(case_ns.dt)
 nearest_step(t) = argmin(abs.(t_ns .- t))
-plot_times = [100.0, 300.0, 600.0, 2400.0].*year
-T_range = (10.0, 500.0)
-fig = Figure(size = (1000, 900))
+plot_times = [300.0, 600.0, 1200.0].*year
+T_range = (10.0, 900.0)
+fig = Figure(size = (1000, 750))
 for (i, t) in enumerate(plot_times)
     step = nearest_step(t)
     T = convert_from_si.(results_ns.states[step][:Temperature], :Celsius)
-    ax = Axis3(fig[(i-1)÷2 + 1, (i-1)%2 + 1];
+    ax = Axis3(fig[1, i];
         title = "$(round(Int, t_ns[step]/year)) years", axis_args...)
     plot_cell_data!(ax, mesh, T; cells = cutaway,
         colormap = :seaborn_icefire_gradient, colorrange = T_range)
+    hidedecorations!(ax)
+    S = vec(results_ns.states[step][:Saturations][1,:])
+    ax = Axis3(fig[2, i]; axis_args...)
+    plot_cell_data!(ax, mesh, S; cells = cutaway,
+        colormap = :batlowK, colorrange = (0.0, 1.0))
     hidedecorations!(ax)
 end
 Colorbar(fig[3, 1:2]; colormap = :seaborn_icefire_gradient, colorrange = T_range,

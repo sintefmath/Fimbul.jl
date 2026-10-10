@@ -119,7 +119,7 @@ function magmatic_intrusion(;
     geothermal_gradient = 0.0375Kelvin/meter,
     intrusion_radius = 1500.0meter,
     intrusion_depths = [2000.0, 3000.0].*meter,
-    temperature_intrusion = convert_to_si(500.0, :Celsius),
+    temperature_intrusion = convert_to_si(900.0, :Celsius),
     permeability = 1e-15,
     permeability_cap = 1e-16,
     cap_thickness = 500.0meter,
