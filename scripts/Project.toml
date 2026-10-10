@@ -1,6 +1,0 @@
-[deps]
-CoolProp = "e084ae63-2819-5025-826e-f8e611a84251"
-Fimbul = "cac51d78-27de-4708-bd2b-bd13a82f652b"
-
-[sources]
-Fimbul = {path = ".."}
