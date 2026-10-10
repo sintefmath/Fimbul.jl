@@ -19,6 +19,12 @@ The simulation consists of two periods:
    bottom-hole pressure, optionally with a cold-water injector that is active
    for the first `injection_years`.
 
+Only wells that are active at some point in the schedule are included in the
+model, since fluid can flow along the wellbore of a shut well. To compute the
+natural state without wells, set `num_years = 0`, and use the resulting
+reservoir state as `initial_state` for a production case with
+`natural_state_time = 0`.
+
 Initial pressure and boundary pressures are hydrostatic, computed by
 integrating the density of water along the background temperature profile.
 
@@ -27,6 +33,16 @@ integrating the density of water along the background temperature profile.
 ## Geometry and mesh
 - `dims = (48, 48, 80)`: Number of cells in x, y and z.
 - `domain_size = (10000.0, 10000.0, 5000.0).*meter`: Domain extent in x, y and z.
+- `refinement_margin = 250.0meter`: Distance outside the intrusion within which
+  the mesh has uniform, fine cells.
+- `cell_growth = 1.25`: Approximate size ratio between neighboring cells outside
+  the refined region. The mesh is a tensor grid with the number of cells given
+  by `dims`, with uniform cells in the refined region and cells growing
+  geometrically towards the domain boundaries. Use `cell_growth = 1.0` for a
+  uniform mesh.
+- `cap_cells = 3`: Number of uniform cell layers in the cap rock for the tensor
+  grid. Cells between the cap rock and the refined region are no larger than
+  the cap-rock cells. If zero, the cap rock is not treated separately.
 
 ## Geology and initial conditions
 - `pressure_surface = 10.0bar`: Pressure at the top of the domain.
@@ -57,8 +73,8 @@ integrating the density of water along the background temperature profile.
 - `producer_depths = [750.0, 1750.0].*meter`: Top and bottom depth of the
   producer's open interval.
 - `injector_position = nothing`: Horizontal injector position relative to the
-  intrusion center, e.g. `(-100.0, 250.0).*meter`. If `nothing`, no injector is
-  added.
+  intrusion center, e.g. `(-100.0, 250.0).*meter`. If `nothing` (or if
+  `injection_years = 0`), no injector is added.
 - `injector_depths = [2050.0, 2300.0].*meter`: Top and bottom depth of the
   injector's open interval.
 - `bhp_producer = 50.0bar`: Producer bottom-hole pressure.
@@ -70,9 +86,16 @@ integrating the density of water along the background temperature profile.
 - `natural_state_time = 2400.0year`: Duration of the natural-state period.
 - `dt_natural_state = 100.0year`: Target timestep during the natural-state
   period.
-- `num_years = 100`: Duration of the production period in years.
+- `num_years = 100`: Duration of the production period in years. If zero, the
+  model has no wells.
 - `injection_years = num_years`: Number of years the injector is active.
 - `report_interval = year/4`: Target timestep during the production period.
+
+## Restart
+- `initial_state = nothing`: Reservoir state to start from, e.g. the final
+  state of a natural-state simulation. Must contain `:Pressure` and
+  `:Enthalpy` (and optionally `:Temperature`) for all cells. If `nothing`, the
+  hydrostatic initial state described above is used.
 
 # Returns
 
@@ -88,6 +111,9 @@ https://doi.org/10.1016/j.geothermics.2023.102744
 function magmatic_intrusion(;
     dims = (48, 48, 80),
     domain_size = (10000.0, 10000.0, 5000.0).*meter,
+    refinement_margin = 250.0meter,
+    cell_growth = 1.25,
+    cap_cells = 3,
     pressure_surface = 10.0*si_unit(:bar),
     temperature_surface = convert_to_si(10.0, :Celsius),
     geothermal_gradient = 0.0375Kelvin/meter,
@@ -114,6 +140,7 @@ function magmatic_intrusion(;
     num_years = 100,
     injection_years = num_years,
     report_interval = year/4,
+    initial_state = nothing,
 )
     if boundaries == :all
         boundaries = [:top, :sides, :bottom]
@@ -125,10 +152,26 @@ function magmatic_intrusion(;
     tables = sys.pvt_tables
 
     # ## Mesh and rock properties
-    g = CartesianMesh(dims, domain_size)
+    center = domain_size[1:2]./2
+    if cell_growth > 1.0
+        r = intrusion_radius + refinement_margin
+        sizes = (
+            magmatic_intrusion_cell_sizes(domain_size[1], dims[1],
+                center[1] - r, center[1] + r; growth = cell_growth),
+            magmatic_intrusion_cell_sizes(domain_size[2], dims[2],
+                center[2] - r, center[2] + r; growth = cell_growth),
+            magmatic_intrusion_cell_sizes(domain_size[3], dims[3],
+                intrusion_depths[1] - refinement_margin,
+                intrusion_depths[2] + refinement_margin;
+                growth = cell_growth,
+                top = cap_cells > 0 ? (cap_thickness, cap_cells) : nothing),
+        )
+        g = CartesianMesh(dims, sizes)
+    else
+        g = CartesianMesh(dims, domain_size)
+    end
     geo = tpfv_geometry(g)
     x, y, z = (geo.cell_centroids[i, :] for i in 1:3)
-    center = domain_size[1:2]./2
 
     T_background = depth -> temperature_surface + geothermal_gradient*depth
     in_intrusion = @. (intrusion_depths[1] <= z <= intrusion_depths[2]) &&
@@ -146,12 +189,20 @@ function magmatic_intrusion(;
     )
 
     # ## Wells
+    # Only wells that are active at some point in the schedule are added to the
+    # model. Fluid can flow through the wellbore of a shut well, which would
+    # disturb the natural state.
     well_cells = (pos, depths) -> magmatic_intrusion_well_cells(
         g, center .+ pos, depths)
-    wells = [setup_well(domain, well_cells(producer_position, producer_depths);
-        name = :Producer, simple_well = true, use_top_node = true)]
-    well_names = [:Producer]
-    has_injector = !isnothing(injector_position)
+    has_producer = num_years > 0
+    has_injector = has_producer && !isnothing(injector_position) &&
+        injection_years > 0
+    wells, well_names = [], Symbol[]
+    if has_producer
+        push!(wells, setup_well(domain, well_cells(producer_position, producer_depths);
+            name = :Producer, simple_well = true, use_top_node = true))
+        push!(well_names, :Producer)
+    end
     if has_injector
         push!(wells, setup_well(domain, well_cells(injector_position, injector_depths);
             name = :Injector, simple_well = true, use_top_node = true))
@@ -171,13 +222,21 @@ function magmatic_intrusion(;
     # ## Initial state
     p_hydrostatic = hydrostatic_pressure_h2o(tables, pressure_surface,
         T_background, domain_size[3])
-    p0 = p_hydrostatic.(z)
-    T0 = T_background.(z)
-    T0[in_intrusion] .= max.(T0[in_intrusion], temperature_intrusion)
+    if isnothing(initial_state)
+        p0 = p_hydrostatic.(z)
+        T0 = T_background.(z)
+        T0[in_intrusion] .= max.(T0[in_intrusion], temperature_intrusion)
+        h0 = tables[:enthalpy].(p0, T0)
+    else
+        p0 = initial_state[:Pressure]
+        h0 = initial_state[:Enthalpy]
+        T0 = haskey(initial_state, :Temperature) ?
+            initial_state[:Temperature] : tables[:temperature].(p0, h0)
+    end
     state0 = setup_reservoir_state(model,
         Pressure = p0,
         Temperature = T0,
-        Enthalpy = tables[:enthalpy].(p0, T0),
+        Enthalpy = h0,
     )
 
     # ## Boundary conditions
@@ -222,14 +281,18 @@ function magmatic_intrusion(;
             tables[:enthalpy](bhp_injector, temperature_injection)),
         check = false,
     )
-    shut = Dict{Symbol, Any}(w => DisabledControl() for w in well_names)
-    forces_natural = setup_reservoir_forces(model; bc = bc, control = shut)
-    control = Dict{Symbol, Any}(:Producer => ctrl_prod)
-    has_injector && (control[:Injector] = ctrl_inj)
-    forces_inj = setup_reservoir_forces(model; bc = bc, control = control)
-    control_no_inj = Dict{Symbol, Any}(:Producer => ctrl_prod)
-    has_injector && (control_no_inj[:Injector] = DisabledControl())
-    forces_prod = setup_reservoir_forces(model; bc = bc, control = control_no_inj)
+    if has_producer
+        shut = Dict{Symbol, Any}(w => DisabledControl() for w in well_names)
+        forces_natural = setup_reservoir_forces(model; bc = bc, control = shut)
+        control = Dict{Symbol, Any}(:Producer => ctrl_prod)
+        has_injector && (control[:Injector] = ctrl_inj)
+        forces_inj = setup_reservoir_forces(model; bc = bc, control = control)
+        control_no_inj = Dict{Symbol, Any}(:Producer => ctrl_prod)
+        has_injector && (control_no_inj[:Injector] = DisabledControl())
+        forces_prod = setup_reservoir_forces(model; bc = bc, control = control_no_inj)
+    else
+        forces_natural = setup_reservoir_forces(model; bc = bc)
+    end
 
     # ## Schedule
     dt, forces = Float64[], []
@@ -265,14 +328,74 @@ end
 # Cells of a vertical well in a Cartesian mesh at horizontal position `xy`,
 # open between `depths[1]` and `depths[2]`.
 function magmatic_intrusion_well_cells(g, xy, depths)
-    nx, ny, nz = g.dims
-    Δ = g.deltas
-    ijk = (v, d, n) -> clamp(Int(floor(v/d)) + 1, 1, n)
-    i = ijk(xy[1], Δ[1], nx)
-    j = ijk(xy[2], Δ[2], ny)
-    k1 = ijk(depths[1], Δ[3], nz)
-    k2 = ijk(depths[2], Δ[3], nz)
+    function ijk(v, d)
+        n = g.dims[d]
+        Δ = g.deltas[d]
+        faces = cumsum(Δ isa Number ? fill(Δ, n) : Δ)
+        return clamp(searchsortedfirst(faces, v), 1, n)
+    end
+    i = ijk(xy[1], 1)
+    j = ijk(xy[2], 2)
+    k1 = ijk(depths[1], 3)
+    k2 = ijk(depths[2], 3)
     return [(i, j, k) for k in k1:k2]
+end
+
+# Cell sizes for `n` cells on `[0, L]`: uniform cells in `[a, b]`, and cells
+# growing geometrically by approximately `growth` towards both ends. If `top =
+# (thickness, n_top)` is given, the top layer `[0, thickness]` gets `n_top`
+# uniform cells, and cells between the top layer and `a` are no larger than
+# the top-layer cells.
+function magmatic_intrusion_cell_sizes(L, n, a, b; growth = 1.25, top = nothing)
+    a, b = clamp(a, 0.0, L), clamp(b, 0.0, L)
+    W = b - a
+    W > 0 || throw(ArgumentError("Refined region must have positive length"))
+    if isnothing(top)
+        L_top, n_top, h_top = 0.0, 0, Inf
+    else
+        L_top, n_top = top
+        L_top < a || throw(ArgumentError("Top layer must be above the refined region"))
+        h_top = L_top/n_top
+    end
+    # Number of cells (real-valued) needed to grade outwards over length Lo,
+    # starting from cells of size h, with cell sizes limited by h_max
+    function count(Lo, h, h_max)
+        Lo <= 0 && return 0.0
+        h_max = max(h_max, h)
+        k = floor(log(h_max/h)/log(growth))
+        S = h*growth*(growth^k - 1)/(growth - 1)
+        S >= Lo && return log(1 + Lo*(growth - 1)/(h*growth))/log(growth)
+        return k + (Lo - S)/h_max
+    end
+    total = h -> W/h + count(a - L_top, h, h_top) + n_top + count(L - b, h, Inf)
+    lo, hi = 1e-6*L, Float64(L)
+    for _ in 1:200
+        h = sqrt(lo*hi)
+        total(h) > n ? (lo = h) : (hi = h)
+    end
+    h = sqrt(lo*hi)
+    m_a = ceil(Int, count(a - L_top, h, h_top) - 0.1)
+    m_b = round(Int, count(L - b, h, Inf))
+    n_fine = n - m_a - m_b - n_top
+    n_fine > 0 || throw(ArgumentError("Too few cells for the refined region"))
+    h_fine = W/n_fine
+    left = magmatic_intrusion_graded_sizes(a - L_top, m_a, h_fine, h_top)
+    right = magmatic_intrusion_graded_sizes(L - b, m_b, h_fine, Inf)
+    return vcat(fill(h_top, n_top), reverse(left), fill(h_fine, n_fine), right)
+end
+
+# Sizes of `m` cells over length `Lo`, growing geometrically from a neighboring
+# cell of size `h0`, with cell sizes limited by `h_max` where possible.
+function magmatic_intrusion_graded_sizes(Lo, m, h0, h_max = Inf)
+    m == 0 && return Float64[]
+    m*h_max <= Lo && return fill(Lo/m, m)
+    sizes = r -> [min(h0*r^k, h_max) for k in 1:m]
+    lo, hi = 1e-3, 10.0
+    for _ in 1:200
+        r = (lo + hi)/2
+        sum(sizes(r)) > Lo ? (hi = r) : (lo = r)
+    end
+    return sizes((lo + hi)/2)
 end
 
 """
