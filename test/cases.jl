@@ -98,11 +98,37 @@ end
 end
 
 @testset "Magmatic intrusion" begin
-    case = magmatic_intrusion(dims = (6, 6, 10), num_years = 1,
-        report_interval = si_unit(:year)/4,
-        injector_position = (-100.0, 250.0))
-    rmodel = reservoir_model(case.model)
+    # Tensor grid: total cell count, uniform refined cells and cap-rock layers
+    dz = Fimbul.magmatic_intrusion_cell_sizes(5000.0, 40, 1750.0, 3250.0;
+        top = (500.0, 3))
+    @test length(dz) == 40
+    @test sum(dz) ≈ 5000.0
+    @test dz[1:3] ≈ fill(500.0/3, 3)
+    @test maximum(max.(dz[2:end]./dz[1:end-1], dz[1:end-1]./dz[2:end])) < 1.3
+    case = magmatic_intrusion(dims = (12, 12, 16), num_years = 0)
+    @test number_of_cells(physical_representation(
+        reservoir_model(case.model).data_domain)) == 12*12*16
+    # Simulations on a small uniform grid
+    args = (dims = (6, 6, 10), injector_position = (-100.0, 250.0),
+        cell_growth = 1.0)
+    # Natural state without wells
+    case_ns = magmatic_intrusion(; args..., num_years = 0,
+        natural_state_time = 300*si_unit(:year))
+    rmodel = reservoir_model(case_ns.model)
     @test haskey(rmodel.primary_variables, :Enthalpy)
-    res = simulate_reservoir(case[1:3], info_level = -1)
-    @test length(res.states) == 3
+    @test isempty(get_model_wells(case_ns.model))
+    res_ns = simulate_reservoir(case_ns, info_level = -1)
+    @test length(res_ns.states) == length(case_ns.dt)
+    # Production with wells, restarted from the natural state
+    case = magmatic_intrusion(; args..., natural_state_time = 0.0,
+        num_years = 1, report_interval = si_unit(:year)/4,
+        initial_state = res_ns.states[end])
+    @test Set(keys(get_model_wells(case.model))) == Set([:Producer, :Injector])
+    @test case.state0[:Reservoir][:Pressure] ≈ res_ns.states[end][:Pressure]
+    res = simulate_reservoir(case[1:2], info_level = -1)
+    @test length(res.states) == 2
+    # The injector is not included if it is never active
+    case_noinj = magmatic_intrusion(; args..., natural_state_time = 0.0,
+        num_years = 1, injection_years = 0)
+    @test collect(keys(get_model_wells(case_noinj.model))) == [:Producer]
 end
