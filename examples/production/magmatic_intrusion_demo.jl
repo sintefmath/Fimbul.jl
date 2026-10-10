@@ -76,12 +76,17 @@ fig
 # water, the fluid properties change rapidly, and these settings help the
 # nonlinear solver through this region.
 function run_case(case)
-    return simulate_reservoir(case;
+    sim, cfg = setup_reservoir_simulator(case;
         max_timestep = Inf,
         relaxation = true,
         tol_cnv = 1e-2,
         tol_mb = 1e-5,
-        info_level = 2)
+        info_level = 2
+    )
+    tss = VariableChangeTimestepSelector(:Enthalpy, 1e5;
+    relative = false, model = :Reservoir)
+    push!(cfg[:timestep_selectors], tss)
+    return simulate_reservoir(case; simulator = sim, config = cfg)
 end
 
 results_ns = run_case(case_ns);
