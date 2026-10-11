@@ -29,8 +29,8 @@ meter, year = si_units(:meter, :year);
 dims = (45, 45, 40)
 case_args = (
     dims = dims,
-    refinement_margin = 500.0*meter,
-    injector_position = (-100.0, 250.0).*meter,
+    refinement_margin = 1000.0*meter,
+    injector_position = (0.0, 0.0).*meter,
 )
 case_ns = magmatic_intrusion(; case_args...,
     natural_state_time = 2400.0year,
@@ -42,10 +42,16 @@ mesh = physical_representation(model.data_domain);
 # ### Plot reservoir properties
 # We first inspect the model interactively. A low-permeability cap rock covers
 # the top 500 m of the domain.
+xc = model.data_domain[:cell_centroids]
+x_mid = sum(extrema(xc[1, :]))/2
+y_mid = sum(extrema(xc[2, :]))/2
+cutaway = .!(xc[1, :] .< x_mid .&& xc[2, :] .< y_mid)
+axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π/16)
 plot_res_args = (
     resolution = (1000, 800), aspect = :data,
-    well_arg = (markersize = 0.0, ),
-    axis_args = (perspectiveness = 0.75, ),
+    # well_arg = (markersize = 0.0, ),
+    axis_args = axis_args,
+    cells = cutaway,
     fancy = false
 )
 plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
@@ -55,11 +61,6 @@ plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
 # with the intrusion at 900 °C. For the 3D plots in this example, we cut away
 # the quadrant of the domain facing the viewer, so that the cut planes pass
 # through the center of the intrusion.
-xc = model.data_domain[:cell_centroids]
-x_mid = sum(extrema(xc[1, :]))/2
-y_mid = sum(extrema(xc[2, :]))/2
-cutaway = .!(xc[1, :] .< x_mid .&& xc[2, :] .< y_mid)
-axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π/16)
 
 fig = Figure(size = (900, 700))
 ax = Axis3(fig[1, 1]; title = "Initial temperature", axis_args...)

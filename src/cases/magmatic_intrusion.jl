@@ -134,7 +134,7 @@ function magmatic_intrusion(;
     rock_heat_capacity = 880.0joule/kilogram/Kelvin,
     rock_thermal_conductivity = 2.0watt/meter/Kelvin,
     boundaries = :all,
-    producer_position = (-250.0, -250.0).*meter,
+    producer_position = (-500.0, -500.0).*meter,
     producer_depths = [750.0, 1750.0].*meter,
     injector_position = nothing,
     injector_depths = [2050.0, 2300.0].*meter,
