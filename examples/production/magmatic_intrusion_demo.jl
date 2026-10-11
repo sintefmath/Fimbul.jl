@@ -23,9 +23,11 @@ meter, year = si_units(:meter, :year);
 # ## Set up the natural-state case
 # The domain is 10 km × 10 km × 5 km, with an ellipsoidal intrusion of
 # horizontal radius 1.5 km centered horizontally. We use a relatively coarse
-# mesh to keep the runtime moderate. Fluid can flow along the wellbore of a shut
-# well, so we simulate the natural state without wells by setting `num_years =
-# 0`. The wells are added when we set up the production scenarios.
+# tensor mesh to keep the runtime moderate, with uniform cells in and within
+# 1 km of the intrusion, and cells growing towards the domain boundaries.
+# Fluid can flow along the wellbore of a shut well, so we simulate the natural
+# state without wells by setting `num_years = 0`. The wells are added when we
+# set up the production scenarios.
 dims = (41, 41, 40)
 case_args = (
     dims = dims,
@@ -40,9 +42,13 @@ case_ns = magmatic_intrusion(; case_args...,
 model = reservoir_model(case_ns.model)
 mesh = physical_representation(model.data_domain);
 
-# ### Plot reservoir properties
-# We first inspect the model interactively. A low-permeability cap rock covers
-# the top 500 m of the domain.
+# ### Inspect the model
+# We first inspect the model interactively, starting with the initial
+# temperature. Other properties can be selected in the viewer, e.g., the
+# permeability, which shows the low-permeability cap rock covering the top
+# 500 m of the domain. For the 3D plots in this example, we cut away the
+# quadrant of the domain facing the viewer, so that the cut planes pass through
+# the center of the intrusion.
 xc = model.data_domain[:cell_centroids]
 x_mid = sum(extrema(xc[1, :]))/2
 y_mid = sum(extrema(xc[2, :]))/2
@@ -50,7 +56,6 @@ cutaway = .!(xc[1, :] .< x_mid .&& xc[2, :] .< y_mid)
 axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π/16)
 plot_res_args = (
     resolution = (1000, 800), aspect = :data,
-    # well_arg = (markersize = 0.0, ),
     axis_args = axis_args,
     cells = cutaway,
     fancy = false
@@ -59,10 +64,7 @@ plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
 
 # ### Initial temperature
 # The initial temperature follows a linear geothermal gradient of 37.5 °C/km,
-# with the intrusion at 900 °C. For the 3D plots in this example, we cut away
-# the quadrant of the domain facing the viewer, so that the cut planes pass
-# through the center of the intrusion.
-
+# with the intrusion at 900 °C.
 fig = Figure(size = (900, 700))
 ax = Axis3(fig[1, 1]; title = "Initial temperature", axis_args...)
 T0 = convert_from_si.(case_ns.state0[:Reservoir][:Temperature], :Celsius)
@@ -72,10 +74,10 @@ Colorbar(fig[1, 2], plt; label = "T (°C)")
 fig
 
 # ## Simulate the natural state
-# We use the same solver settings for all simulations in this example: we remove the default maximum
-# timestep of one year, since the system evolves slowly once the convection
-# pattern is established, use relaxation of the Newton updates, and use
-# slightly relaxed convergence tolerances. Close to the critical point of
+# We use the same solver settings for all simulations in this example: we
+# remove the default maximum timestep of one year, since the system evolves
+# slowly once the convection pattern is established, use relaxation of the
+# Newton updates, and use slightly relaxed convergence tolerances. Close to the critical point of
 # water, the fluid properties change rapidly, and these settings help the
 # nonlinear solver through this region. We also limit the change in enthalpy
 # per timestep.
@@ -110,7 +112,7 @@ plot_reservoir(case_ns.model, results_ns.states;
 # ### Development of the convection plume
 # The hot intrusion heats the surrounding water, which rises buoyantly and is
 # replaced by colder water flowing in from the sides. We plot the temperature
-# (top) and vapor saturation (bottom) at selected times.
+# (top) and liquid saturation (bottom) at selected times.
 t_ns = cumsum(case_ns.dt)
 nearest_step(t) = argmin(abs.(t_ns .- t))
 plot_times = [300.0, 600.0, 1200.0].*year
@@ -138,15 +140,16 @@ fig
 
 # ### Phase diagram
 # The evolution of the fluid can be shown in a pressure-enthalpy phase diagram,
-# with temperature contours and the two-phase envelope. We follow three cells
+# with temperature contours and the two-phase envelope. We follow four cells
 # on the vertical line through the center of the intrusion: one at the center
-# of the intrusion, one just above it, and one higher up in the convection
-# plume. Each line shows the state of one cell at every timestep of the natural
-# state, starting from the initial state (circle). Early in the natural state,
+# of the intrusion, one just above it, one higher up in the convection plume,
+# and one near the surface. Each line shows the state of one cell at every
+# report step of the natural state (circles), starting from the initial state
+# (star). Early in the natural state,
 # the fluid passes close to the critical point of water (22.064 MPa,
 # 2.085 MJ/kg), where the fluid properties change rapidly. This is the most
 # challenging part of the simulation.
-x_c = (sum(extrema(xc[1, :]))/2, sum(extrema(xc[2, :]))/2)
+x_c = (x_mid, y_mid)
 probe_depths = [2500.0, 1900.0, 1300.0, 700.0].*meter
 probe_cells = [argmin((xc[1, :] .- x_c[1]).^2 .+ (xc[2, :] .- x_c[2]).^2 .+
     (xc[3, :] .- d).^2) for d in probe_depths]
@@ -214,9 +217,9 @@ results_inj = run_case(case_inj);
 # The produced fluid boils as it rises in the producer, and reaches the
 # wellhead as a mixture of water and steam. The production temperature is
 # therefore fixed at the saturation temperature at the wellhead pressure of
-# 10 bar (about 180 °C) throughout the simulation. The specific enthalpy of the produced
-# fluid, which determines the steam fraction, varies only slightly. We
-# therefore show the power output, computed as the produced mass rate times
+# 10 bar (about 180 °C) throughout the simulation. The specific enthalpy of
+# the produced fluid, which determines the steam fraction, varies only
+# slightly. We therefore show the power output, computed as the produced mass rate times
 # the specific enthalpy of the produced fluid, which closely follows the
 # production rate. The power output drops quickly in the first years as the
 # pressure around the producer declines. Reinjection supports the reservoir
@@ -246,7 +249,7 @@ plot_reservoir(case_inj.model, Δstates_inj;
     step = length(Δstates_inj),
     plot_res_args...)
 
-# ### Reservoir temperature change and vapor saturation
+# ### Reservoir temperature change
 # Finally, we plot the temperature change relative to the natural state for the
 # scenario without (left) and with (right) reinjection. The region along the
 # producer cools, while hot fluid drawn up from the plume warms the rock next to
@@ -257,17 +260,23 @@ results_prod = (results_noinj, results_inj)
 ΔT_max = maximum(maximum.(ΔT_all))
 ΔT_min = minimum(minimum.(ΔT_all))
 ΔT_range = (ΔT_min, ΔT_max)
+# Diverging colormap with the neutral (white) color at ΔT = 0: the negative and
+# positive parts of the range are mapped to the two halves of the colormap.
+vik = cgrad(:vik)
+ΔT_cmap = map(range(ΔT_min, ΔT_max, length = 256)) do v
+    v < 0 ? vik[0.5*(v - ΔT_min)/(0 - ΔT_min)] : vik[0.5 + 0.5*v/ΔT_max]
+end
 fig = Figure(size = (1000, 600))
 for (i, (res, ΔT, title)) in enumerate(zip(results_prod, ΔT_all,
         ["Production only", "With reinjection"]))
     ax = Axis3(fig[1, i]; title = title, axis_args...)
     plot_cell_data!(ax, mesh, ΔT; cells = cutaway,
-        colormap = :seaborn_icefire_gradient, colorrange = ΔT_range)
+        colormap = ΔT_cmap, colorrange = ΔT_range)
     plot_wells!(ax)
     hidedecorations!(ax)
 end
 Colorbar(fig[2, 1:2];
-    colormap = :seaborn_icefire_gradient, colorrange = ΔT_range,
+    colormap = ΔT_cmap, colorrange = ΔT_range,
     vertical = false,
     label = "ΔT (°C)")
 fig

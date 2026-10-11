@@ -16,8 +16,8 @@ The simulation consists of two periods:
    which the system develops a hydrothermal convection pattern around the
    intrusion.
 2. A production period of `num_years` where a producer is operated at constant
-   bottom-hole pressure, optionally with a cold-water injector that is active
-   for the first `injection_years`.
+   wellhead pressure, optionally with a cold-water injector that is active for
+   the first `injection_years`.
 
 Only wells that are active at some point in the schedule are included in the
 model, since fluid can flow along the wellbore of a shut well. To compute the
@@ -69,23 +69,23 @@ integrating the density of water along the background temperature profile.
   :bottom]`. Boundaries that are not included are closed.
 
 ## Wells
-- `producer_position = (-250.0, -250.0).*meter`: Horizontal producer position
+- `producer_position = (-500.0, 0.0).*meter`: Horizontal producer position
   relative to the intrusion center.
 - `producer_depths = [750.0, 1750.0].*meter`: Top and bottom depth of the
   producer's open interval.
 - `injector_position = nothing`: Horizontal injector position relative to the
-  intrusion center, e.g. `(-100.0, 250.0).*meter`. If `nothing` (or if
+  intrusion center, e.g. `(0.0, 0.0).*meter`. If `nothing` (or if
   `injection_years = 0`), no injector is added.
 - `injector_depths = [2050.0, 2300.0].*meter`: Top and bottom depth of the
   injector's open interval.
 - `whp_producer = 10.0bar`: Producer wellhead pressure.
 - `whp_injector = 80.0bar`: Injector wellhead pressure.
+- `temperature_injection = convert_to_si(80.0, :Celsius)`: Injection
+  temperature.
 
 The wells are multisegment wells that extend from the surface to the bottom of
 the open interval, and are cased (no flow or heat exchange with the reservoir)
 above the open interval. The well pressures are prescribed at the wellhead.
-- `temperature_injection = convert_to_si(80.0, :Celsius)`: Injection
-  temperature.
 
 ## Schedule
 - `natural_state_time = 2400.0year`: Duration of the natural-state period.
@@ -205,8 +205,8 @@ function magmatic_intrusion(;
     # wellhead (top node at the surface).
     function setup_ms_well(name, pos, depths)
         cells = magmatic_intrusion_well_cells(g, center .+ pos, [0.0, depths[2]])
-        open = magmatic_intrusion_well_cells(g, center .+ pos, depths)
-        closed = [!(c in open) for c in cells]
+        open_cells = magmatic_intrusion_well_cells(g, center .+ pos, depths)
+        closed = [!(c in open_cells) for c in cells]
         WI = [cl ? 0.0 : NaN for cl in closed]
         return setup_well(domain, cells; name = name, simple_well = false,
             reference_depth = 0.0, WI = WI, WIth = WI)
@@ -262,7 +262,7 @@ function magmatic_intrusion(;
     # at the boundary-cell centroids to be in equilibrium with the initial
     # state. Temperatures are taken at the boundary faces.
     bc_cells, bc_dir, bc_depth = Int[], Symbol[], Float64[]
-    z_top, z_bottom = extrema(geo.boundary_centroids[3, :])
+    z_top = minimum(geo.boundary_centroids[3, :])
     for (f, c) in enumerate(geo.boundary_neighbors)
         d = argmax(abs.(geo.boundary_normals[:, f]))
         # No boundary conditions in directions with a single cell (2D slices)
