@@ -4,7 +4,7 @@
 High-enthalpy geothermal system heated by a magmatic intrusion, based on the
 production and reinjection scenarios of Yapparova et al. (2023).
 
-The domain is a box with a cylindrical intrusion centered horizontally. The
+The domain is a box with an ellipsoidal intrusion centered horizontally. The
 background temperature follows a linear geothermal gradient, and the intrusion
 is initialized at `temperature_intrusion` (or the background temperature, if
 higher). The fluid is pure H₂O modelled with the pressure-enthalpy formulation
@@ -49,10 +49,11 @@ integrating the density of water along the background temperature profile.
 - `temperature_surface = convert_to_si(10.0, :Celsius)`: Temperature at the
   top of the domain.
 - `geothermal_gradient = 0.0375Kelvin/meter`: Background geothermal gradient.
-- `intrusion_radius = 1500.0meter`: Radius of the cylindrical intrusion.
+- `intrusion_radius = 1500.0meter`: Horizontal semi-axis of the ellipsoidal
+  intrusion.
 - `intrusion_depths = [2000.0, 3000.0].*meter`: Top and bottom depth of the
   intrusion.
-- `temperature_intrusion = convert_to_si(500.0, :Celsius)`: Initial
+- `temperature_intrusion = convert_to_si(900.0, :Celsius)`: Initial
   temperature of the intrusion.
 - `permeability = 1e-15`: Host-rock permeability [m²].
 - `permeability_cap = 1e-16`: Cap-rock permeability [m²].
@@ -174,8 +175,10 @@ function magmatic_intrusion(;
     x, y, z = (geo.cell_centroids[i, :] for i in 1:3)
 
     T_background = depth -> temperature_surface + geothermal_gradient*depth
-    in_intrusion = @. (intrusion_depths[1] <= z <= intrusion_depths[2]) &&
-        (x - center[1])^2 + (y - center[2])^2 <= intrusion_radius^2
+    r_xy = @. sqrt((x - center[1])^2 + (y - center[2])^2)/intrusion_radius
+    z_mid = sum(intrusion_depths)/2
+    r_z = @. abs(z - z_mid)/((intrusion_depths[2] - intrusion_depths[1])/2)
+    in_intrusion = @. r_xy^2 + r_z^2 <= 1.0
 
     perm = fill(permeability, length(z))
     perm[z .<= cap_thickness] .= permeability_cap
@@ -246,7 +249,10 @@ function magmatic_intrusion(;
     bc_cells, bc_dir, bc_depth = Int[], Symbol[], Float64[]
     z_top, z_bottom = extrema(geo.boundary_centroids[3, :])
     for (f, c) in enumerate(geo.boundary_neighbors)
-        dir = (:x, :y, :z)[argmax(abs.(geo.boundary_normals[:, f]))]
+        d = argmax(abs.(geo.boundary_normals[:, f]))
+        # No boundary conditions in directions with a single cell (2D slices)
+        dims[d] == 1 && continue
+        dir = (:x, :y, :z)[d]
         zf = geo.boundary_centroids[3, f]
         if dir == :z
             kind = isapprox(zf, z_top) ? :top : :bottom
@@ -347,6 +353,7 @@ end
 # uniform cells, and cells between the top layer and `a` are no larger than
 # the top-layer cells.
 function magmatic_intrusion_cell_sizes(L, n, a, b; growth = 1.25, top = nothing)
+    n == 1 && return [Float64(L)]
     a, b = clamp(a, 0.0, L), clamp(b, 0.0, L)
     W = b - a
     W > 0 || throw(ArgumentError("Refined region must have positive length"))
