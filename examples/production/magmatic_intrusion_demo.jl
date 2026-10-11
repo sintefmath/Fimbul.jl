@@ -127,30 +127,52 @@ Colorbar(fig[3, 1:2]; colormap = :seaborn_icefire_gradient, colorrange = T_range
 fig
 
 # ### Phase diagram
-# The reservoir states can be shown in a pressure-enthalpy phase diagram,
-# with temperature contours and the two-phase envelope. Early in the natural
-# state, the fluid in and above the intrusion passes close to the critical
-# point of water (22.064 MPa, 2.085 MJ/kg), where the fluid properties change
-# rapidly. This is the most challenging part of the simulation.
-fig = Figure(size = (1200, 500))
-handles = nothing
-for (i, t) in enumerate([300.0, 2400.0].*year)
-    step = nearest_step(t)
-    ax = Axis(fig[1, i]; title = "t = $(round(Int, t_ns[step]/year)) years")
-    global handles = plot_reservoir_state_phase_diagram!(ax, case_ns.model, results_ns.states[step];
-        pressure_limits = (0.0, 50e6), enthalpy_limits = (0.0, 3.2e6),
-        state_kwargs = (type = :scatter, markersize = 4, color = :black))
+# The evolution of the fluid can be shown in a pressure-enthalpy phase diagram,
+# with temperature contours and the two-phase envelope. We follow three cells
+# on the vertical line through the center of the intrusion: one at the center
+# of the intrusion, one just above it, and one higher up in the convection
+# plume. Each line shows the state of one cell at every timestep of the natural
+# state, starting from the initial state (circle). Early in the natural state,
+# the fluid passes close to the critical point of water (22.064 MPa,
+# 2.085 MJ/kg), where the fluid properties change rapidly. This is the most
+# challenging part of the simulation.
+x_c = (sum(extrema(xc[1, :]))/2, sum(extrema(xc[2, :]))/2)
+probe_depths = [2500.0, 1900.0, 1300.0, 700.0].*meter
+probe_cells = [argmin((xc[1, :] .- x_c[1]).^2 .+ (xc[2, :] .- x_c[2]).^2 .+
+    (xc[3, :] .- d).^2) for d in probe_depths]
+probe_labels = ["Intrusion center", "Above intrusion", "Upper plume", "Near surface"]
+probe_colors = [:red, :lightgreen, :cyan, :magenta]
+states_ph = vcat([case_ns.state0[:Reservoir]], results_ns.states)
+tables = model.system.pvt_tables
+fig = Figure(size = (900, 650), fontsize = 14)
+ax = Axis(fig[1, 1])
+handles = plot_phase_diagram_contours!(ax, tables;
+    pressure_limits = (0.0, 30e6), enthalpy_limits = (0.0, 4.5e6), lines = true)
+for (i, (c, label)) in enumerate(zip(probe_cells, probe_labels))
+    h = [state[:Enthalpy][c] for state in states_ph]./1e3
+    p = [state[:Pressure][c] for state in states_ph]./1e6
+    depth = round(Int, xc[3, c])
+    lines!(ax, h, p; color = probe_colors[i], linewidth = 3, label = "$label ($depth m)")
+    scatter!(ax, h, p; color = probe_colors[i], markersize = 10,
+        strokecolor = :black, strokewidth = 1)
+    scatter!(ax, h[1:1], p[1:1]; color = :yellow, markersize = 12,
+        strokecolor = :black, strokewidth = 1, marker = :star5)
 end
-Colorbar(fig[1, 3], handles.contours.filled; label = "T (°C)")
+
+axislegend(ax; position = :rb)
+Colorbar(fig[1, 2], handles.filled; label = "T (°C)")
 fig
 
 # ## Production scenarios
 # We set up the production scenarios with wells, starting from the end of the
 # natural state (`initial_state`), and simulate 100 years of production. The
-# producer is open between 750 and 1750 m depth, above the intrusion, and is
-# operated at a bottom-hole pressure of 50 bar. In the second scenario, cold
-# water (80 °C) is reinjected at 300 bar in an injector that is open between
-# 2050 and 2300 m depth, in the top of the intrusion. With
+# wells are multisegment wells that extend from the surface, and the well
+# pressures are prescribed at the wellhead. The producer is open between 750
+# and 1750 m depth, above the intrusion, and is operated at a wellhead pressure
+# of 10 bar. In the second scenario, cold water (80 °C) is reinjected at a
+# wellhead pressure of 80 bar (about 300 bar at the bottom of the well) in an
+# injector that is open between 2050 and 2300 m depth, in the top of the
+# intrusion. With
 # `injection_years = 0`, the injector is not included in the model. We use
 # report steps of one year.
 state_ns = results_ns.states[end]
@@ -180,26 +202,27 @@ results_noinj = run_case(case_noinj);
 results_inj = run_case(case_inj);
 
 # ### Well performance
-# The production rate drops quickly in the first years as the pressure around
-# the producer declines. Reinjection supports the reservoir pressure, which
-# sustains a higher production rate. The produced fluid boils at the
-# bottom-hole pressure of 50 bar, so the production temperature is fixed at the
-# saturation temperature (about 264 °C). Instead, we show the power output,
-# computed as the produced mass rate times the specific enthalpy of the
-# produced fluid.
-fig = Figure(size = (1200, 450))
-ax_q = Axis(fig[1, 1]; xlabel = "Time (years)", ylabel = "Production rate (kg/s)")
-ax_P = Axis(fig[1, 2]; xlabel = "Time (years)", ylabel = "Power output (MW)")
+# The produced fluid boils as it rises in the producer, and reaches the
+# wellhead as a mixture of water and steam. The production temperature is
+# therefore fixed at the saturation temperature at the wellhead pressure of
+# 10 bar (about 180 °C) throughout the simulation. The specific enthalpy of the produced
+# fluid, which determines the steam fraction, varies only slightly. We
+# therefore show the power output, computed as the produced mass rate times
+# the specific enthalpy of the produced fluid, which closely follows the
+# production rate. The power output drops quickly in the first years as the
+# pressure around the producer declines. Reinjection supports the reservoir
+# pressure, which sustains a higher production rate and power output.
+fig = Figure(size = (800, 450))
+ax = Axis(fig[1, 1]; xlabel = "Time (years)", ylabel = "Power output (MW)")
 colors = Makie.wong_colors()
 for (i, (res, label)) in enumerate(zip(
         [results_noinj, results_inj], ["Production only", "With reinjection"]))
     t = res.time./year
     q = -res.wells[:Producer][:mass_rate]
     h = [state[:Producer][:Enthalpy][1] for state in res.result.states]
-    lines!(ax_q, t, q; color = colors[i], linewidth = 2, label = label)
-    lines!(ax_P, t, q.*h./1e6; color = colors[i], linewidth = 2, label = label)
+    lines!(ax, t, q.*h./1e6; color = colors[i], linewidth = 2, label = label)
 end
-axislegend(ax_q; position = :rt)
+axislegend(ax; position = :rt)
 fig
 
 # ### Interactive visualization of temperature changes
