@@ -78,8 +78,13 @@ integrating the density of water along the background temperature profile.
   `injection_years = 0`), no injector is added.
 - `injector_depths = [2050.0, 2300.0].*meter`: Top and bottom depth of the
   injector's open interval.
-- `bhp_producer = 50.0bar`: Producer bottom-hole pressure.
-- `bhp_injector = 300.0bar`: Injector bottom-hole pressure.
+- `whp_producer = 10.0bar`: Producer wellhead pressure.
+- `whp_injector = 80.0bar`: Injector wellhead pressure.
+- `well_radius = 0.1meter`: Radius of the wells.
+
+The wells are multisegment wells that extend from the surface to the bottom of
+the open interval, and are cased (no flow or heat exchange with the reservoir)
+above the open interval. The well pressures are prescribed at the wellhead.
 - `temperature_injection = convert_to_si(80.0, :Celsius)`: Injection
   temperature.
 
@@ -133,8 +138,9 @@ function magmatic_intrusion(;
     producer_depths = [750.0, 1750.0].*meter,
     injector_position = nothing,
     injector_depths = [2050.0, 2300.0].*meter,
-    bhp_producer = 50.0*si_unit(:bar),
-    bhp_injector = 300.0*si_unit(:bar),
+    whp_producer = 10.0*si_unit(:bar),
+    whp_injector = 80.0*si_unit(:bar),
+    well_radius = 0.1meter,
     temperature_injection = convert_to_si(80.0, :Celsius),
     natural_state_time = 2400.0year,
     dt_natural_state = 100.0year,
@@ -195,26 +201,37 @@ function magmatic_intrusion(;
     # Only wells that are active at some point in the schedule are added to the
     # model. Fluid can flow through the wellbore of a shut well, which would
     # disturb the natural state.
-    well_cells = (pos, depths) -> magmatic_intrusion_well_cells(
-        g, center .+ pos, depths)
+    # Wells are multisegment wells extending from the surface to the bottom of
+    # the open interval. Cells above the open interval are cased, with no flow
+    # or heat exchange with the reservoir. The well pressure is given at the
+    # wellhead (top node at the surface).
+    function setup_ms_well(name, pos, depths)
+        cells = magmatic_intrusion_well_cells(g, center .+ pos, [0.0, depths[2]])
+        open = magmatic_intrusion_well_cells(g, center .+ pos, depths)
+        closed = [!(c in open) for c in cells]
+        WI = [cl ? 0.0 : NaN for cl in closed]
+        return setup_well(domain, cells; name = name, simple_well = false,
+            reference_depth = 0.0, WI = WI, WIth = WI, radius = well_radius)
+    end
     has_producer = num_years > 0
     has_injector = has_producer && !isnothing(injector_position) &&
         injection_years > 0
     wells, well_names = [], Symbol[]
     if has_producer
-        push!(wells, setup_well(domain, well_cells(producer_position, producer_depths);
-            name = :Producer, simple_well = true, use_top_node = true))
+        push!(wells, setup_ms_well(:Producer, producer_position, producer_depths))
         push!(well_names, :Producer)
     end
     if has_injector
-        push!(wells, setup_well(domain, well_cells(injector_position, injector_depths);
-            name = :Injector, simple_well = true, use_top_node = true))
+        push!(wells, setup_ms_well(:Injector, injector_position, injector_depths))
         push!(well_names, :Injector)
     end
 
     # ## Model
+    # Wells must not be shut automatically, since the multisegment wells may
+    # appear to inject during the first iterations after they are opened.
     model, parameters = setup_reservoir_model(domain, sys;
         wells = wells,
+        can_shut_wells = false,
         thermal = true,
         block_backend = true,
         extra_out = true,
@@ -279,12 +296,12 @@ function magmatic_intrusion(;
     isempty(bc) && (bc = nothing)
 
     # ## Forces
-    ctrl_prod = ProducerControl(BottomHolePressureTarget(bhp_producer))
-    ctrl_inj = InjectorControl(BottomHolePressureTarget(bhp_injector), [1.0];
+    ctrl_prod = ProducerControl(BottomHolePressureTarget(whp_producer))
+    ctrl_inj = InjectorControl(BottomHolePressureTarget(whp_injector), [1.0];
         temperature = temperature_injection,
-        enthalpy = tables[:enthalpy](bhp_injector, temperature_injection),
-        density = tables[:density_mix](bhp_injector,
-            tables[:enthalpy](bhp_injector, temperature_injection)),
+        enthalpy = tables[:enthalpy](whp_injector, temperature_injection),
+        density = tables[:density_mix](whp_injector,
+            tables[:enthalpy](whp_injector, temperature_injection)),
         check = false,
     )
     if has_producer
