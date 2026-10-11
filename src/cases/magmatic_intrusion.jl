@@ -80,7 +80,6 @@ integrating the density of water along the background temperature profile.
   injector's open interval.
 - `whp_producer = 10.0bar`: Producer wellhead pressure.
 - `whp_injector = 80.0bar`: Injector wellhead pressure.
-- `well_radius = 0.1meter`: Radius of the wells.
 
 The wells are multisegment wells that extend from the surface to the bottom of
 the open interval, and are cased (no flow or heat exchange with the reservoir)
@@ -134,13 +133,12 @@ function magmatic_intrusion(;
     rock_heat_capacity = 880.0joule/kilogram/Kelvin,
     rock_thermal_conductivity = 2.0watt/meter/Kelvin,
     boundaries = :all,
-    producer_position = (-500.0, -500.0).*meter,
+    producer_position = (-500.0, 0.0).*meter,
     producer_depths = [750.0, 1750.0].*meter,
     injector_position = nothing,
     injector_depths = [2050.0, 2300.0].*meter,
     whp_producer = 10.0*si_unit(:bar),
     whp_injector = 80.0*si_unit(:bar),
-    well_radius = 0.1meter,
     temperature_injection = convert_to_si(80.0, :Celsius),
     natural_state_time = 2400.0year,
     dt_natural_state = 100.0year,
@@ -211,7 +209,7 @@ function magmatic_intrusion(;
         closed = [!(c in open) for c in cells]
         WI = [cl ? 0.0 : NaN for cl in closed]
         return setup_well(domain, cells; name = name, simple_well = false,
-            reference_depth = 0.0, WI = WI, WIth = WI, radius = well_radius)
+            reference_depth = 0.0, WI = WI, WIth = WI)
     end
     has_producer = num_years > 0
     has_injector = has_producer && !isnothing(injector_position) &&
