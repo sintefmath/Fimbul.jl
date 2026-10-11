@@ -26,9 +26,10 @@ meter, year = si_units(:meter, :year);
 # mesh to keep the runtime moderate. Fluid can flow along the wellbore of a shut
 # well, so we simulate the natural state without wells by setting `num_years =
 # 0`. The wells are added when we set up the production scenarios.
-dims = (51, 51, 40)
+dims = (45, 45, 40)
 case_args = (
     dims = dims,
+    refinement_margin = 500.0*meter,
     injector_position = (-100.0, 250.0).*meter,
 )
 case_ns = magmatic_intrusion(; case_args...,
@@ -181,20 +182,22 @@ results_inj = run_case(case_inj);
 # ### Well performance
 # The production rate drops quickly in the first years as the pressure around
 # the producer declines. Reinjection supports the reservoir pressure, which
-# sustains a higher production rate. The injector is open below the producer
-# and some distance away, so the injected cold water has only a minor effect
-# on the production temperature within 100 years.
+# sustains a higher production rate. The produced fluid boils at the
+# bottom-hole pressure of 50 bar, so the production temperature is fixed at the
+# saturation temperature (about 264 °C). Instead, we show the power output,
+# computed as the produced mass rate times the specific enthalpy of the
+# produced fluid.
 fig = Figure(size = (1200, 450))
 ax_q = Axis(fig[1, 1]; xlabel = "Time (years)", ylabel = "Production rate (kg/s)")
-ax_T = Axis(fig[1, 2]; xlabel = "Time (years)", ylabel = "Production temperature (°C)")
+ax_P = Axis(fig[1, 2]; xlabel = "Time (years)", ylabel = "Power output (MW)")
 colors = Makie.wong_colors()
 for (i, (res, label)) in enumerate(zip(
         [results_noinj, results_inj], ["Production only", "With reinjection"]))
     t = res.time./year
     q = -res.wells[:Producer][:mass_rate]
-    T = convert_from_si.(res.wells[:Producer][:temperature], :Celsius)
+    h = [state[:Producer][:Enthalpy][1] for state in res.result.states]
     lines!(ax_q, t, q; color = colors[i], linewidth = 2, label = label)
-    lines!(ax_T, t, T; color = colors[i], linewidth = 2, label = label)
+    lines!(ax_P, t, q.*h./1e6; color = colors[i], linewidth = 2, label = label)
 end
 axislegend(ax_q; position = :rt)
 fig
@@ -221,8 +224,8 @@ lims = (extrema(xc[1, :])..., extrema(xc[2, :])..., extrema(xc[3, :])...)
 fig = Figure(size = (1200, 600))
 for (i, (ΔT, title)) in enumerate(zip(ΔT_all, ["Production only", "With reinjection"]))
     ax = Axis3(fig[1, i]; title = title, limits = lims, axis_args...)
-    plot_cell_data!(ax, mesh, ΔT; cells = abs.(ΔT) .> 0.1*maximum(abs, ΔT),
-        colormap = :seaborn_icefire_gradient, colorrange = ΔT_range)
+    plot_cell_data!(ax, mesh, ΔT; cells = abs.(ΔT) .> 0.1*maximum(abs, ΔT) .&& cutaway,
+        colormap = :seaborn_icefire_gradient) #, colorrange = ΔT_range)
     plot_wells!(ax)
 end
 Colorbar(fig[2, 1:2]; colormap = :seaborn_icefire_gradient, colorrange = ΔT_range,
