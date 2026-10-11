@@ -108,9 +108,10 @@ end
     case = magmatic_intrusion(dims = (12, 12, 16), num_years = 0)
     @test number_of_cells(physical_representation(
         reservoir_model(case.model).data_domain)) == 12*12*16
-    # Simulations on a small uniform grid
+    # Simulations on a small uniform grid (with a moderate intrusion
+    # temperature, since the grid is very coarse)
     args = (dims = (6, 6, 10), injector_position = (-100.0, 250.0),
-        cell_growth = 1.0)
+        cell_growth = 1.0, temperature_intrusion = convert_to_si(500.0, :Celsius))
     # Natural state without wells
     case_ns = magmatic_intrusion(; args..., num_years = 0,
         natural_state_time = 300*si_unit(:year))
