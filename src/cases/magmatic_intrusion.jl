@@ -33,16 +33,19 @@ integrating the density of water along the background temperature profile.
 ## Geometry and mesh
 - `dims = (48, 48, 80)`: Number of cells in x, y and z.
 - `domain_size = (10000.0, 10000.0, 5000.0).*meter`: Domain extent in x, y and z.
-- `refinement_margin = 250.0meter`: Distance outside the intrusion within which
-  the mesh has uniform, fine cells.
+- `refinement_margin = 0.0meter`: Distance outside the intrusion within which
+  the mesh has uniform, fine cells. Vertically, the refined region always
+  extends from the base of the cap rock to the bottom of the intrusion (plus
+  the margin), so that the convection plume above the intrusion is resolved.
 - `cell_growth = 1.25`: Approximate size ratio between neighboring cells outside
   the refined region. The mesh is a tensor grid with the number of cells given
   by `dims`, with uniform cells in the refined region and cells growing
   geometrically towards the domain boundaries. Use `cell_growth = 1.0` for a
   uniform mesh.
-- `cap_cells = 3`: Number of uniform cell layers in the cap rock for the tensor
-  grid. Cells between the cap rock and the refined region are no larger than
-  the cap-rock cells. If zero, the cap rock is not treated separately.
+- `cap_cells = nothing`: Number of uniform cell layers in the cap rock for the
+  tensor grid. If `nothing`, the number is chosen such that the cap-rock cells
+  are approximately as large as the cells in the refined region. If zero, the
+  cap rock is not treated separately.
 
 ## Geology and initial conditions
 - `pressure_surface = 10.0bar`: Pressure at the top of the domain.
@@ -57,8 +60,6 @@ integrating the density of water along the background temperature profile.
   temperature of the intrusion.
 - `permeability = 1e-15`: Host-rock permeability [m²].
 - `permeability_cap = 1e-16`: Cap-rock permeability [m²].
-- `cap_thickness = 500.0meter`: Thickness of the low-permeability cap rock at
-  the top of the domain.
 - `porosity = 0.1`: Rock porosity.
 - `rock_density = 2700.0kilogram/meter^3`: Rock density.
 - `rock_heat_capacity = 880.0joule/kilogram/Kelvin`: Rock heat capacity.
@@ -76,8 +77,8 @@ integrating the density of water along the background temperature profile.
 - `injector_position = nothing`: Horizontal injector position relative to the
   intrusion center, e.g. `(0.0, 0.0).*meter`. If `nothing` (or if
   `injection_years = 0`), no injector is added.
-- `injector_depths = [2050.0, 2300.0].*meter`: Top and bottom depth of the
-  injector's open interval.
+- `injector_depths = [1750.0, 1950.0].*meter`: Top and bottom depth of the
+  injector's open interval, just above the top of the intrusion.
 - `whp_producer = 10.0bar`: Producer wellhead pressure.
 - `whp_injector = 80.0bar`: Injector wellhead pressure.
 - `temperature_injection = convert_to_si(80.0, :Celsius)`: Injection
@@ -116,9 +117,9 @@ https://doi.org/10.1016/j.geothermics.2023.102744
 function magmatic_intrusion(;
     dims = (48, 48, 80),
     domain_size = (10000.0, 10000.0, 5000.0).*meter,
-    refinement_margin = 250.0meter,
+    refinement_margin = 0.0meter,
     cell_growth = 1.25,
-    cap_cells = 3,
+    cap_cells = nothing,
     pressure_surface = 10.0*si_unit(:bar),
     temperature_surface = convert_to_si(10.0, :Celsius),
     geothermal_gradient = 0.0375Kelvin/meter,
@@ -136,7 +137,7 @@ function magmatic_intrusion(;
     producer_position = (-500.0, 0.0).*meter,
     producer_depths = [750.0, 1750.0].*meter,
     injector_position = nothing,
-    injector_depths = [2050.0, 2300.0].*meter,
+    injector_depths = [1750.0, 1950.0].*meter,
     whp_producer = 10.0*si_unit(:bar),
     whp_injector = 80.0*si_unit(:bar),
     temperature_injection = convert_to_si(80.0, :Celsius),
@@ -166,10 +167,9 @@ function magmatic_intrusion(;
             magmatic_intrusion_cell_sizes(domain_size[2], dims[2],
                 center[2] - r, center[2] + r; growth = cell_growth),
             magmatic_intrusion_cell_sizes(domain_size[3], dims[3],
-                intrusion_depths[1] - refinement_margin,
-                intrusion_depths[2] + refinement_margin;
+                cap_thickness, intrusion_depths[2] + refinement_margin;
                 growth = cell_growth,
-                top = cap_cells > 0 ? (cap_thickness, cap_cells) : nothing),
+                top = cap_cells == 0 ? nothing : (cap_thickness, cap_cells)),
         )
         g = CartesianMesh(dims, sizes)
     else
@@ -366,9 +366,24 @@ end
 # growing geometrically by approximately `growth` towards both ends. If `top =
 # (thickness, n_top)` is given, the top layer `[0, thickness]` gets `n_top`
 # uniform cells, and cells between the top layer and `a` are no larger than
-# the top-layer cells.
+# the top-layer cells. If `n_top` is `nothing`, it is chosen such that the
+# top-layer cells are approximately as large as the cells in `[a, b]`.
 function magmatic_intrusion_cell_sizes(L, n, a, b; growth = 1.25, top = nothing)
     n == 1 && return [Float64(L)]
+    if !isnothing(top) && isnothing(top[2])
+        L_top = top[1]
+        n_top = 1
+        sizes = Float64[]
+        for _ in 1:20
+            sizes = magmatic_intrusion_cell_sizes(L, n, a, b;
+                growth = growth, top = (L_top, n_top))
+            h_fine = minimum(sizes[(n_top + 1):end])
+            n_next = max(1, round(Int, L_top/h_fine))
+            n_next == n_top && break
+            n_top = n_next
+        end
+        return sizes
+    end
     a, b = clamp(a, 0.0, L), clamp(b, 0.0, L)
     W = b - a
     W > 0 || throw(ArgumentError("Refined region must have positive length"))
@@ -376,7 +391,7 @@ function magmatic_intrusion_cell_sizes(L, n, a, b; growth = 1.25, top = nothing)
         L_top, n_top, h_top = 0.0, 0, Inf
     else
         L_top, n_top = top
-        L_top < a || throw(ArgumentError("Top layer must be above the refined region"))
+        L_top <= a || throw(ArgumentError("Top layer must be above the refined region"))
         h_top = L_top/n_top
     end
     # Number of cells (real-valued) needed to grade outwards over length Lo,

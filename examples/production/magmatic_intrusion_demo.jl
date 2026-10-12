@@ -23,15 +23,16 @@ meter, year = si_units(:meter, :year);
 # ## Set up the natural-state case
 # The domain is 10 km × 10 km × 5 km, with an ellipsoidal intrusion of
 # horizontal radius 1.5 km centered horizontally. We use a relatively coarse
-# tensor mesh to keep the runtime moderate, with uniform cells in and within
-# 1 km of the intrusion, and cells growing towards the domain boundaries.
+# tensor mesh to keep the runtime moderate. The mesh has uniform cells
+# horizontally across the intrusion and vertically from the base of the cap
+# rock to the bottom of the intrusion, so that the convection plume above the
+# intrusion is resolved, and cells growing towards the domain boundaries.
 # Fluid can flow along the wellbore of a shut well, so we simulate the natural
 # state without wells by setting `num_years = 0`. The wells are added when we
 # set up the production scenarios.
 dims = (41, 41, 40)
 case_args = (
     dims = dims,
-    refinement_margin = 1000.0*meter,
     injector_position = (0.0, 0.0).*meter,
     cell_growth = 1.25,
 )
@@ -183,9 +184,9 @@ fig
 # pressures are prescribed at the wellhead. The producer is open between 750
 # and 1750 m depth, above the intrusion, and is operated at a wellhead pressure
 # of 10 bar. In the second scenario, cold water (80 °C) is reinjected at a
-# wellhead pressure of 80 bar (about 300 bar at the bottom of the well) in an
-# injector that is open between 2050 and 2300 m depth, in the top of the
-# intrusion. With `injection_years = 0`, the injector is not included in the
+# wellhead pressure of 80 bar in an injector that is open between 1750 and
+# 1950 m depth, just above the intrusion. With `injection_years = 0`, the
+# injector is not included in the
 # model. We use report steps of one year.
 state_ns = results_ns.states[end]
 case_inj = magmatic_intrusion(; case_args...,

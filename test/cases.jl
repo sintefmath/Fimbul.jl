@@ -105,6 +105,13 @@ end
     @test sum(dz) ≈ 5000.0
     @test dz[1:3] ≈ fill(500.0/3, 3)
     @test maximum(max.(dz[2:end]./dz[1:end-1], dz[1:end-1]./dz[2:end])) < 1.3
+    # Automatic number of cap-rock layers, refined all the way to the cap
+    dz = Fimbul.magmatic_intrusion_cell_sizes(5000.0, 40, 500.0, 3000.0;
+        top = (500.0, nothing))
+    @test length(dz) == 40
+    @test sum(dz) ≈ 5000.0
+    @test any(isapprox.(cumsum(dz), 500.0))
+    @test maximum(max.(dz[2:end]./dz[1:end-1], dz[1:end-1]./dz[2:end])) < 1.3
     case = magmatic_intrusion(dims = (12, 12, 16), num_years = 0)
     @test number_of_cells(physical_representation(
         reservoir_model(case.model).data_domain)) == 12*12*16
