@@ -90,12 +90,15 @@ above the open interval. The well pressures are prescribed at the wellhead.
 
 ## Schedule
 - `natural_state_time = 2400.0year`: Duration of the natural-state period.
-- `dt_natural_state = 100.0year`: Target timestep during the natural-state
+- `dt_natural_state = 100.0year`: Report interval during the natural-state
   period.
 - `num_years = 100`: Duration of the production period in years. If zero, the
   model has no wells.
 - `injection_years = num_years`: Number of years the injector is active.
-- `report_interval = year/4`: Target timestep during the production period.
+- `report_interval = year/4`: Report interval during the production period.
+
+The periods are divided into uniform report steps. The timesteps within each
+report step are chosen by the simulator's timestep selectors.
 
 ## Restart
 - `initial_state = nothing`: Reservoir state to start from, e.g. the final
@@ -317,15 +320,18 @@ function magmatic_intrusion(;
 
     # ## Schedule
     dt, forces = Float64[], []
+    # Uniform report steps of approximately length dt_report over total_time
+    function report_steps(total_time, dt_report)
+        n = max(1, ceil(Int, total_time/dt_report - 1e-8))
+        return fill(total_time/n, n)
+    end
     if natural_state_time > 0
-        dt_ns = _benchmark_rampup_timesteps(Float64(natural_state_time),
-            Float64(dt_natural_state))
+        dt_ns = report_steps(natural_state_time, dt_natural_state)
         append!(dt, dt_ns)
         append!(forces, fill(forces_natural, length(dt_ns)))
     end
     if num_years > 0
-        dt_prod = _benchmark_rampup_timesteps(Float64(num_years*year),
-            Float64(report_interval))
+        dt_prod = report_steps(num_years*year, report_interval)
         t_end = cumsum(dt_prod)
         append!(dt, dt_prod)
         append!(forces, [t <= injection_years*year + 1.0 ? forces_inj : forces_prod
