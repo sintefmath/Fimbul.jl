@@ -225,6 +225,26 @@ function JutulDarcy.flash_wellstream_at_surface(
 end
 
 """
+    JutulDarcy.surface_density_and_volume_fractions(var, model, system::H2OSystem, state, well)
+
+Phase densities and volume fractions of a well stream at surface conditions,
+used to convert between surface volume rates and mass rates.
+
+The default for multiphase systems divides the component rates by the phase
+reference densities. `H2OSystem` has one component in two phases, so this would
+split the water over liquid and vapour in proportion to the inverse reference
+densities, i.e. count liquid water mainly as vapour. Instead, the stream is
+flashed at the surface pressure with the surface enthalpy of the well.
+"""
+function JutulDarcy.surface_density_and_volume_fractions(var, model, system::H2OSystem, state, well)
+    rhoS = JutulDarcy.reference_densities(system)
+    p = JutulDarcy.default_surface_cond().p
+    h = value(state.SurfaceEnthalpy[well])
+    s_v = clamp(system.pvt_tables[:saturation_vapor_ph](p, h), 0.0, 1.0)
+    return (rhoS, [1.0 - s_v, s_v])
+end
+
+"""
     JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
         inc_tol_dh_rel = Inf, inc_tol_dh_abs = Inf, kwargs...)
 
