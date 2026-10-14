@@ -198,12 +198,9 @@ end
 
     X = state.LiquidMassFractions
     Y = state.VaporMassFractions
-    S = state.Saturations
-    ρ = state.PhaseMassDensities
-    D = haskey(state, :Diffusivities) ? state.Diffusivities : nothing
     mass_fluxes = JutulDarcy.darcy_phase_mass_fluxes(face, state, model, flux_type, kgrad, upw)
-    return JutulDarcy.compositional_fluxes!(q, face, state, S, ρ, X, Y, D, model,
-        flux_type, kgrad, mass_fluxes, upw, aqua, ph_ix, component_count)
+    # No molecular diffusion for a single component
+    return JutulDarcy.compositional_fluxes!(q, X, Y, mass_fluxes, upw, aqua, ph_ix, component_count)
 end
 
 # For H2OSystem the (P,H)-based property evaluators (PhaseMassDensities,
