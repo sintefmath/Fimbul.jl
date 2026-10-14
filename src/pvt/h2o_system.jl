@@ -94,6 +94,11 @@ end
 # saturation, which are already registered as secondary variables during
 # add_thermal_to_model!, and should be refactored to avoid the need for this
 # special case.
+#
+# When enthalpy is a primary variable, its absolute change per Newton iteration
+# can be limited by `dh_max_abs` [J/kg] (not limited by default). A reasonable
+# but large value is 2e5 J/kg, corresponding to a temperature change of about
+# 50 K for liquid water.
 function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
     p_min,
     p_max,
@@ -104,6 +109,7 @@ function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
     dr_max,
     dT_max_rel = nothing,
     dT_max_abs = nothing,
+    dh_max_abs = nothing,
     T_min = convert_to_si(0.0, :Celsius),
     flash_reuse_guess = false,
     flash_stability_bypass = flash_reuse_guess
@@ -115,6 +121,16 @@ function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
         maximum = p_max
     )
     replace_variables!(model, Pressure = p_def, throw = false)
+    pvars = model.primary_variables
+    if haskey(pvars, :Enthalpy)
+        h = pvars[:Enthalpy]
+        pvars[:Enthalpy] = Enthalpy(
+            min = h.min,
+            max = h.max,
+            max_rel = h.max_rel,
+            max_abs = isnothing(dh_max_abs) ? nothing : Float64(dh_max_abs),
+        )
+    end
     return model
 end
 
