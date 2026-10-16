@@ -207,13 +207,26 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         println("  Number of cells in section $k: ", length(rc))
     end
 
+    # A junction point between two sections can lie on a cell face (the mesh is
+    # built from the trajectory points). One of the sections then has zero
+    # length in the cell on the other side of the face, so the traced cells of
+    # the two sections do not share a cell. In that case, connect to the cell of
+    # the other section with centroid closest to the junction point.
+    function connection_index(cells, cell, pt)
+        ix = findfirst(isequal(cell), cells)
+        if isnothing(ix)
+            ix = argmin([norm(geo.cell_centroids[:, c] .- pt) for c in cells])
+        end
+        return ix
+    end
+
     connection_segments = []
 
     seg_no = 0
     for k = 1:length(well_coords)
         from = well_connectivity[k,1]
         if from != 0
-            ix = findfirst(rcells[from] .== rcells[k][1])
+            ix = connection_index(rcells[from], rcells[k][1], well_coords[k][1, :])
             if isnothing(ix)
                 error("Could not find connection from well section $from to well $k")
             end
@@ -222,7 +235,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         end
         to = well_connectivity[k,2]
         if to != 0
-            ix = findfirst(rcells[to] .== rcells[k][end])
+            ix = connection_index(rcells[to], rcells[k][end], well_coords[k][end, :])
             if isnothing(ix)
                 error("Could not find connection from well section $k to well $to")
             end
