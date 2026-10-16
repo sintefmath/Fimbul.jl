@@ -4,13 +4,15 @@
 # The tables are generated with CoolProp through the `FimbulCoolPropExt`
 # extension, using the default settings of `build_steam_tables_h2o`.
 #
-# Usage (from the Fimbul.jl root folder):
+# The script requires an environment with Fimbul and CoolProp. Usage (from the
+# Fimbul.jl root folder), here with a shared environment named `steam_tables`:
 #
-#     julia --project=scripts -e 'using Pkg; Pkg.instantiate()'
-#     julia --project=scripts scripts/build_steam_tables.jl [output_folder]
+#     julia --project=@steam_tables -e 'using Pkg; Pkg.develop(path = "."); Pkg.add("CoolProp")'
+#     julia --project=@steam_tables examples/pvt/build_steam_tables.jl [output_folder]
 #
 # The tables are saved as `steam_tables_h2o.jld2` in `output_folder` (default:
-# `scripts/steam_tables_h2o`). To publish the tables as an artifact, compress
+# `examples/pvt/steam_tables_h2o`). This script is not built as part of the
+# documentation. To publish the tables as an artifact, compress
 # the folder content and update `Artifacts.toml` accordingly. On macOS, set
 # `COPYFILE_DISABLE=1` when running `tar` to avoid including `._*` metadata
 # files in the archive.

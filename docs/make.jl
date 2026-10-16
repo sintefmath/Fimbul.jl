@@ -24,6 +24,11 @@ function get_example_paths(; check_empty = true)
     examples["production"] = []
     examples["validation"] = []
     for excat in readdir(basepth)
+        if excat == "pvt"
+            # Utility scripts for building PVT tables (require e.g. CoolProp),
+            # not built as examples
+            continue
+        end
         if isdir(joinpath(basepth, excat))
             for exfile in readdir(joinpath(basepth, excat))
                 if endswith(exfile, ".jl")
