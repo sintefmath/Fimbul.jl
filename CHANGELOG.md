@@ -1,5 +1,37 @@
 # Fimbul.jl Changelog
 
+## [v0.4.0]
+
+### Breaking changes
+
+- Fimbul now requires Jutul 0.5 and JutulDarcy 0.4, which are breaking releases. Cases return JutulDarcy objects, so code that uses them may need updates for the new JutulDarcy version.
+
+### New features
+
+**Magmatic intrusion case (`magmatic_intrusion`)**
+- New high-enthalpy geothermal case with an ellipsoidal magmatic intrusion, based on the production and reinjection scenarios of Yapparova et al. (2023). Uses the pressure–enthalpy formulation (`H2OSystem`), so the reservoir may contain liquid, vapor, two-phase and supercritical water.
+- The schedule has a natural-state period with no wells, followed by a production period with a producer at constant wellhead pressure and an optional cold-water injector. Wells are multisegment wells that are cased above the open interval. A natural-state result can be passed as `initial_state` to a production case.
+- Tensor mesh with uniform cells across the intrusion and the plume region above it, and geometrically growing cells towards the boundaries.
+- New example: `examples/production/magmatic_intrusion_demo.jl`.
+
+**Pressure–enthalpy formulation**
+- `set_reservoir_variable_defaults!` for `H2OSystem` models accepts `dh_max_abs` to limit the absolute enthalpy change per Newton iteration (not limited by default).
+- `add_thermal_to_model!` for `H2OSystem` models now passes keyword arguments on to JutulDarcy. Previously, calls with keyword arguments silently bypassed the `H2OSystem` overload.
+
+### Improvements
+
+- `H2OSystem`: gravity uses a saturation-weighted face density, which varies continuously when a phase disappears in one of the cells. This avoids cycling Newton iterations close to the critical point.
+- `H2OSystem`: adapted to the reworked compositional fluxes in JutulDarcy 0.4.
+- Steam tables: supercritical states are labelled as liquid or vapor by the critical enthalpy, which removes a spurious two-phase band across the critical pressure. The `SteamTablesH2O` artifact has been updated accordingly.
+- New script for building the steam tables artifact with CoolProp: `examples/pvt/build_steam_tables.jl`.
+- Closed-loop wells (`ags`, `btes`, `coaxial_bhe`) can no longer be shut automatically, since shutting the supply or return gives a dead end.
+- `coaxial_bhe`: uses the total energy formulation, and the grout cells have a small fluid volume to avoid a singular mass balance.
+- `ags`: well sections are now connected also when the junction point lies on a cell face. With Jutul ≥ 0.5.3, the traced cells of the connected sections then do not share a cell, which made the case setup fail.
+
+### Compatibility
+
+- Requires Jutul ≥ 0.5.2 and JutulDarcy ≥ 0.4.0.
+
 ## [v0.3.6]
 
 ### New features
