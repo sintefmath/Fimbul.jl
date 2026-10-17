@@ -23,6 +23,7 @@ module Fimbul
     export egs
     export ags
     export ates
+    export ht_ates
     export btes
     export ftes
     export coaxial_bhe
