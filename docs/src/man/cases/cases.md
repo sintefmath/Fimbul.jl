@@ -18,6 +18,7 @@ geothermal_doublet
 egs
 ags
 coaxial_bhe
+magmatic_intrusion
 egg_geothermal_doublet
 ```
 

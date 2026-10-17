@@ -94,6 +94,11 @@ end
 # saturation, which are already registered as secondary variables during
 # add_thermal_to_model!, and should be refactored to avoid the need for this
 # special case.
+#
+# When enthalpy is a primary variable, its absolute change per Newton iteration
+# can be limited by `dh_max_abs` [J/kg] (not limited by default). A reasonable
+# but large value is 2e5 J/kg, corresponding to a temperature change of about
+# 50 K for liquid water.
 function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
     p_min,
     p_max,
@@ -104,6 +109,7 @@ function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
     dr_max,
     dT_max_rel = nothing,
     dT_max_abs = nothing,
+    dh_max_abs = nothing,
     T_min = convert_to_si(0.0, :Celsius),
     flash_reuse_guess = false,
     flash_stability_bypass = flash_reuse_guess
@@ -115,6 +121,16 @@ function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
         maximum = p_max
     )
     replace_variables!(model, Pressure = p_def, throw = false)
+    pvars = model.primary_variables
+    if haskey(pvars, :Enthalpy)
+        h = pvars[:Enthalpy]
+        pvars[:Enthalpy] = Enthalpy(
+            min = h.min,
+            max = h.max,
+            max_rel = h.max_rel,
+            max_abs = isnothing(dh_max_abs) ? nothing : Float64(dh_max_abs),
+        )
+    end
     return model
 end
 
@@ -141,6 +157,50 @@ function JutulDarcy.degrees_of_freedom_per_entity(
     model::GeothermalModel, ::TotalMasses
     )
     return 1
+end
+
+"""
+    JutulDarcy.face_average_density(model::GeothermalModel, state, tpfa, phase, ρ)
+
+Saturation-weighted face density for the gravity term of an `H2OSystem` model.
+
+The compositional default in JutulDarcy switches abruptly from the two-cell
+average to the one-sided density when a phase vanishes in one of the cells. For
+pure H₂O, the table density of an absent phase is the saturated density, so
+this switch makes the gravity term discontinuous when a cell crosses a
+saturation line. Close to the critical point this causes the Newton iterations
+to cycle. The saturation-weighted average gives the same values when a phase is
+absent from one of the cells, but varies continuously in between.
+"""
+@inline function JutulDarcy.face_average_density(model::GeothermalModel, state, tpfa, phase, ρ = state.PhaseMassDensities)
+    l = tpfa.left
+    r = tpfa.right
+    s = state.Saturations
+    @inbounds ρ_l = ρ[phase, l]
+    @inbounds ρ_r = ρ[phase, r]
+    @inbounds s_l = s[phase, l]
+    @inbounds s_r = s[phase, r]
+    # Small regularization to fall back to the arithmetic average when the
+    # phase is absent from both cells
+    δ = 1e-8
+    return (s_l*ρ_l + s_r*ρ_r + δ*0.5*(ρ_l + ρ_r))/(s_l + s_r + δ)
+end
+
+# The compositional flux in JutulDarcy takes the number of components from the
+# equation of state, which H2OSystem does not have. Pure H₂O has one component.
+# TODO: Remove this overload once JutulDarcy's `component_mass_fluxes!` uses
+# `number_of_components(sys)` instead of the equation of state.
+@inline function JutulDarcy.component_mass_fluxes!(q, face, state, model::GeothermalModel, flux_type, kgrad, upw)
+    sys = model.system
+    aqua = Val(JutulDarcy.has_other_phase(sys))
+    component_count = Val(1)
+    ph_ix = JutulDarcy.phase_indices(sys)
+
+    X = state.LiquidMassFractions
+    Y = state.VaporMassFractions
+    mass_fluxes = JutulDarcy.darcy_phase_mass_fluxes(face, state, model, flux_type, kgrad, upw)
+    # No molecular diffusion for a single component
+    return JutulDarcy.compositional_fluxes!(q, X, Y, mass_fluxes, upw, aqua, ph_ix, component_count)
 end
 
 # For H2OSystem the (P,H)-based property evaluators (PhaseMassDensities,

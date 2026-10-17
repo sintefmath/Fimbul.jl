@@ -226,7 +226,9 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
 
         hole_volumes[pc_in] = vol_ip
         hole_volumes[pc_out] = vol_op
-        hole_volumes[gc] = 0.0
+        # Small fluid volume in the grout to avoid singular mass balance
+        # (consistent with the U1 closed-loop well)
+        hole_volumes[gc] = 1e-3*vol_g
         casing_volumes[pc_in] = vol_iw
         casing_volumes[pc_out] = vol_ow
         casing_volumes[gc] = 0.0
