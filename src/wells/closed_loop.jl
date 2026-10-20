@@ -148,10 +148,15 @@ end
 function setup_closed_loop_return_well(D::DataDomain, return_reservoir_cell;
     name = :CL, kwarg...)
 
+    # The return well is a separate top node connected to the node in the
+    # reservoir cell. Having (at least) one segment avoids special treatment of
+    # well models without segments, e.g., when computing sensitivities with
+    # respect to segment parameters.
     return setup_well(D, return_reservoir_cell;
         name = Symbol(name, "_return"),
         type = :closed_loop,
         simple_well = false,
+        use_top_node = true,
         WI = 0.0,
         WIth = 0.0,
         kwarg...)
