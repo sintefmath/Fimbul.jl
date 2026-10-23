@@ -158,8 +158,9 @@ function plot_btes_temperature(ax, sector, timesteps)
             lbl = wno == 1 ? label : nothing
             T = results.result.states[step][well][:Temperature]
             T = convert_from_si.(T, :Celsius)
-            wm = case.model.models[well]
-            num_nodes = length(wm.domain.representation.perforations.reservoir)
+            ## Plot the pipe nodes (one per perforation) of the supply part
+            supply = get_model_wells(case.model)[first(closed_loop_well_names(case.model.models[well].data_domain))]
+            num_nodes = length(supply.perforations.reservoir)
             plot_mswell_values!(ax, case.model, well, T;
             nodes = 1:num_nodes, geo = geo, color = colors[sno], linewidth = 6, label = lbl)
         end
@@ -173,7 +174,7 @@ sectors = case.input_data[:sectors]
 # ### Temperature evolution during the first charging cycle
 # We first visualize how thermal energy propagates through the wellbore network
 # as hot water flows from the innermost to the outermost well in the sector.
-well = sectors[Symbol("S$sector")][1]
+well = first(closed_loop_well_names(case.model.models[sectors[Symbol("S$sector")][1]].data_domain))
 T_ch = convert_to_si(90.0, :Celsius)
 is_charge = [f[:Facility].control[well].temperature == T_ch for f in case.forces]
 stop = findfirst(diff(is_charge) .< 0)
@@ -185,7 +186,7 @@ Legend(fig[1,2], ax; fontsize = 20)
 # ### Temperature evolution during the first discharging cycle
 # Next, we show how stored thermal energy is extracted as flow direction
 # reverses, with water flowing from the outermost to the innermost well.
-well = sectors[Symbol("S$sector")][end-1]
+well = first(closed_loop_well_names(case.model.models[sectors[Symbol("S$sector")][end]].data_domain))
 T_dch = convert_to_si(10.0, :Celsius)
 is_discharge = [f[:Facility].control[well].temperature == T_dch for f in case.forces]
 start = findfirst(diff(is_discharge) .> 0)+1

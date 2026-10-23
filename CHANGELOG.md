@@ -1,5 +1,21 @@
 # Fimbul.jl Changelog
 
+## [Unreleased]
+
+### Breaking changes
+
+- Closed-loop wells are now a single merged multisegment well instead of separate `<name>_supply` and `<name>_return` wells coupled by a cross term. The supply and return parts are merged with `JutulDarcy.WellMerging.merge_well_domains` and connected by a regular well segment. `setup_closed_loop_well` (and `setup_btes_well`, `setup_vertical_btes_well`) returns one well domain named `<name>`, and states and the model use this name. The two parts are controlled under names with a type-dependent suffix (see `closed_loop_well_names`): `_a`/`_b` for generic, `_supply`/`_return` for U1, and `_inner`/`_outer` for coaxial wells. For example, `coaxial_bhe` now uses `CoaxialWell_inner` and `CoaxialWell_outer`, and `ags` uses `AGS_a` and `AGS_b`. The return node comes after the supply nodes and has tag `:return`.
+- `btes`: the sectors in `input_data[:sectors]` list the closed-loop wells instead of the supply and return names.
+
+### New features
+
+- New abstract type `AbstractClosedLoopWell` with the concrete types `GenericClosedLoopWell`, `U1ClosedLoopWell` and `CoaxialClosedLoopWell`. The type is stored as the `type` of the `MultiSegmentWell`, and `closed_loop_type` accepts either a type or `:generic` (alias `:simple`), `:u1` and `:coaxial`. New closed-loop types implement `setup_closed_loop_supply`.
+- `ags` uses `GenericClosedLoopWell` with a general well topology.
+
+### Compatibility
+
+- Requires a JutulDarcy version where `setup_reservoir_model` adds the original names of merged wells to the facility.
+
 ## [v0.4.0]
 
 ### Breaking changes

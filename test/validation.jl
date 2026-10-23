@@ -103,7 +103,7 @@ end
             permeability = K
         )
         ## Set up BTES well
-        wells = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
+        well = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
             name = :BTES,
             well_args...,
             grouting_density = 2000.0,
@@ -112,7 +112,7 @@ end
         )
         ## Set up reservoir model
         sys = SinglePhaseSystem(AqueousPhase(), reference_density = 1000.0)
-        model = setup_reservoir_model(reservoir, sys; wells = wells, thermal = true)
+        model = setup_reservoir_model(reservoir, sys; wells = [well], thermal = true)
         ## Set up controls and boundary conditions
         ctrl_inj = InjectorControl( # Injection control with fixed temperature
             TotalRateTarget(Q), [1.0], 
@@ -132,9 +132,10 @@ end
             ctrl_supply = ctrl_inj
             ctrl_return = ctrl_prod
         end
+        supply_name, return_name = closed_loop_well_names(well)
         controls = Dict(
-            :BTES_supply => ctrl_supply,
-            :BTES_return => ctrl_return
+            supply_name => ctrl_supply,
+            return_name => ctrl_return
         )
         forces = setup_reservoir_forces(model; control=controls, bc = bc)
         state0 = setup_reservoir_state( # Initialize with uniform pressure and temperature
@@ -149,7 +150,7 @@ end
         sim, cfg = setup_reservoir_simulator(
             case; initial_dt = 1.0, info_level = -1);
         sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
-            relative = false, model = :BTES_supply)
+            relative = false, model = :BTES)
         push!(cfg[:timestep_selectors], sel);
 
         return case, sim, cfg
@@ -158,9 +159,9 @@ end
 
     function compute_error(case, simulated, analytical)
 
-        well = case.model.models[:BTES_supply].data_domain
-        tags = well[:tag] |> unique |> collect
-        sim_temp = simulated.result.states[end][:BTES_supply][:Temperature]
+        well = case.model.models[:BTES].data_domain
+        tags = filter(!=(:return), unique(well[:tag]))
+        sim_temp = simulated.result.states[end][:BTES][:Temperature]
 
         ϵ = 0.0
         for tag in tags
@@ -183,7 +184,7 @@ end
     u1, sim_u1, cfg_u1 = setup_btes_single(:u1);
     res_u1 = simulate_reservoir(u1; simulator=sim_u1, config=cfg_u1)
     analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
-    ρf, Cpf, u1.model.models[:BTES_supply].data_domain)
+    ρf, Cpf, u1.model.models[:BTES].data_domain)
     ϵ_u1 = compute_error(u1, res_u1, analytical_u1)
     @test ϵ_u1 < tolerance
 
@@ -191,7 +192,7 @@ end
     coax_out, sim_coax_out, cfg_coax_out = setup_btes_single(:coaxial, inlet = :outer);
     res_coax_out = simulate_reservoir(coax_out; simulator=sim_coax_out, config=cfg_coax_out)
     analytical_coax_out = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
-    ρf, Cpf, coax_out.model.models[:BTES_supply].data_domain;
+    ρf, Cpf, coax_out.model.models[:BTES].data_domain;
     inlet = :outer)
     ϵ_coax_out = compute_error(coax_out, res_coax_out, analytical_coax_out)
     @test ϵ_coax_out < tolerance
@@ -200,7 +201,7 @@ end
     coax_in, sim_coax_in, cfg_coax_in = setup_btes_single(:coaxial, inlet = :inner);
     res_coax_in = simulate_reservoir(coax_in; simulator=sim_coax_in, config=cfg_coax_in)
     analytical_coax_in = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
-    ρf, Cpf, coax_in.model.models[:BTES_supply].data_domain;
+    ρf, Cpf, coax_in.model.models[:BTES].data_domain;
     inlet = :inner)
     ϵ_coax_in = compute_error(coax_in, res_coax_in, analytical_coax_in)
     @test ϵ_coax_in < tolerance

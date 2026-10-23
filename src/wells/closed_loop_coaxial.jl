@@ -1,6 +1,5 @@
-function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
-    name = :CL,
-    return_reservoir_cell = reservoir_cells[1],
+function setup_closed_loop_supply(type::CoaxialClosedLoopWell, D::DataDomain, reservoir_cells;
+    name = :CL_inner,
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells_inner = missing,
@@ -108,14 +107,14 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
 
     # Common well arguments
     args = (
-        type = :closed_loop,
+        type = type,
         simple_well = false,
         # WI = 0.0
     )
 
     # Setup supply well
     supply_well = setup_well(D, reservoir_cells;
-        name = Symbol(name, "_supply"),
+        name = name,
         neighborship = neighborship,
         perforation_cells_well = collect(grout_cells),
         well_cell_centers = well_cell_centers,
@@ -138,17 +137,7 @@ function setup_closed_loop_well_coaxial(D::DataDomain, reservoir_cells;
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_coaxial!(supply_well)
 
-    # Setup return well
-    r_eff = sqrt(radius_pipe_outer^2 - radius_pipe_inner^2)
-    if dir isa Vector{<:Vector}
-        dir_return = [dir[1]]
-    else
-        dir_return = dir
-    end
-    return_well = setup_closed_loop_return_well(D, return_reservoir_cell;
-        name = name, radius = r_eff, dir = dir_return)
-
-    return [supply_well, return_well]
+    return supply_well
 
 end
 

@@ -119,8 +119,10 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
         porosity = ϕ,
         permeability = K
     )
-    ## Set up closed-loop well
-    wells = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
+    ## Set up closed-loop well. The supply and return parts are merged into a
+    ## single well named :CL, controlled as :CL_supply and :CL_return (U1)
+    ## or :CL_inner and :CL_outer (coaxial).
+    well = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
         name = :CL,
         well_args...,
         grouting_density = ρg,
@@ -129,7 +131,7 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
     )
     ## Set up reservoir model
     sys = SinglePhaseSystem(AqueousPhase(), reference_density = ρf)
-    model = setup_reservoir_model(reservoir, sys; wells = wells, thermal = true)
+    model = setup_reservoir_model(reservoir, sys; wells = [well], thermal = true)
     ## Set up controls and boundary conditions
     ctrl_inj = InjectorControl( # Injection control with fixed temperature
         TotalRateTarget(Q), [1.0], 
@@ -149,9 +151,10 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
         ctrl_supply = ctrl_inj
         ctrl_return = ctrl_prod
     end
+    supply_name, return_name = closed_loop_well_names(well)
     controls = Dict(
-        :CL_supply => ctrl_supply,
-        :CL_return => ctrl_return
+        supply_name => ctrl_supply,
+        return_name => ctrl_return
     )
     forces = setup_reservoir_forces(model; control=controls, bc = bc)
     state0 = setup_reservoir_state( # Initialize with uniform pressure and temperature
@@ -166,7 +169,7 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
     sim, cfg = setup_reservoir_simulator(
         case; initial_dt = 1.0);
     sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
-        relative = false, model = :CL_supply)
+        relative = false, model = :CL)
     push!(cfg[:timestep_selectors], sel)
 
     return case, sim, cfg
@@ -185,16 +188,16 @@ function plot_closed_loop( # Utility function to plot closed-loop simulation res
         yreversed = true  # Surface at top, depth increases downward
     )
     ## Extract numerical solution from final state
-    well = case.model.models[:CL_supply].data_domain
+    well = case.model.models[:CL].data_domain
     sim_temp = convert_from_si.(
-        simulated.result.states[end][:CL_supply][:Temperature], :Celsius)
+        simulated.result.states[end][:CL][:Temperature], :Celsius)
     za = collect(range(0, L, step=0.1)) # Analytical depth points
     tag_handles = []
     solution_handles = []
     tag_names = String[]
     solution_names = ["Analytical", "Fimbul"]
-    ## Plot results for each well tag
-    tags = well[:tag] |> unique |> collect
+    ## Plot results for each well tag (except the return node)
+    tags = filter(!=(:return), unique(well[:tag]))
     colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4,3]]
     err_inf = -Inf
     for (i, tag) in enumerate(tags)
@@ -241,7 +244,7 @@ res_u1 = simulate_reservoir(case_u1; simulator = sim, config = cfg)
 # be called with explicit parameters, but also has a convenience version that
 # extracts parameters directly from the well model.
 analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
-    ρf, Cpf, case_u1.model.models[:CL_supply].data_domain)
+    ρf, Cpf, case_u1.model.models[:CL].data_domain)
 
 # ### Plot comparison
 # The numerical solution agrees very well with the analytical solution.
@@ -265,7 +268,7 @@ res_coax_outer = simulate_reservoir(case_coax_outer; simulator = sim, config = c
 # function also accepts an `inlet` keyword argument to specify whether the
 # fluid is injected through the outer or inner pipe.
 analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
-    ρf, Cpf, case_coax_outer.model.models[:CL_supply].data_domain; inlet = :outer)
+    ρf, Cpf, case_coax_outer.model.models[:CL].data_domain; inlet = :outer)
 
 # ### Plot comparison
 # Coaxial systems typically show different thermal behavior than U-tubes due to
@@ -288,7 +291,7 @@ res_coax_inner = simulate_reservoir(case_coax_inner; simulator = sim, config = c
 # We compute the analytical solution for the coaxial configuration with inner
 # pipe inlet.
 analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
-    ρf, Cpf, case_coax_inner.model.models[:CL_supply].data_domain; inlet = :inner)
+    ρf, Cpf, case_coax_inner.model.models[:CL].data_domain; inlet = :inner)
 
 # ### Plot comparison
 fig, err_inf = plot_closed_loop(case_coax_inner, res_coax_inner, analytical_coax_inner;

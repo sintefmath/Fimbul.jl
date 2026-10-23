@@ -86,7 +86,7 @@ sel = VariableChangeTimestepSelector(:Temperature, 5.0;
     relative = false, model = :Reservoir)
 push!(cfg[:timestep_selectors], sel);
 sel = VariableChangeTimestepSelector(:Temperature, 5.0; 
-    relative = false, model = :AGS_supply)
+    relative = false, model = :AGS)
 push!(cfg[:timestep_selectors], sel);
 
 # NOTE: depending in your system, the simulation may take a few minutes to
@@ -149,7 +149,7 @@ plot_well_results(results.wells)
 # analysis helps to understand how effectively the two laterals exchange heat with
 # the reservoir and contribute to overall energy production.
 section_data = Fimbul.get_section_data_ags(
-    case, results.result.states, :AGS_supply)
+    case, results.result.states, :AGS)
 
 # ### Set up plotting utilities
 colors = collect(cgrad(:BrBg, 8, categorical = true))[[2, end-1]]

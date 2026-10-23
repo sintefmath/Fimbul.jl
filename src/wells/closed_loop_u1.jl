@@ -1,6 +1,5 @@
-function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
-    name = :CL,
-    return_reservoir_cell = reservoir_cells[1],
+function setup_closed_loop_supply(type::U1ClosedLoopWell, D::DataDomain, reservoir_cells;
+    name = :CL_supply,
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells = missing,
@@ -99,13 +98,13 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
 
     # Set up common well properties
     args = (
-        type = :closed_loop,
+        type = type,
         simple_well = false,
         # WI = 0.0
     )
     # Set up supply well
     supply_well = setup_well(D, reservoir_cells;
-        name = Symbol(name, "_supply"),
+        name = name,
         neighborship = neighborship,
         perforation_cells_well = grout_cells,
         well_cell_centers = well_cell_centers,
@@ -127,11 +126,8 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_u1!(
     supply_well, pipe_cells, grout_cells)
-    # Set up return well
-    return_well = setup_closed_loop_return_well(D, return_reservoir_cell;
-        name = name)
 
-    return [supply_well, return_well]
+    return supply_well
 
 end
 

@@ -48,7 +48,8 @@ well trajectory given as an m×3 matrix. The well is set up using
 - `mesh_args`: Additional keyword arguments passed to `extruded_mesh`.
 
 ## Coaxial well parameters
-- `well_name = :CoaxialWell`: Name prefix for the well.
+- `well_name = :CoaxialWell`: Name of the closed-loop well. The inner pipe and
+  outer annulus are controlled as `<well_name>_inner` and `<well_name>_outer`.
 - `well_args`: Additional keyword arguments passed to `setup_closed_loop_well`.
 
 # Returns
@@ -147,7 +148,7 @@ function coaxial_bhe(;
         dir = Vector.(extra[:direction] .* extra[:lengths])
     end
 
-    wells = setup_closed_loop_well(domain, cells;
+    well = setup_closed_loop_well(domain, cells;
         name = well_name,
         closed_loop_type = :coaxial,
         dir = dir,
@@ -157,18 +158,17 @@ function coaxial_bhe(;
     # Closed-loop wells must not be shut: The supply and return are hydraulically
     # connected, and shutting one of them gives a dead end.
     model = setup_reservoir_model(
-        domain, :geothermal; wells = wells, energy_formulation = :total,
+        domain, :geothermal; wells = [well], energy_formulation = :total,
         can_shut_wells = false)
     bc, state0, p, T = set_dirichlet_bcs(model;
         pressure_surface = 10atm,
         temperature_surface = temperature_surface,
         geothermal_gradient = thermal_gradient,
     )
-    supply_name = Symbol(well_name, "_supply")
-    return_name = Symbol(well_name, "_return")
-    z = wells[1][:cell_centroids][3, :]
-    state0[supply_name][:Pressure] .= p(z)
-    state0[supply_name][:Temperature] .= T(z)
+    inner_name, outer_name = closed_loop_well_names(well)
+    z = well[:cell_centroids][3, :]
+    state0[well_name][:Pressure] .= p(z)
+    state0[well_name][:Temperature] .= T(z)
 
     # ## Set up controls based on flow direction
     rho = reservoir_model(model).system.rho_ref[1]
@@ -181,13 +181,13 @@ function coaxial_bhe(;
 
     if inject_into == :inner
         control = Dict(
-            supply_name => ctrl_inj,
-            return_name => ctrl_prod,
+            inner_name => ctrl_inj,
+            outer_name => ctrl_prod,
         )
     else # inject_into == :outer
         control = Dict(
-            supply_name => ctrl_prod,
-            return_name => ctrl_inj,
+            inner_name => ctrl_prod,
+            outer_name => ctrl_inj,
         )
     end
 

@@ -117,7 +117,8 @@ function ags(;
     # TODO: support multiple periods with different rates
     bhp_target = BottomHolePressureTarget(10atm)
     ctrl_return = ProducerControl(bhp_target)
-    control = Dict(:AGS_supply => ctrl_supply, :AGS_return => ctrl_return)
+    supply_name, return_name = closed_loop_well_names(:generic, :AGS)
+    control = Dict(supply_name => ctrl_supply, return_name => ctrl_return)
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)#, limits = limits)
 
@@ -252,33 +253,25 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
     neighbors = hcat(neighbors...)
     cell_to_section = vcat(cell_to_section...)
 
-    # return rcells, wcells, directions, neighbors
-
-    common_args = (
-        simple_well = false,
-        type = :closed_loop,
-        radius = 150e-3,
-        WI = 0.0
-    )
-
-    w_supply = setup_well(domain, rcells;
+    # Closed-loop well with plain pipe/reservoir thermal communication
+    well = setup_closed_loop_well(domain, rcells;
+        closed_loop_type = :generic,
+        name = :AGS,
         neighborship = neighbors,
         perforation_cells_well = wcells,
         dir = directions,
         well_cell_centers = geo.cell_centroids[:, rcells],
         end_nodes = [length(wcells)],
-        name = :AGS_supply,
-        common_args...
+        return_reservoir_cell = rcells[end],
+        radius_pipe = 150e-3,
+        wall_thickness = 0.0,
+        grouting_thickness = 0.0,
+        pipe_thermal_conductivity = 20.0
     )
-    w_supply[:section, Cells()] = cell_to_section
+    # The return node is placed at the end of the last section
+    well[:section, Cells()] = vcat(cell_to_section, cell_to_section[end])
 
-    w_return = setup_well(domain, rcells[end];
-        name = :AGS_return,
-        WIth = 0.0,
-        common_args...
-    )
-
-    wells = [w_supply, w_return]
+    wells = [well]
 
     section_info = (
         cell_to_section = cell_to_section,
@@ -293,9 +286,9 @@ function get_section_data_ags(case, states, well=missing)
 
     model = case.model
     if ismissing(well)
-        model_names = keys(model.models)
-        supply_ix = findfirst(map(k -> contains(string(k), "_supply"), model_names))
-        well = model_names[supply_ix]
+        model_names = collect(keys(model.models))
+        well_ix = findfirst(k -> is_closed_loop_well(model.models[k].data_domain), model_names)
+        well = model_names[well_ix]
     end
 
     section_info = case.input_data[:sections]
