@@ -87,6 +87,7 @@ function all_tags()
     descr["FTES"] = "Fracture/Fault Thermal Energy Storage (FTES) examples."
     descr["EGS"] = "Enhanced Geothermal System (EGS) examples."
     descr["AGS"] = "Advanced Geothermal System (AGS) examples."
+    descr["Workflow"] = "Examples of workflows such as model calibration and design optimization."
 
     palette = [
         "rgb(228, 26, 28)",
@@ -96,7 +97,8 @@ function all_tags()
         "rgb(255, 127, 0)",
         "rgb(255, 255, 51)",
         "rgb(166, 86, 40)",
-        "rgb(247, 129, 191)"
+        "rgb(247, 129, 191)",
+        "rgb(153, 153, 153)"
     ]
 
     out = OrderedDict{String, NamedTuple{(:desc, :color), Tuple{String, String}}}()
