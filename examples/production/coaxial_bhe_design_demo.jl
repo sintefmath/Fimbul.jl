@@ -94,11 +94,14 @@ end
 # center of the pattern (x = 0 and y = 0) are symmetry planes without flow of
 # mass or heat. The thermal interference between the wells is thus accounted
 # for, since each well cannot extract heat from beyond the symmetry planes.
-# Since the mesh would otherwise change with the design, we use a Cartesian
-# mesh that is the same for all designs, with 25 m cells horizontally in the
-# region where the wells are, and 100 m cells vertically down to 2000 m.
+#
+# We use a tensor mesh that is adapted to each design: The cells are 25 m
+# horizontally from the symmetry planes to 100 m beyond the end of the well,
+# and 100 m vertically down to 100 m below the bottom of the well. Outside
+# these regions, the cell sizes increase geometrically towards the outer
+# boundaries of the domain, which is 2000 m wide and 3000 m deep.
 function graded_cells(L_fine, h, L_total; growth = 1.5)
-    d = fill(h, round(Int, L_fine/h))
+    d = fill(h, ceil(Int, L_fine/h))
     while sum(d) < L_total
         push!(d, min(d[end]*growth, L_total - sum(d)))
     end
@@ -115,9 +118,12 @@ end
 λ_grout = 2.3λ_unit
 λ_grout_insulated = 0.01λ_unit
 
-function design_case(θ, L)
-    dxy = graded_cells(1250.0, 25.0, 2000.0)
-    dz = [fill(100.0, 20); fill(250.0, 4)]
+function design_case(θ, L; margin = 100.0)
+    ## The well in the quarter domain x, y > 0
+    trajectory = first(pattern_trajectories(θ, L))
+    x_end, z_end = trajectory[end, 1], trajectory[end, 3]
+    dxy = graded_cells(x_end + margin, 25.0, 2000.0)
+    dz = graded_cells(z_end + margin, 100.0, 3000.0)
     mesh = UnstructuredMesh(CartesianMesh(
         (length(dxy), length(dxy), length(dz)), (dxy, dxy, dz)))
     geo = tpfv_geometry(mesh)
@@ -129,8 +135,6 @@ function design_case(θ, L)
         rock_thermal_conductivity = λ_layers,
         rock_heat_capacity = 900*joule/(kilogram*Kelvin),
         rock_density = 2600*kilogram/meter^3))
-    ## The well in the quarter domain x, y > 0
-    trajectory = first(pattern_trajectories(θ, L))
     cells, extra = Jutul.find_enclosing_cells(mesh, trajectory, extra_out = true)
     ## Insulating grout in the vertical section above the kickoff depth, based
     ## on the depth of the trajectory in each well cell
@@ -175,7 +179,7 @@ end
 
 function run_case(case)
     sim, cfg = setup_reservoir_simulator(case;
-        info_level = 0,
+        info_level = -1,
         initial_dt = 120.0,
         presolve_wells = true,
         relaxation = true)
@@ -212,7 +216,12 @@ end
 # which is affordable since the problem only has two design variables.
 θ_values = deg2rad.(0.0:10.0:60.0)
 L_values = collect(1000.0:250.0:L_max)
-design_results = [run_case(design_case(θ, L)) for θ in θ_values, L in L_values]
+function simulate_design(θ, L)
+    println("Simulating design θ = $(round(rad2deg(θ), digits = 2))°, L = $(round(L, digits = 1)) m, drilling cost $(round(drilling_cost(θ, L)/1e6, digits = 2)) M€")
+    return run_case(design_case(θ, L))
+end
+
+design_results = [simulate_design(θ, L) for θ in θ_values, L in L_values]
 P_avg = average_power.(design_results)
 costs = [drilling_cost(θ, L) for θ in θ_values, L in L_values];
 
@@ -259,8 +268,8 @@ fig
 # design is then verified with a simulation. If the interpolation was too
 # optimistic, the wells are lengthened slightly until the constraint is
 # satisfied. Note that the power is not exactly a smooth function of the
-# design variables: Small changes in the trajectory change which cells of the
-# fixed mesh the well passes through, which gives variations of about 1-2%.
+# design variables, since the mesh and the cells the well passes through
+# change with the design.
 function interpolate_power(P, θ, L)
     i = clamp(searchsortedlast(θ_values, θ), 1, length(θ_values) - 1)
     j = clamp(searchsortedlast(L_values, L), 1, length(L_values) - 1)
@@ -286,7 +295,7 @@ _, θ_opt, L_opt = optimal_design(P_avg, Q_min)
 isnan(θ_opt) && error("No design satisfies the power constraint")
 P_opt = 0.0
 for it in 1:5
-    global P_opt = average_power(run_case(design_case(θ_opt, L_opt)))
+    global P_opt = average_power(simulate_design(θ_opt, L_opt))
     println("Verification $it: θ = $(round(rad2deg(θ_opt), digits = 2))°, L = $(round(L_opt, digits = 1)) m, average power $(round(P_opt/1e6, digits = 4)) MW")
     P_opt >= Q_min && break
     global L_opt = min(L_opt + 25.0, L_max)
