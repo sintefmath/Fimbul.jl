@@ -119,6 +119,7 @@ function ags(;
     ctrl_return = ProducerControl(bhp_target)
     supply_name, return_name = closed_loop_well_names(:generic, :AGS)
     control = Dict(supply_name => ctrl_supply, return_name => ctrl_return)
+    check_closed_loop_pressure(model, control)
 
     forces = setup_reservoir_forces(model, control = control, bc = bc)#, limits = limits)
 

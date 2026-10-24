@@ -127,6 +127,8 @@ function btes(;
 
     control_charge, control_discharge, sectors = setup_controls(model, num_sectors,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge);
+    check_closed_loop_pressure(model, control_charge)
+    check_closed_loop_pressure(model, control_discharge)
     forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
     forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
     forces_rest = setup_reservoir_forces(model, bc=bc)

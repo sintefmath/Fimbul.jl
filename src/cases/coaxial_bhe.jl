@@ -191,6 +191,7 @@ function coaxial_bhe(;
         )
     end
 
+    check_closed_loop_pressure(model, control)
     forces = setup_reservoir_forces(model, control = control, bc = bc)
 
     dt, forces = make_schedule(

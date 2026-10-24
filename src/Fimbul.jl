@@ -6,7 +6,7 @@ module Fimbul
     # Wells
     export setup_btes_well, setup_vertical_btes_well
     export setup_closed_loop_well, setup_vertical_closed_loop_well
-    export closed_loop_well_names
+    export closed_loop_well_names, check_closed_loop_pressure
     export AbstractClosedLoopWell, ClosedLoopGenericWell
     export ClosedLoop1UWell, ClosedLoopCoaxialWell
     # Utils for setting up cases

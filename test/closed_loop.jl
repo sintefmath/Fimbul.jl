@@ -172,6 +172,51 @@ using Jutul, JutulDarcy, Fimbul, Test
         @test physical_representation(well).perforations.reservoir == [2, 3, 4, 5, 5]
     end
 
+    @testset "Pressure check" begin
+        sys = SinglePhaseSystem(AqueousPhase(), reference_density = 1000.0)
+        function setup_model(type)
+            well = setup(type)
+            model = setup_reservoir_model(reservoir, sys;
+                wells = [well], thermal = true, can_shut_wells = false)
+            return model, well
+        end
+        ctrl_inj = InjectorControl(TotalRateTarget(rate), [1.0],
+            density = 1000.0, temperature = T_in)
+        ctrl_bhp(p) = ProducerControl(BottomHolePressureTarget(p))
+        # Generic pipe flowing downwards: the BHP applies at the bottom node
+        model, well = setup_model(:generic)
+        inj, prod = closed_loop_well_names(well)
+        z = well[:cell_centroids][3, :]
+        p_min = JutulDarcy.DEFAULT_MINIMUM_PRESSURE
+        p_required = p_min + 1000.0*Jutul.gravity_constant*(maximum(z) - minimum(z))
+        low = Dict(inj => ctrl_inj, prod => ctrl_bhp(0.99*p_required))
+        high = Dict(inj => ctrl_inj, prod => ctrl_bhp(1.01*p_required))
+        @test (@test_logs (:warn, r"too low") check_closed_loop_pressure(model, low)) == false
+        @test (@test_logs check_closed_loop_pressure(model, high)) == true
+        # Forces and vectors of forces
+        forces_low = setup_reservoir_forces(model, control = low)
+        forces_high = setup_reservoir_forces(model, control = high)
+        @test (@test_logs (:warn, r"too low") check_closed_loop_pressure(model, forces_low)) == false
+        @test (@test_logs check_closed_loop_pressure(model, [forces_high, forces_high])) == true
+        @test (@test_logs (:warn, r"too low") check_closed_loop_pressure(model,
+            [forces_high, forces_low, forces_low])) == false
+        # Custom minimum pressure
+        @test (@test_logs check_closed_loop_pressure(model, low; p_min = 0.0)) == true
+        # Rate-controlled parts are not checked
+        rate_only = Dict(inj => ctrl_inj,
+            prod => ProducerControl(TotalRateTarget(-rate)))
+        @test (@test_logs check_closed_loop_pressure(model, rate_only)) == true
+        # 1U and coaxial wells have both ends at the top
+        for type in (:u1, :coaxial)
+            model, well = setup_model(type)
+            sup, ret = closed_loop_well_names(well)
+            for ctrl in (Dict(sup => ctrl_inj, ret => ctrl_bhp(1.0si_unit(:atm))),
+                    Dict(sup => ctrl_bhp(1.0si_unit(:atm)), ret => ctrl_inj))
+                @test (@test_logs check_closed_loop_pressure(model, ctrl)) == true
+            end
+        end
+    end
+
     function simulate_closed_loop(type; n_step = 5)
         # The generic pipe flows downwards from the top to the bottom cell. The
         # outlet pressure must exceed the hydrostatic pressure of the pipe, so
