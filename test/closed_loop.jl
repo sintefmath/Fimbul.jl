@@ -173,9 +173,11 @@ using Jutul, JutulDarcy, Fimbul, Test
     end
 
     function simulate_closed_loop(type; n_step = 5)
-        # The generic pipe flows upwards from the bottom cell
-        well_cells = type == :generic ? reverse(cells) : cells
-        well = setup(type; cells = well_cells)
+        # The generic pipe flows downwards from the top to the bottom cell. The
+        # outlet pressure must exceed the hydrostatic pressure of the pipe, so
+        # that the pressure stays positive at the top.
+        well = setup(type)
+        p_loop = 15.0si_unit(:atm)
         inj, prod = closed_loop_well_names(well)
         sys = SinglePhaseSystem(AqueousPhase(), reference_density = 1000.0)
         model = setup_reservoir_model(reservoir, sys;
@@ -183,11 +185,11 @@ using Jutul, JutulDarcy, Fimbul, Test
         control = Dict(
             inj => InjectorControl(TotalRateTarget(rate), [1.0],
                 density = 1000.0, temperature = T_in),
-            prod => ProducerControl(BottomHolePressureTarget(5.0si_unit(:atm)))
+            prod => ProducerControl(BottomHolePressureTarget(p_loop))
         )
         forces = setup_reservoir_forces(model, control = control)
         state0 = setup_reservoir_state(model,
-            Pressure = 5.0si_unit(:atm), Temperature = T_rock)
+            Pressure = p_loop, Temperature = T_rock)
         dt = fill(si_unit(:day), n_step)
         res = simulate_reservoir(state0, model, dt;
             forces = forces, info_level = -1)
@@ -201,11 +203,11 @@ using Jutul, JutulDarcy, Fimbul, Test
         @test !haskey(model.models, inj)
         @test model.models[:Facility].domain.well_symbols == collect(names)
         @test sort(well_symbols(model)) == sort(collect(names))
-        # No cross terms between the supply and return parts
-        @test !any(ct -> ct.cross_term isa Union{
-            JutulDarcy.ClosedLoopSupplyToReturnMassCT,
-            JutulDarcy.ClosedLoopSupplyToReturnEnergyCT}, model.cross_terms)
-        @test !any(ct -> ct.target == :CL && ct.source == :CL, model.cross_terms)
+        # Only standard well cross terms: the supply and return parts are
+        # connected inside the merged well
+        well_cts = filter(ct -> :CL in (ct.target, ct.source), model.cross_terms)
+        @test !isempty(well_cts)
+        @test all(ct -> JutulDarcy.WellMerging.is_standard_well_cross_term(ct.cross_term), well_cts)
         # Mass in equals mass out, and the fluid is cooled by the rock
         ws = res.wells
         q_in = ws[inj][:mass_rate][end]
