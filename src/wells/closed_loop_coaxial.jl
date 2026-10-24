@@ -1,4 +1,30 @@
-function setup_closed_loop_supply(type::CoaxialClosedLoopWell, D::DataDomain, reservoir_cells;
+"""
+    setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D, reservoir_cells; kwarg...)
+
+Supply part of a coaxial closed-loop well. By default, the inner pipe goes
+down through `reservoir_cells` and the outer annulus back up again, embedded
+in grout. Nodes are tagged `:pipe_inner`, `:pipe_outer` and `:grout`.
+
+# Keyword arguments
+- `radius_grout = 100e-3`: Borehole (grout) radius [m].
+- `radius_pipe_inner = 50e-3`: Outer radius of the inner pipe [m].
+- `radius_pipe_outer = sqrt(2)*radius_pipe_inner`: Outer radius of the outer
+  pipe [m].
+- `wall_thickness_pipe_inner = 3e-3`, `wall_thickness_pipe_outer = 3e-3`:
+  Pipe wall thicknesses [m].
+- `pipe_thermal_conductivity_inner = 0.38`,
+  `pipe_thermal_conductivity_outer = 0.38`: Pipe wall thermal conductivities
+  [W/(m K)].
+- `grouting_thermal_conductivity = 2.3`: Grout thermal conductivity [W/(m K)].
+- `grouting_heat_capacity = 1460`: Grout heat capacity [J/(kg K)].
+- `grouting_density = 1500`: Grout density [kg/m³].
+- `dir = :z`: Direction of the well in each reservoir cell.
+- `neighborship`, `pipe_cells_inner`, `pipe_cells_outer`, `grout_cells`,
+  `well_cell_centers`, `end_nodes`: General well topology. Must be given
+  together.
+- `segment_models`, `tag`: Segment models and node tags for a general topology.
+"""
+function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, reservoir_cells;
     name = :CL_inner,
     cell_centers = D[:cell_centroids],
     neighborship = missing,
@@ -16,19 +42,15 @@ function setup_closed_loop_supply(type::CoaxialClosedLoopWell, D::DataDomain, re
     wall_thickness_pipe_inner = 3e-3,
     wall_thickness_pipe_outer = 3e-3,
     grouting_thermal_conductivity = 2.3,
-    inner_pipe_thermal_conductivity = 0.38,
-    outer_pipe_thermal_conductivity = 0.38,
+    pipe_thermal_conductivity_inner = 0.38,
+    pipe_thermal_conductivity_outer = 0.38,
     grouting_heat_capacity = 1460,
     grouting_density = 1500.0,
     kwarg...)
 
-
-     if ismissing(neighborship)
-        if !ismissing(pipe_cells_inner) || !ismissing(pipe_cells_outer) || !ismissing(grout_cells)
-            error("Provide either neighborship, pipe_cells_inner, \
-                pipe_cells_outer, grout_cells, well_cell_centers, end_nodes, \
-                or none of them.")
-        end
+    if ismissing(neighborship)
+        check_closed_loop_topology_args(pipe_cells_inner, pipe_cells_outer,
+            grout_cells, well_cell_centers, end_nodes)
         # Set inner/outer pipe and grout cells
         nc_pipe = length(reservoir_cells)*2
         nc_grout = length(reservoir_cells)
@@ -99,8 +121,8 @@ function setup_closed_loop_supply(type::CoaxialClosedLoopWell, D::DataDomain, re
     wall_thickness[pipe_cells_outer] .= wall_thickness_pipe_outer
     # Set pipe wall thermal conductivities
     λ_pipe = zeros(num_cells)
-    λ_pipe[pipe_cells_inner] .= inner_pipe_thermal_conductivity
-    λ_pipe[pipe_cells_outer] .= outer_pipe_thermal_conductivity
+    λ_pipe[pipe_cells_inner] .= pipe_thermal_conductivity_inner
+    λ_pipe[pipe_cells_outer] .= pipe_thermal_conductivity_outer
     # Set grouting thermal conductivities
     λ_grout = zeros(num_cells)
     λ_grout[grout_cells] .= grouting_thermal_conductivity

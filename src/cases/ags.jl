@@ -264,7 +264,7 @@ function setup_ags_wells(domain, well_coords, well_connectivity)
         end_nodes = [length(wcells)],
         return_reservoir_cell = rcells[end],
         radius_pipe = 150e-3,
-        wall_thickness = 0.0,
+        wall_thickness_pipe = 0.0,
         grouting_thickness = 0.0,
         pipe_thermal_conductivity = 20.0
     )

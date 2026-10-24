@@ -248,8 +248,8 @@ for λ in λ_values
     case_i = coaxial_bhe(;
         inject_into = :outer,
         homogeneous_args...,
-        well_args = (inner_pipe_thermal_conductivity = λ,
-        outer_pipe_thermal_conductivity = λ_default, # keep outer pipe conductivity constant),
+        well_args = (pipe_thermal_conductivity_inner = λ,
+        pipe_thermal_conductivity_outer = λ_default, # keep outer pipe conductivity constant),
     ))
     push!(cases_λ, case_i)
     push!(results_λ, run_case(case_i))

@@ -81,8 +81,8 @@ cfg_coax = ( # Coaxial parameters
     wall_thickness_pipe_inner = 3e-3*meter, # Inner pipe wall thickness
     radius_pipe_outer = 25e-3*meter,        # Outer pipe outer radius
     wall_thickness_pipe_outer = 4e-3*meter, # Outer pipe wall thickness
-    inner_pipe_thermal_conductivity = λp,   # Inner pipe material conductivity
-    outer_pipe_thermal_conductivity = λp    # Outer pipe material conductivity
+    pipe_thermal_conductivity_inner = λp,   # Inner pipe material conductivity
+    pipe_thermal_conductivity_outer = λp    # Outer pipe material conductivity
 );
 
 # ## Utility functions

@@ -25,38 +25,39 @@ Concrete types implement [`setup_closed_loop_supply`](@ref).
 abstract type AbstractClosedLoopWell end
 
 """
-    GenericClosedLoopWell()
+    ClosedLoopGenericWell()
 
 Closed-loop well with direct thermal communication between the pipe and the
-reservoir. If no topology is given, the well is set up as a simple U-shaped
-pipe. A general topology (e.g., for advanced geothermal systems with multiple
-laterals) can be given using `neighborship`, `perforation_cells_well`,
-`well_cell_centers` and `end_nodes`.
+reservoir. If no topology is given, the well is a single pipe that starts in
+the first and ends in the last of the given reservoir cells. A general
+topology (e.g., for advanced geothermal systems with multiple laterals) can be
+given using `neighborship`, `perforation_cells_well`, `well_cell_centers` and
+`end_nodes`.
 """
-struct GenericClosedLoopWell <: AbstractClosedLoopWell end
+struct ClosedLoopGenericWell <: AbstractClosedLoopWell end
 
 """
-    U1ClosedLoopWell()
+    ClosedLoop1UWell()
 
 Single U-tube closed-loop well with two pipes embedded in grout.
 """
-struct U1ClosedLoopWell <: AbstractClosedLoopWell end
+struct ClosedLoop1UWell <: AbstractClosedLoopWell end
 
 """
-    CoaxialClosedLoopWell()
+    ClosedLoopCoaxialWell()
 
 Coaxial closed-loop well with an inner pipe and an outer annulus embedded in
 grout.
 """
-struct CoaxialClosedLoopWell <: AbstractClosedLoopWell end
+struct ClosedLoopCoaxialWell <: AbstractClosedLoopWell end
 
 function closed_loop_well_type(type::Symbol)
-    if type == :generic || type == :simple
-        return GenericClosedLoopWell()
+    if type == :generic
+        return ClosedLoopGenericWell()
     elseif type == :u1
-        return U1ClosedLoopWell()
+        return ClosedLoop1UWell()
     elseif type == :coaxial
-        return CoaxialClosedLoopWell()
+        return ClosedLoopCoaxialWell()
     else
         error("Unknown closed loop type: $type")
     end
@@ -81,9 +82,9 @@ Names of the supply and return parts of a closed-loop well, used for controls
 and well results. The names are `name` with a suffix that depends on the
 closed-loop type:
 
-- [`GenericClosedLoopWell`](@ref): `_a` and `_b`
-- [`U1ClosedLoopWell`](@ref): `_supply` and `_return`
-- [`CoaxialClosedLoopWell`](@ref): `_inner` and `_outer`
+- [`ClosedLoopGenericWell`](@ref) and [`ClosedLoop1UWell`](@ref): `_supply`
+  and `_return`
+- [`ClosedLoopCoaxialWell`](@ref): `_inner` and `_outer`
 
 For a merged closed-loop well domain, the names are taken from the domain.
 """
@@ -98,9 +99,8 @@ function closed_loop_well_names(well::DataDomain)
     return (names[1], names[2])
 end
 
-closed_loop_well_suffixes(::AbstractClosedLoopWell) = ("_a", "_b")
-closed_loop_well_suffixes(::U1ClosedLoopWell) = ("_supply", "_return")
-closed_loop_well_suffixes(::CoaxialClosedLoopWell) = ("_inner", "_outer")
+closed_loop_well_suffixes(::AbstractClosedLoopWell) = ("_supply", "_return")
+closed_loop_well_suffixes(::ClosedLoopCoaxialWell) = ("_inner", "_outer")
 
 ## Setup functions
 
@@ -110,11 +110,12 @@ closed_loop_well_suffixes(::CoaxialClosedLoopWell) = ("_inner", "_outer")
 
 Set up a closed-loop well in `reservoir_cells` of the reservoir domain `D`.
 `closed_loop_type` is either an [`AbstractClosedLoopWell`](@ref) or one of
-`:generic` (alias `:simple`), `:u1` and `:coaxial`. The result is a single
+`:generic`, `:u1` and `:coaxial`. The result is a single
 merged well domain named `name`, with supply and return parts named by
 [`closed_loop_well_names`](@ref). The return part is connected to the
-reservoir in `return_reservoir_cell` (defaults to the first reservoir cell)
-with zero well indices.
+reservoir in `return_reservoir_cell` with zero well indices. By default, this
+is the reservoir cell perforated by the end node of the supply part, or the
+first perforated reservoir cell if the end node is not perforated.
 """
 function setup_closed_loop_well(D::DataDomain, reservoir_cells;
     closed_loop_type = :generic,
@@ -127,7 +128,7 @@ end
 
 function setup_closed_loop_well(type::AbstractClosedLoopWell, D::DataDomain, reservoir_cells;
     name = :CL,
-    return_reservoir_cell = reservoir_cells[1],
+    return_reservoir_cell = missing,
     kwarg...)
 
     supply_name, return_name = closed_loop_well_names(type, name)
@@ -147,6 +148,13 @@ node where the fluid leaves the loop.
 """
 function setup_closed_loop_supply end
 
+"""
+    setup_vertical_closed_loop_well(D::DataDomain, i, j; heel = 1, toe = missing, kwarg...)
+
+Set up a vertical closed-loop well in column `(i, j)` of a logically
+structured mesh, from layer `heel` to layer `toe` (defaults to the bottom
+layer). See [`setup_closed_loop_well`](@ref) for the keyword arguments.
+"""
 function setup_vertical_closed_loop_well(D::DataDomain, i, j;
     heel = 1, toe = missing, kwarg...)
 
@@ -165,27 +173,59 @@ function setup_vertical_closed_loop_well(D::DataDomain, i, j;
     for (ix, k) in enumerate(k_range)
         reservoir_cells[ix] = cell_index(g, (i, j, k))
     end
-    # Set up BTES well
     return setup_closed_loop_well(D, reservoir_cells; kwarg...)
 end
 
+"""
+    setup_btes_well(D::DataDomain, reservoir_cells; name = :BTES, closed_loop_type = :u1, kwarg...)
+
+Set up a borehole thermal energy storage (BTES) well. This is a closed-loop
+well (see [`setup_closed_loop_well`](@ref)) that defaults to a 1U well.
+"""
 function setup_btes_well(D::DataDomain, reservoir_cells;
-    name = :BTES, kwarg...)
+    name = :BTES, closed_loop_type = :u1, kwarg...)
 
     return setup_closed_loop_well(D, reservoir_cells;
-        name = name, kwarg...)
+        name = name, closed_loop_type = closed_loop_type, kwarg...)
 
 end
 
+"""
+    setup_vertical_btes_well(D::DataDomain, i, j; name = :BTES, closed_loop_type = :u1, heel = 1, toe = missing, kwarg...)
+
+Set up a vertical BTES well in column `(i, j)` of a logically structured mesh.
+See [`setup_btes_well`](@ref) and [`setup_vertical_closed_loop_well`](@ref).
+"""
 function setup_vertical_btes_well(D::DataDomain, i, j;
-    name = :BTES, heel = 1, toe = missing, kwarg...)
+    name = :BTES, closed_loop_type = :u1, heel = 1, toe = missing, kwarg...)
 
     return setup_vertical_closed_loop_well(D, i, j;
-        name = name, heel = heel, toe = toe, kwarg...)
+        name = name, closed_loop_type = closed_loop_type,
+        heel = heel, toe = toe, kwarg...)
 
 end
 
-function setup_closed_loop_supply(type::GenericClosedLoopWell, D::DataDomain, reservoir_cells;
+"""
+    setup_closed_loop_supply(type::ClosedLoopGenericWell, D, reservoir_cells; kwarg...)
+
+Supply part of a generic closed-loop well. By default, this is a single pipe
+that starts in the first and ends in the last of `reservoir_cells`. All nodes
+are tagged `:pipe`.
+
+# Keyword arguments
+- `radius_pipe = 20e-3`: Outer pipe radius [m].
+- `wall_thickness_pipe = 2.5e-3`: Pipe wall thickness [m].
+- `grouting_thickness = 50e-3`: Grout thickness outside the pipe [m].
+- `pipe_thermal_conductivity = 0.35`: Pipe wall thermal conductivity [W/(m K)].
+- `grouting_thermal_conductivity = 2.3`: Grout thermal conductivity [W/(m K)].
+- `dir = :z`: Direction of the well in each reservoir cell.
+- `neighborship`, `perforation_cells_well`, `well_cell_centers`, `end_nodes`:
+  General well topology. `neighborship`, `well_cell_centers` and `end_nodes`
+  must be given together, with exactly one end node. `perforation_cells_well`
+  defaults to one node per reservoir cell.
+- `segment_models`, `tag`: Segment models and node tags for a general topology.
+"""
+function setup_closed_loop_supply(type::ClosedLoopGenericWell, D::DataDomain, reservoir_cells;
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     perforation_cells_well = missing,
@@ -194,53 +234,31 @@ function setup_closed_loop_supply(type::GenericClosedLoopWell, D::DataDomain, re
     segment_models = missing,
     end_nodes = missing,
     tag = missing,
-    name = :CL_a,
+    name = :CL_supply,
     radius_pipe = 20e-3,
-    wall_thickness = 2.5e-3,
+    wall_thickness_pipe = 2.5e-3,
     grouting_thickness = 50e-3,
     pipe_thermal_conductivity = 0.35,
     grouting_thermal_conductivity = 2.3,
-    pipe_spacing = 60e-3,
     kwarg...)
 
+    nc = length(reservoir_cells)
     if ismissing(neighborship)
-        if !ismissing(perforation_cells_well) || !ismissing(end_nodes)
-            error("Provide either neighborship, perforation_cells_well, \
-                well_cell_centers, end_nodes, or none of them.")
-        end
-        # Create pipe cells
-        reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
-        if dir isa AbstractVector
-            dir = vcat(dir, reverse(dir))
-        end
-        nc_pipe = length(reservoir_cells)
-        pipe_cells = collect(1:nc_pipe)
+        check_closed_loop_topology_args(perforation_cells_well,
+            well_cell_centers, end_nodes)
+        # Single pipe from the first to the last reservoir cell
+        pipe_cells = collect(1:nc)
         perforation_cells_well = pipe_cells
-        # Set up connectivity
         neighborship = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
-        # Set up well cell centers and end nodes
-        nc_mid = div(nc_pipe, 2)
-        left_ix = Int.(1:nc_mid)
-        right_ix = Int.(1:nc_mid) .+ nc_mid
-        wc_left = cell_centers[:, reservoir_cells[left_ix]] .- [pipe_spacing/2, 0.0, 0.0]
-        wc_right = cell_centers[:, reservoir_cells[right_ix]] .+ [pipe_spacing/2, 0.0, 0.0]
-        well_cell_centers = hcat(wc_left, wc_right)
         end_nodes = [pipe_cells[end]]
-        # Set tag for identifying cell groups (e.g., pipe legs)
-        if !ismissing(tag)
-            @warn "tag argument is ignored when neighborship is not \
-                provided. Tags will be created automatically."
-        end
-        tag = Vector{Symbol}(undef, nc_pipe)
-        tag[pipe_cells[left_ix]] .= :pipe_left
-        tag[pipe_cells[right_ix]] .= :pipe_right
+        well_cell_centers = cell_centers[:, reservoir_cells]
     else
         if ismissing(well_cell_centers) || ismissing(end_nodes)
             error("If neighborship is provided, well_cell_centers and \
                 end_nodes must also be provided.")
         end
         if ismissing(perforation_cells_well)
-            perforation_cells_well = collect(eachindex(reservoir_cells))
+            perforation_cells_well = collect(1:nc)
         end
     end
     if ismissing(segment_models)
@@ -259,33 +277,42 @@ function setup_closed_loop_supply(type::GenericClosedLoopWell, D::DataDomain, re
         dir = dir,
         WI = 0.0,
         radius = radius_pipe,
-        casing_thickness = wall_thickness,
+        casing_thickness = wall_thickness_pipe,
         grouting_thickness = grouting_thickness,
         casing_thermal_conductivity = pipe_thermal_conductivity,
         grouting_thermal_conductivity = grouting_thermal_conductivity,
         kwarg...)
-    if !ismissing(tag)
-        supply_well[:tag, Cells()] = tag
+    if ismissing(tag)
+        tag = fill(:pipe, number_of_cells(physical_representation(supply_well)))
     end
+    supply_well[:tag, Cells()] = tag
 
     return supply_well
 
 end
 
+# Topology arguments are only used together with neighborship
+function check_closed_loop_topology_args(args...)
+    if any(!ismissing, args)
+        error("Topology arguments (e.g., cell groups, well_cell_centers and \
+            end_nodes) can only be given together with neighborship.")
+    end
+end
+
 ## Merging of supply and return wells
 
 """
-    merge_closed_loop_well(supply_well::DataDomain, return_reservoir_cell;
-        name, return_name = Symbol(name, "_b"))
+    merge_closed_loop_well(supply_well::DataDomain, return_reservoir_cell = missing;
+        name, return_name = Symbol(name, "_return"))
 
 Merge the supply part of a closed-loop well with a return well consisting of a
 single node at the end node of the supply well. The return node gets a copy of
 the data in the supply end node, and a zero-length segment connects the two.
 The return well is perforated in `return_reservoir_cell` with zero well
-indices.
+indices (see [`setup_closed_loop_well`](@ref) for the default).
 """
-function merge_closed_loop_well(supply_well::DataDomain, return_reservoir_cell;
-    name, return_name = Symbol(name, "_b"))
+function merge_closed_loop_well(supply_well::DataDomain, return_reservoir_cell = missing;
+    name, return_name = Symbol(name, "_return"))
 
     w = physical_representation(supply_well)
     length(w.end_nodes) == 1 || error("Closed-loop supply well must have exactly one end node.")
@@ -305,9 +332,18 @@ function setup_closed_loop_return_well(supply_well::DataDomain, return_reservoir
 
     w = physical_representation(supply_well)
     end_node = only(w.end_nodes)
-    perf = findfirst(isequal(return_reservoir_cell), w.perforations.reservoir)
-    if isnothing(perf)
-        perf = 1
+    if ismissing(return_reservoir_cell)
+        # Use the reservoir cell at the end node if it is perforated
+        perf = findfirst(isequal(end_node), w.perforations.self)
+        if isnothing(perf)
+            perf = 1
+        end
+        return_reservoir_cell = w.perforations.reservoir[perf]
+    else
+        perf = findfirst(isequal(return_reservoir_cell), w.perforations.reservoir)
+        if isnothing(perf)
+            perf = 1
+        end
     end
     return_well = JutulDarcy.MultiSegmentWell(zeros(Int, 2, 0), [return_reservoir_cell], [1];
         type = w.type,

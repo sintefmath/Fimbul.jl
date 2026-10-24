@@ -70,8 +70,8 @@ end
         wall_thickness_pipe_inner = 3e-3*meter, # Inner pipe wall thickness
         radius_pipe_outer = 25e-3*meter, # Outer pipe outer radius
         wall_thickness_pipe_outer = 4e-3*meter, # Outer pipe wall thickness
-        inner_pipe_thermal_conductivity = λp, # Pipe thermal conductivity
-        outer_pipe_thermal_conductivity = λp # Pipe thermal conductivity
+        pipe_thermal_conductivity_inner = λp, # Pipe thermal conductivity
+        pipe_thermal_conductivity_outer = λp # Pipe thermal conductivity
     );
 
     function setup_btes_single( # Utility function to set up a BTES simulation case
