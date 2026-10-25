@@ -15,7 +15,6 @@
 
 - New abstract type `AbstractClosedLoopWell` with the concrete types `ClosedLoopGenericWell`, `ClosedLoop1UWell` and `ClosedLoopCoaxialWell`. The type is stored as the `type` of the `MultiSegmentWell`, and `closed_loop_type` accepts either a type or `:generic`, `:u1` and `:coaxial`. New closed-loop types implement `setup_closed_loop_supply`.
 - `ags` uses `ClosedLoopGenericWell` with a general well topology.
-- New `check_closed_loop_pressure` warns if a bottom-hole pressure control is too low to keep the pressure in a closed loop above the minimum pressure (e.g., a generic well flowing downwards to an outlet at depth). The `ags`, `btes` and `coaxial_bhe` cases run this check.
 - All closed-loop types accept `dir` (also per reservoir cell), generic wells tag their nodes `:pipe`, and `setup_vertical_closed_loop_well` is exported. The setup for each type is documented in `setup_closed_loop_supply`.
 
 ### Compatibility

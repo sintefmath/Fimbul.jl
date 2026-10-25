@@ -116,16 +116,6 @@ merged well domain named `name`, with supply and return parts named by
 reservoir in `return_reservoir_cell` with zero well indices. By default, this
 is the reservoir cell perforated by the end node of the supply part, or the
 first perforated reservoir cell if the end node is not perforated.
-
-# Pressure in the loop
-The fluid in a closed loop is a single liquid phase, and the pressure must stay
-above the minimum pressure of the model everywhere in the loop. If one part is
-controlled by bottom-hole pressure (BHP) at a node below the highest point of
-the loop, the BHP must exceed the hydrostatic pressure of the fluid column
-above that node, ρ g Δz, plus the minimum pressure. Otherwise the simulation
-fails to converge (physically, the siphon would break). This is typically the
-case for a generic well that flows downwards to an outlet at depth. Use
-[`check_closed_loop_pressure`](@ref) to check the controls.
 """
 function setup_closed_loop_well(D::DataDomain, reservoir_cells;
     closed_loop_type = :generic,
@@ -307,87 +297,6 @@ function check_closed_loop_topology_args(args...)
         error("Topology arguments (e.g., cell groups, well_cell_centers and \
             end_nodes) can only be given together with neighborship.")
     end
-end
-
-## Pressure check
-
-"""
-    check_closed_loop_pressure(model, controls; density = missing, p_min = missing)
-
-Check that bottom-hole pressure (BHP) controls of closed-loop wells keep the
-pressure in the loop above the minimum pressure of the model. `controls` is a
-`Dict` of well controls (as passed to `setup_reservoir_forces`), forces with a
-`:Facility` entry, or a vector of forces.
-
-For each part of a closed-loop well with a BHP target, the hydrostatic
-pressure at the highest node of the loop is estimated as
-`bhp - density*g*(z_bhp - z_top)`, where `z_bhp` is the depth of the node where
-the BHP applies. A warning is given if this is below `p_min`. `density`
-defaults to the largest reference density of the well system, and `p_min` to
-the minimum pressure of the well model. Friction is not accounted for.
-
-Returns `true` if all checks pass, `false` otherwise.
-"""
-function check_closed_loop_pressure(model::MultiModel, controls::AbstractVector; kwarg...)
-    ok = true
-    for forces in unique(objectid, controls)
-        ok = check_closed_loop_pressure(model, forces; kwarg...) && ok
-    end
-    return ok
-end
-
-function check_closed_loop_pressure(model::MultiModel, controls; kwarg...)
-    if haskey(controls, :Facility)
-        controls = controls[:Facility].control
-    end
-    ok = true
-    for (key, submodel) in pairs(model.models)
-        well = submodel.data_domain
-        is_closed_loop_well(well) || continue
-        ok = check_closed_loop_pressure(submodel, controls; kwarg...) && ok
-    end
-    return ok
-end
-
-function check_closed_loop_pressure(well_model::SimulationModel, controls;
-    density = missing,
-    p_min = missing)
-
-    well = well_model.data_domain
-    W = physical_representation(well)
-    if ismissing(density)
-        density = maximum(JutulDarcy.reference_densities(well_model.system))
-    end
-    if ismissing(p_min)
-        p_min = JutulDarcy.DEFAULT_MINIMUM_PRESSURE
-        pvar = get(well_model.primary_variables, :Pressure, nothing)
-        if pvar isa JutulDarcy.Pressure
-            p_min = pvar.minimum_pressure
-        end
-    end
-    # Depth of the highest node in the loop
-    z = well[:cell_centroids][3, :]
-    z_top = minimum(z)
-    ok = true
-    for (ix, name) in enumerate(W.multiwell.names)
-        ctrl = get(controls, name, nothing)
-        if !(ctrl isa Union{InjectorControl, ProducerControl}) ||
-            !(ctrl.target isa BottomHolePressureTarget)
-            continue
-        end
-        bhp = ctrl.target.value
-        Δp = density*Jutul.gravity_constant*(z[W.multiwell.top_nodes[ix]] - z_top)
-        if bhp - Δp < p_min
-            ok = false
-            @warn "BHP of closed-loop well $name is too low to keep the pressure \
-                in the loop above the minimum pressure \
-                ($(round(p_min/1e5, digits = 3)) bar). The hydrostatic pressure \
-                at the top of the loop is estimated to \
-                $(round((bhp - Δp)/1e5, digits = 3)) bar, and the BHP should be \
-                at least $(round((p_min + Δp)/1e5, digits = 3)) bar."
-        end
-    end
-    return ok
 end
 
 ## Merging of supply and return wells
