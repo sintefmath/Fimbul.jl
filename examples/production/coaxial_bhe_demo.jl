@@ -55,7 +55,7 @@ function run_case(case)
         relative = false, model = :Reservoir)
     push!(cfg[:timestep_selectors], sel)
     sel = VariableChangeTimestepSelector(:Temperature, 5.0;
-        relative = false, model = :CoaxialWell_supply)
+        relative = false, model = :CoaxialWell)
     push!(cfg[:timestep_selectors], sel)
     return simulate_reservoir(case; simulator = sim, config = cfg)
 end
@@ -84,7 +84,7 @@ ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.5, aspect = (1, 1, 4
     title = "Homogeneous reservoir – mesh")
 Jutul.plot_mesh_edges!(ax, msh_hom, alpha = 0.2)
 wells = get_model_wells(case_hom_inner.model)
-plot_well!(ax, msh_hom, wells[:CoaxialWell_supply]; fontsize=0.0)
+plot_well!(ax, msh_hom, wells[:CoaxialWell_inner]; fontsize=0.0)
 
 fig
 
@@ -132,14 +132,16 @@ for (i, (c, r, l)) in enumerate(zip(
         ylabel = "Depth (m)",
         yreversed = true)
 
-    well = r.model.models[:CoaxialWell_supply].data_domain
+    ## The inner part of the merged closed-loop well holds the pipes and
+    ## grout. Its nodes come first in the merged well :CoaxialWell.
+    well = get_model_wells(r.model, data_domain = true)[:CoaxialWell_inner]
     T_well = convert_from_si.(
-        c.result.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+        c.result.states[end][:CoaxialWell][:Temperature], :Celsius)
     tags = well[:tag] |> unique |> collect
 
     for (j, tag) in enumerate(tags)
         name = titlecase(replace(string(tag), "_" => " "))
-        cells = well[:tag] .== tag
+        cells = findall(well[:tag] .== tag)
         Tn = T_well[cells]
         zn = well[:cell_centroids][3, cells]
         lines!(ax, Tn, zn; color = colors[j], linewidth = 4, label = name)
@@ -207,14 +209,14 @@ for (i, (results, case, label)) in enumerate(zip(
         xticks = 0:5:100,
         yreversed = true)
 
-    well = case.model.models[:CoaxialWell_supply].data_domain
+    well = get_model_wells(case.model, data_domain = true)[:CoaxialWell_inner]
     T_well = convert_from_si.(
-        results.result.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+        results.result.states[end][:CoaxialWell][:Temperature], :Celsius)
     tags = well[:tag] |> unique |> collect
 
     for (j, tag) in enumerate(tags)
         name = titlecase(replace(string(tag), "_" => " "))
-        cells = well[:tag] .== tag
+        cells = findall(well[:tag] .== tag)
         Tn = T_well[cells]
         zn = well[:cell_centroids][3, cells]
         lines!(ax, Tn, zn; color = colors[j], linewidth = 4, label = name)
@@ -246,8 +248,8 @@ for λ in λ_values
     case_i = coaxial_bhe(;
         inject_into = :outer,
         homogeneous_args...,
-        well_args = (inner_pipe_thermal_conductivity = λ,
-        outer_pipe_thermal_conductivity = λ_default, # keep outer pipe conductivity constant),
+        well_args = (pipe_thermal_conductivity_inner = λ,
+        pipe_thermal_conductivity_outer = λ_default, # keep outer pipe conductivity constant),
     ))
     push!(cases_λ, case_i)
     push!(results_λ, run_case(case_i))
@@ -269,14 +271,14 @@ for (i, (results, case, label)) in enumerate(
         ylabel = "Depth (m)",
         yreversed = true)
 
-    well = case.model.models[:CoaxialWell_supply].data_domain
+    well = get_model_wells(case.model, data_domain = true)[:CoaxialWell_inner]
     T_well = convert_from_si.(
-        results.result.states[end][:CoaxialWell_supply][:Temperature], :Celsius)
+        results.result.states[end][:CoaxialWell][:Temperature], :Celsius)
     tags = well[:tag] |> unique |> collect
 
     for (j, tag) in enumerate(tags)
         name = titlecase(replace(string(tag), "_" => " "))
-        cells = well[:tag] .== tag
+        cells = findall(well[:tag] .== tag)
         Tn = T_well[cells]
         zn = well[:cell_centroids][3, cells]
         lines!(ax, Tn, zn; color = colors[j], linewidth = 4, label = name)
@@ -311,8 +313,8 @@ ax_pwr = Axis(fig_power[1, 1];
 colors_λ = Makie.wong_colors(length(λ_values))
 T_inj = base_args.temperature_inj
 for (i, (results, case, label)) in enumerate(zip(results_λ, cases_λ, labels_λ))
-    T_prod = results.wells[:CoaxialWell_supply][:temperature]
-    mrate = results.wells[:CoaxialWell_supply][:mass_rate]
+    T_prod = results.wells[:CoaxialWell_inner][:temperature]
+    mrate = results.wells[:CoaxialWell_inner][:mass_rate]
     Cp = mean(reservoir_model(case.model).data_domain[:component_heat_capacity])
     power_mw = abs.(mrate .* Cp .* (T_prod .- T_inj)) ./ 1e6
     t_years = results.time ./ si_unit(:year)

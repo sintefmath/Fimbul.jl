@@ -1,5 +1,26 @@
 # Fimbul.jl Changelog
 
+## [Unreleased]
+
+### Breaking changes
+
+- Closed-loop wells are now a single merged multisegment well instead of separate `<name>_supply` and `<name>_return` wells coupled by a cross term. The supply and return parts are merged with `JutulDarcy.WellMerging.merge_well_domains` and connected by a regular well segment. `setup_closed_loop_well` (and `setup_btes_well`, `setup_vertical_btes_well`) returns one well domain named `<name>`, and states and the model use this name. The two parts are controlled under names with a type-dependent suffix (see `closed_loop_well_names`): `_supply`/`_return` for generic and 1U wells, and `_inner`/`_outer` for coaxial wells. For example, `coaxial_bhe` now uses `CoaxialWell_inner` and `CoaxialWell_outer`. The return node comes after the supply nodes and has tag `:return`.
+- `ClosedLoopGenericWell` (formerly `closed_loop_type = :simple`) without a given topology is now a single pipe from the first to the last reservoir cell instead of a U-shaped pipe. The `:simple` alias is removed.
+- By default, the return part is perforated in the reservoir cell of the supply end node (if perforated).
+- Consistent keyword arguments for the closed-loop setup: `wall_thickness` (generic) is renamed to `wall_thickness_pipe`, and `inner_pipe_thermal_conductivity`/`outer_pipe_thermal_conductivity` (coaxial) to `pipe_thermal_conductivity_inner`/`pipe_thermal_conductivity_outer`. Topology arguments (cell groups, `well_cell_centers`, `end_nodes`) without `neighborship` now give an error for all types instead of being ignored.
+- `setup_btes_well` and `setup_vertical_btes_well` default to 1U wells (`closed_loop_type = :u1`).
+- `btes`: the sectors in `input_data[:sectors]` list the closed-loop wells instead of the supply and return names.
+
+### New features
+
+- New abstract type `AbstractClosedLoopWell` with the concrete types `ClosedLoopGenericWell`, `ClosedLoop1UWell` and `ClosedLoopCoaxialWell`. The type is stored as the `type` of the `MultiSegmentWell`, and `closed_loop_type` accepts either a type or `:generic`, `:u1` and `:coaxial`. New closed-loop types implement `setup_closed_loop_supply`.
+- `ags` uses `ClosedLoopGenericWell` with a general well topology.
+- All closed-loop types accept `dir` (also per reservoir cell), generic wells tag their nodes `:pipe`, and `setup_vertical_closed_loop_well` is exported. The setup for each type is documented in `setup_closed_loop_supply`.
+
+### Compatibility
+
+- Requires a JutulDarcy version where `setup_reservoir_model` adds the original names of merged wells to the facility.
+
 ## [v0.4.0]
 
 ### Breaking changes

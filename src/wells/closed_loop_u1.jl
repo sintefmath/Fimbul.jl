@@ -1,12 +1,34 @@
-function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
-    name = :CL,
-    return_reservoir_cell = reservoir_cells[1],
+"""
+    setup_closed_loop_supply(type::ClosedLoop1UWell, D, reservoir_cells; kwarg...)
+
+Supply part of a single U-tube (1U) closed-loop well. By default, the U-tube
+goes down through `reservoir_cells` and back up again, with two pipes embedded
+in grout. Nodes are tagged `:pipe_left`, `:pipe_right`, `:grout_left` and
+`:grout_right`.
+
+# Keyword arguments
+- `radius_grout = 65e-3`: Borehole (grout) radius [m].
+- `radius_pipe = 15e-3`: Outer pipe radius [m].
+- `wall_thickness_pipe = 3e-3`: Pipe wall thickness [m].
+- `pipe_spacing = 60e-3`: Distance between the pipe centers [m].
+- `pipe_thermal_conductivity = 0.38`: Pipe wall thermal conductivity [W/(m K)].
+- `grouting_thermal_conductivity = 2.3`: Grout thermal conductivity [W/(m K)].
+- `grouting_heat_capacity = 1500`: Grout heat capacity [J/(kg K)].
+- `grouting_density = 2000`: Grout density [kg/m³].
+- `dir = :z`: Direction of the well in each reservoir cell.
+- `neighborship`, `pipe_cells`, `grout_cells`, `well_cell_centers`,
+  `end_nodes`: General well topology. Must be given together.
+- `segment_models`, `tag`: Segment models and node tags for a general topology.
+"""
+function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservoir_cells;
+    name = :CL_supply,
     cell_centers = D[:cell_centroids],
     neighborship = missing,
     pipe_cells = missing,
     grout_cells = missing,
     tag = missing,
     well_cell_centers = missing,
+    dir = :z,
     segment_models = missing,
     end_nodes = missing,
     radius_grout = 65e-3,
@@ -20,12 +42,13 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     kwarg...)
 
     if ismissing(neighborship)
-        if !ismissing(pipe_cells) || !ismissing(grout_cells)
-            error("Provide either neighborship, pipe_cells, grout_cells, \
-                well_cell_centers, end_nodes, or none of them.")
-        end
+        check_closed_loop_topology_args(pipe_cells, grout_cells,
+            well_cell_centers, end_nodes)
         # Create grout and pipe cells
         reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
+        if dir isa AbstractVector
+            dir = vcat(dir, reverse(dir))
+        end
         nc_pipe = length(reservoir_cells)
         nc_grout = length(reservoir_cells)
         nc_mid = div(nc_pipe, 2)
@@ -99,13 +122,13 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
 
     # Set up common well properties
     args = (
-        type = :closed_loop,
+        type = type,
         simple_well = false,
         # WI = 0.0
     )
     # Set up supply well
     supply_well = setup_well(D, reservoir_cells;
-        name = Symbol(name, "_supply"),
+        name = name,
         neighborship = neighborship,
         perforation_cells_well = grout_cells,
         well_cell_centers = well_cell_centers,
@@ -115,6 +138,7 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
         grouting_thermal_conductivity = grouting_thermal_conductivity,
         segment_models = segment_models,
         end_nodes = end_nodes,
+        dir = dir,
         args..., kwarg...)
     # Augment supply well with closed_loop-specific properties
     augment_closed_loop_domain_u1!(supply_well,
@@ -127,11 +151,8 @@ function setup_closed_loop_well_u1(D::DataDomain, reservoir_cells;
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_u1!(
     supply_well, pipe_cells, grout_cells)
-    # Set up return well
-    return_well = setup_closed_loop_return_well(D, return_reservoir_cell;
-        name = name)
 
-    return [supply_well, return_well]
+    return supply_well
 
 end
 
