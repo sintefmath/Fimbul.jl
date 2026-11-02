@@ -19,7 +19,7 @@
 
 ### Compatibility
 
-- Requires a JutulDarcy version where `setup_reservoir_model` adds the original names of merged wells to the facility.
+- Requires JutulDarcy ≥ 0.4.1 (and < 0.5), where `setup_reservoir_model` adds the original names of merged wells to the facility.
 
 ## [v0.4.0]
 
