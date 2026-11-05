@@ -92,12 +92,19 @@ Collins analytical heat-transport solution.
 
 # Keyword arguments
 - `nang = 32`: Number of angular sectors in the radial mesh.
-- `radii = vcat(collect(1.0:100.0), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14]))`:
-  Radial cell-edge positions in meters.
+- `nrad = 100`: Number of radial cell edges in the uniform near-well zone
+  (0.5–99.5 m). Only used if `radii` is not given.
+- `radii = nothing`: Radial cell-edge positions in meters. The first entry is
+  the radius of the central (well) cell. Defaults to `nrad` uniformly spaced
+  edges from 0.5 to 99.5 m followed by 14 geometrically growing rings (ratio
+  1.3).
 - `layer_depths = [0.0, 5.0, 10.0, 15.0, 20.0]`: Vertical layer interfaces in meters.
 - `permeability_horizontal = 2.31e-11*meter^2`: Horizontal permeability.
 - `permeability_vertical = permeability_horizontal/3`: Vertical permeability.
 - `porosity = 0.35`: Rock porosity.
+- `thermal_dispersivity = nothing`: Longitudinal and transverse thermal
+  dispersivity as a 2×1 matrix `[α_L; α_T]` (or per cell). No dispersion if
+  `nothing`.
 - `rock_thermal_conductivity = 2.0*watt/(meter*Kelvin)`: Rock thermal conductivity.
 - `fluid_thermal_conductivity = 0.59*watt/(meter*Kelvin)`: Fluid thermal conductivity.
 - `rock_heat_capacity = 800.0*joule/(kilogram*Kelvin)`: Rock heat capacity.
@@ -108,6 +115,9 @@ Collins analytical heat-transport solution.
 - `injection_rate = 400.0*meter^3/day`: Total injection rate.
 - `injection_temperature = convert_to_si(20.0, :Celsius)`: Injection temperature.
 - `well_radius = 0.1`: Well radius.
+- `well_index = missing`: Well index of the well connection. Computed with the
+  Peaceman model if `missing` (requires a well cell sufficiently larger than
+  the well radius).
 - `num_steps = 90`: Number of report steps.
 - `step_size = day`: Length of each report step.
 
@@ -117,7 +127,7 @@ A `JutulCase` for the analytical radial benchmark.
 function analytical_radial(;
     nang::Int = 32,
     nrad::Int = 100,
-    # radii = vcat(collect(0.5:99.5), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14])),
+    radii = nothing,
     layer_depths = [0.0, 5.0, 10.0, 15.0, 20.0],
     permeability_horizontal = 2.31e-11*meter^2,
     permeability_vertical = permeability_horizontal/3,
@@ -133,11 +143,15 @@ function analytical_radial(;
     injection_rate = 400.0*meter^3/day,
     injection_temperature = convert_to_si(20.0, :Celsius),
     well_radius = 0.1,
+    well_index = missing,
     num_steps::Int = 90,
     step_size = day,
 )
 
-    radii = vcat(range(0.5, 99.5, length = nrad), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14]))
+    if isnothing(radii)
+        radii = vcat(range(0.5, 99.5, length = nrad), 100.0 .+ cumsum([1.0 * 1.3^(i - 1) for i in 1:14]))
+    end
+    @assert issorted(radii) && radii[1] > 0 "Radii must be positive and increasing."
     # @assert length(radii) == 250 + 14 "Expected 250 + 14 radial cells for the benchmark discretization."
     # @assert length(layer_depths) == 5 "Expected 4 vertical layers for the benchmark discretization."
 
@@ -170,6 +184,7 @@ function analytical_radial(;
         name = :Well,
         simple_well = false,
         radius = well_radius,
+        WI = well_index,
         WIth = 10
     )
     control = Dict(
@@ -234,6 +249,7 @@ function analytical_radial(;
         :boundary_temperature => boundary_temperature,
         :injection_rate => injection_rate,
         :injection_temperature => injection_temperature,
+        :thermal_dispersivity => thermal_dispersivity,
         :well_radius => well_radius,
         :well_name => :Well,
     )
