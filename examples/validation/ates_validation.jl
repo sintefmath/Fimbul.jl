@@ -117,7 +117,7 @@ function convergence_study(; with_dispersion = false, nrad_values = [100, 200, 4
     )
 
     for nrad in nrad_values
-        thermal_dispersivity = with_dispersion ? permutedims([α_L α_T]) : nothing
+        thermal_dispersivity = with_dispersion ? (α_L, α_T) : nothing
         case = Fimbul.analytical_radial(
             thermal_dispersivity = thermal_dispersivity,
             nrad = nrad,
@@ -210,7 +210,7 @@ fig_conv_no_disp
 case_disp = Fimbul.analytical_radial(
     nrad = 3200,
     nang = 64,
-    thermal_dispersivity = permutedims([αL_disp αT_disp]),
+    thermal_dispersivity = (αL_disp, αT_disp),
     layer_depths = [0.0, 20.0],
 )
 sim_disp, cfg_disp = setup_reservoir_simulator(

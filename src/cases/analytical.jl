@@ -103,8 +103,8 @@ Collins analytical heat-transport solution.
 - `permeability_vertical = permeability_horizontal/3`: Vertical permeability.
 - `porosity = 0.35`: Rock porosity.
 - `thermal_dispersivity = nothing`: Longitudinal and transverse thermal
-  dispersivity as a 2×1 matrix `[α_L; α_T]` (or per cell). No dispersion if
-  `nothing`.
+  dispersivity `(α_L, α_T)`, or any other input accepted by
+  `JutulDarcy.add_thermal_dispersion!`. No dispersion if `nothing`.
 - `rock_thermal_conductivity = 2.0*watt/(meter*Kelvin)`: Rock thermal conductivity.
 - `fluid_thermal_conductivity = 0.59*watt/(meter*Kelvin)`: Fluid thermal conductivity.
 - `rock_heat_capacity = 800.0*joule/(kilogram*Kelvin)`: Rock heat capacity.
