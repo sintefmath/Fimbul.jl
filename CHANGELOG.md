@@ -1,5 +1,14 @@
 # Fimbul.jl Changelog
 
+## [Unreleased]
+
+### New features
+
+**ATES in the SPE10 model (`ates_spe10`)**
+- Aquifer thermal energy storage with a hot and a cold well in the Upper Ness or Tarbert formation of the SPE10 model 2, in 3D or in a vertical slice along the wells (`slice`). The SPE10 block, optionally a lateral subset and coarsened, is surrounded by cap and base rock and by padding cells with hydrostatic and geothermal boundary conditions. The injector reinjects what the other well produces.
+- `Fimbul.spe10_block` gives the (coarsened) SPE10 permeability and porosity of a set of layers and columns.
+- Reads the SPE10 data with `JutulDarcy.SPE10.load_data`.
+
 ## [v0.5.0]
 
 ### Breaking changes

@@ -28,7 +28,7 @@ export benchmark_ht_2d
 export geothermal_doublet
 export egs
 export ags
-export ates
+export ates, ates_spe10
 export btes
 export ftes
 export coaxial_bhe

@@ -164,6 +164,22 @@ end
     @test collect(keys(get_model_wells(case_noinj.model))) == [:Producer]
 end
 
+@testset "ATES in SPE10" begin
+    case = ates_spe10(ix = 21:30, iy = 1:40, coarsen = (2, 2, 5))
+    info = case.input_data
+    @test info[:dims] == (13, 28, 22)
+    @test length(info[:block_cells]) == 5 * 20 * 10
+    res = simulate_reservoir(case[1:2], info_level = -1)
+    @test length(res.states) == 2
+    # A vertical slice along the wells in the Tarbert formation
+    case = ates_spe10(formation = :tarbert, slice = 30, coarsen = (1, 1, 5))
+    nx, ny, nz = case.input_data[:dims]
+    @test nx == 1 && nz == 7 + 12
+    @test case.input_data[:slice]
+    res = simulate_reservoir(case[1:2], info_level = -1)
+    @test length(res.states) == 2
+end
+
 ##
 @testset "BTES topology" begin
 

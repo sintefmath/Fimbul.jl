@@ -25,6 +25,7 @@ egg_geothermal_doublet
 ## Underground thermal energy storage
 ```@docs
 ates
+ates_spe10
 btes
 ftes
 egg_ates
