@@ -375,6 +375,9 @@ function build_fimbul_docs(
                     "man/cases/cases.md",
                     "man/cases/utils.md",
                 ],
+                "Wells" => [
+                    "man/wells/closed_loop.md",
+                ],
             ],
             "References" => [
                 "Bibliography" => "extras/refs.md"
