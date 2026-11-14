@@ -17,9 +17,17 @@
 - `ags` uses `ClosedLoopGenericWell` with a general well topology.
 - All closed-loop types accept `dir` (also per reservoir cell), generic wells tag their nodes `:pipe`, and `setup_vertical_closed_loop_well` is exported. The setup for each type is documented in `setup_closed_loop_supply`.
 
+### Improvements
+
+- `H2OSystem`: adapted to the upwinding on potential differences in the compositional fluxes of JutulDarcy 0.4.1, and accepts (and ignores) the flash-specific variable defaults that JutulDarcy passes on.
+
+### Documentation
+
+- New API page for closed-loop wells (setup functions and closed-loop well types).
+
 ### Compatibility
 
-- Requires JutulDarcy ≥ 0.4.1 (and < 0.5), where `setup_reservoir_model` adds the original names of merged wells to the facility.
+- Requires JutulDarcy ≥ 0.4.1 (and < 0.5), where `setup_reservoir_model` adds the original names of merged wells to the facility. Fimbul 0.4.0 does not work with JutulDarcy 0.4.1 (`H2OSystem` models fail to set up and simulate).
 
 ## [v0.4.0]
 
