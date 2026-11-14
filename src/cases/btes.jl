@@ -90,8 +90,8 @@ function btes(;
         trajectory = [xw[1] xw[2] 0.0 + 1e-3; xw[1] xw[2] depths[end] - 1e-3]
         cells = Jutul.find_enclosing_cells(mesh, trajectory, n = 100)
         filter!(c -> layers[c] ∈ well_layers, cells)
-        w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
-        push!(well_models, w_sup, w_ret)
+        well = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
+        push!(well_models, well)
     end
     # Make the model
     # Closed-loop wells must not be shut: The supply and return are hydraulically
@@ -176,9 +176,10 @@ function setup_controls(model, number_of_sectors,
     r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
     θ = atan.(xy[2,:], xy[1,:]) .+ π
     assigned = []
-    wells = well_symbols(model)
-    filter!(well -> contains(String(well), "_supply"), wells)
-    get_return = (well) -> Symbol(replace(String(well), "_supply" => "_return"))
+    # Closed-loop wells, each with a supply and a return part
+    wells = [k for (k, m) in pairs(model.models) if is_closed_loop_well(m.data_domain)]
+    get_supply = (well) -> first(closed_loop_well_names(model.models[well].data_domain))
+    get_return = (well) -> last(closed_loop_well_names(model.models[well].data_domain))
     sectors = Dict()
     wells_per_sector = div(length(wells), number_of_sectors)
     rem = length(wells) - wells_per_sector*number_of_sectors
@@ -197,8 +198,8 @@ function setup_controls(model, number_of_sectors,
         order = sortperm(well_radii)
         sec_wells = Symbol[]
         for (k, wno) in enumerate(order)
-            well_sup = sw[wno]
-            well_ret = get_return(well_sup)
+            well_sup = get_supply(sw[wno])
+            well_ret = get_return(sw[wno])
             @assert well_sup ∉ assigned
             @assert well_ret ∉ assigned
             if k == 1
@@ -236,7 +237,7 @@ function setup_controls(model, number_of_sectors,
             control_charge[well_ret] = ctrl_ret
             control_discharge[well_ret] = ctrl_ret
             push!(assigned, well_sup, well_ret)
-            push!(sec_wells, well_sup, well_ret)
+            push!(sec_wells, sw[wno])
         end
         sectors[Symbol("S$sno")] = sec_wells
     end

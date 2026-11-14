@@ -112,7 +112,9 @@ function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
     dh_max_abs = nothing,
     T_min = convert_to_si(0.0, :Celsius),
     flash_reuse_guess = false,
-    flash_stability_bypass = flash_reuse_guess
+    flash_stability_bypass = flash_reuse_guess,
+    # Other (e.g. flash-specific) defaults from JutulDarcy do not apply here
+    kwarg...
 )
     p_def = Pressure(
         max_abs = dp_max_abs,
@@ -198,9 +200,11 @@ end
 
     X = state.LiquidMassFractions
     Y = state.VaporMassFractions
-    mass_fluxes = JutulDarcy.darcy_phase_mass_fluxes(face, state, model, flux_type, kgrad, upw)
+    phases = JutulDarcy.eachphase(sys)
+    dpot = JutulDarcy.darcy_permeability_potential_differences(face, state, model, flux_type, kgrad, upw, phases)
+    mass_fluxes = JutulDarcy.darcy_phase_mass_fluxes(face, state, model, flux_type, kgrad, upw, phases, dpot)
     # No molecular diffusion for a single component
-    return JutulDarcy.compositional_fluxes!(q, X, Y, mass_fluxes, upw, aqua, ph_ix, component_count)
+    return JutulDarcy.compositional_fluxes!(q, X, Y, mass_fluxes, dpot, upw, aqua, ph_ix, component_count)
 end
 
 # For H2OSystem the (P,H)-based property evaluators (PhaseMassDensities,

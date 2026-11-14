@@ -5,6 +5,10 @@ module Fimbul
     export extruded_mesh, horizontal_fractured_mesh
     # Wells
     export setup_btes_well, setup_vertical_btes_well
+    export setup_closed_loop_well, setup_vertical_closed_loop_well
+    export closed_loop_well_names
+    export AbstractClosedLoopWell, ClosedLoopGenericWell
+    export ClosedLoop1UWell, ClosedLoopCoaxialWell
     # Utils for setting up cases
     export make_schedule, make_utes_schedule
     export set_dirichlet_bcs

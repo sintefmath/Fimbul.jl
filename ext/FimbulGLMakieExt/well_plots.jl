@@ -61,8 +61,16 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
         geo = tpfv_geometry(msh)
     end
         
-    well_representation = model.models[well].domain.representation
-    
+    # Wells may be part of a merged well (e.g., the supply and return parts of
+    # a closed-loop well). Plot only the nodes of the named part by default.
+    well_key = JutulDarcy.WellMerging.merged_well_key(model, well)
+    well_representation = model.models[well_key].domain.representation
+    if ismissing(nodes) && well_key != well
+        info = well_representation.multiwell
+        ix = JutulDarcy.WellMerging.well_local_index(well_representation, well)
+        nodes = Jutul.indirection_range(info.nodes, ix)
+    end
+
     N = well_representation.neighborship
     if !ismissing(nodes)
         keep = [n[1] ∈ nodes && n[2] ∈ nodes for n in eachcol(N)]
@@ -72,7 +80,7 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
     branches = dfs_branches(N)
     rcells = well_representation.perforations.reservoir
     
-    z = model.models[well].data_domain[:cell_centroids][3, :]
+    z = model.models[well_key].data_domain[:cell_centroids][3, :]
     # Plot edges
     for (i, branch) in enumerate(branches)
         zb = z[branch]
