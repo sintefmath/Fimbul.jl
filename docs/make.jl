@@ -403,17 +403,13 @@ function build_fimbul_docs(
             "Formulation" => [
                 "Governing Equations" => "man/formulation/governing_equations.md",
             ],
+            # Keep API one level deep (Manual -> API -> page) so that the
+            # top-bar "Manual" dropdown can show its pages, as in JutulDarcy
             "API" => [
-                "Modelling" => [
-                    "man/pvt/fluid_properties.md",
-                ],
-                "Cases" => [
-                    "man/cases/cases.md",
-                    "man/cases/utils.md",
-                ],
-                "Wells" => [
-                    "man/wells/closed_loop.md",
-                ],
+                "Fluid properties" => "man/pvt/fluid_properties.md",
+                "Case setup" => "man/cases/cases.md",
+                "Case utilities" => "man/cases/utils.md",
+                "Closed-loop wells" => "man/wells/closed_loop.md",
             ],
             "References" => [
                 "Bibliography" => "extras/refs.md"
