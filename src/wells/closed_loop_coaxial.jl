@@ -42,7 +42,7 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
     dir = :z,
     segment_models = missing,
     end_nodes = missing,
-    grouting_thickness = missing,
+    grouting_thickness = 30e-3,
     radius_pipe_inner = 50e-3,
     radius_pipe_outer = sqrt(2)*radius_pipe_inner,
     wall_thickness_pipe_inner = 3e-3,
@@ -53,31 +53,21 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
     fill_thermal_conductivity = missing,
     fill_density = missing,
     fill_heat_capacity = missing,
-    # Deprecated keyword arguments
+    # Removed keyword arguments, give an error
     radius_grout = missing,
     grouting_thermal_conductivity = missing,
     grouting_heat_capacity = missing,
     grouting_density = missing,
     kwarg...)
 
-    if !ismissing(radius_grout)
-        Base.depwarn("Keyword argument `radius_grout` is deprecated for \
-            coaxial closed-loop wells, use `grouting_thickness` instead.",
-            :setup_closed_loop_well)
-        ismissing(grouting_thickness) || error("Cannot give both \
-            `radius_grout` and `grouting_thickness`.")
-        grouting_thickness = radius_grout - radius_pipe_outer
-    end
-    if ismissing(grouting_thickness)
-        grouting_thickness = 30e-3
-    end
+    check_removed_kwargs(; radius_grout, grouting_thermal_conductivity,
+        grouting_heat_capacity, grouting_density)
     grouting_thickness >= 0.0 || error("Grouting thickness must be non-negative.")
     has_grout = grouting_thickness > 0.0
-    fill_props = closed_loop_fill_properties(fill, fill_thermal_conductivity,
-        fill_density, fill_heat_capacity;
-        grouting_thermal_conductivity = grouting_thermal_conductivity,
-        grouting_density = grouting_density,
-        grouting_heat_capacity = grouting_heat_capacity)
+    fill_props = borehole_fill_properties(fill;
+        thermal_conductivity = fill_thermal_conductivity,
+        density = fill_density,
+        heat_capacity = fill_heat_capacity)
 
     if ismissing(neighborship)
         check_closed_loop_topology_args(pipe_cells_inner, pipe_cells_outer,

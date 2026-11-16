@@ -33,7 +33,7 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     dir = :z,
     segment_models = missing,
     end_nodes = missing,
-    radius_borehole = missing,
+    radius_borehole = 65e-3,
     radius_pipe = 15e-3,
     wall_thickness_pipe = 3e-3,
     pipe_spacing = 60e-3,
@@ -42,23 +42,19 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     fill_thermal_conductivity = missing,
     fill_density = missing,
     fill_heat_capacity = missing,
-    # Deprecated keyword arguments
+    # Removed keyword arguments, give an error
     radius_grout = missing,
     grouting_thermal_conductivity = missing,
     grouting_heat_capacity = missing,
     grouting_density = missing,
     kwarg...)
 
-    radius_borehole = deprecated_kwarg(radius_borehole, radius_grout,
-        :radius_grout, :radius_borehole)
-    if ismissing(radius_borehole)
-        radius_borehole = 65e-3
-    end
-    fill_props = closed_loop_fill_properties(fill, fill_thermal_conductivity,
-        fill_density, fill_heat_capacity;
-        grouting_thermal_conductivity = grouting_thermal_conductivity,
-        grouting_density = grouting_density,
-        grouting_heat_capacity = grouting_heat_capacity)
+    check_removed_kwargs(; radius_grout, grouting_thermal_conductivity,
+        grouting_heat_capacity, grouting_density)
+    fill_props = borehole_fill_properties(fill;
+        thermal_conductivity = fill_thermal_conductivity,
+        density = fill_density,
+        heat_capacity = fill_heat_capacity)
     grouting_thermal_conductivity = fill_props.thermal_conductivity
 
     if ismissing(neighborship)

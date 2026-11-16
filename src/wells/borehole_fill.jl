@@ -40,35 +40,17 @@ function borehole_fill_properties(fill::NamedTuple;
     )
 end
 
-# Fill properties from the fill keyword arguments of the closed-loop setup
-# functions, also accepting the deprecated grouting_* keyword arguments
-function closed_loop_fill_properties(fill, fill_thermal_conductivity,
-    fill_density, fill_heat_capacity;
-    grouting_thermal_conductivity = missing,
-    grouting_density = missing,
-    grouting_heat_capacity = missing)
-
-    fill_thermal_conductivity = deprecated_kwarg(fill_thermal_conductivity,
-        grouting_thermal_conductivity,
-        :grouting_thermal_conductivity, :fill_thermal_conductivity)
-    fill_density = deprecated_kwarg(fill_density, grouting_density,
-        :grouting_density, :fill_density)
-    fill_heat_capacity = deprecated_kwarg(fill_heat_capacity,
-        grouting_heat_capacity, :grouting_heat_capacity, :fill_heat_capacity)
-    return borehole_fill_properties(fill;
-        thermal_conductivity = fill_thermal_conductivity,
-        density = fill_density,
-        heat_capacity = fill_heat_capacity)
-
-end
-
-# Use the value of a deprecated keyword argument if it is given
-function deprecated_kwarg(value, old_value, old_name, new_name)
-    if !ismissing(old_value)
-        Base.depwarn("Keyword argument `$old_name` is deprecated, use \
-            `$new_name` instead.", :setup_closed_loop_well)
-        ismissing(value) || error("Cannot give both `$old_name` and `$new_name`.")
-        return old_value
+# Error for keyword arguments that were removed from the closed-loop setup
+function check_removed_kwargs(; kwarg...)
+    replacements = Dict(
+        :radius_grout => "radius_borehole (1U) or grouting_thickness (coaxial)",
+        :grouting_thermal_conductivity => "fill_thermal_conductivity",
+        :grouting_density => "fill_density",
+        :grouting_heat_capacity => "fill_heat_capacity",
+    )
+    for (k, v) in kwarg
+        ismissing(v) && continue
+        error("Keyword argument `$k` has been removed, use \
+            $(replacements[k]) instead.")
     end
-    return value
 end

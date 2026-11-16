@@ -246,12 +246,13 @@ function setup_closed_loop_supply(type::ClosedLoopGenericWell, D::DataDomain, re
     pipe_thermal_conductivity = 0.35,
     fill = :grout,
     fill_thermal_conductivity = missing,
-    grouting_thermal_conductivity = missing, # Deprecated
+    grouting_thermal_conductivity = missing, # Removed, gives an error
     kwarg...)
 
-    fill_props = closed_loop_fill_properties(fill, fill_thermal_conductivity,
-        missing, missing;
+    check_removed_kwargs(;
         grouting_thermal_conductivity = grouting_thermal_conductivity)
+    fill_props = borehole_fill_properties(fill;
+        thermal_conductivity = fill_thermal_conductivity)
 
     nc = length(reservoir_cells)
     if ismissing(neighborship)

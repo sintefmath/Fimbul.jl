@@ -198,24 +198,17 @@ using Jutul, JutulDarcy, Fimbul, Test
         @test all(well[:grouting_thermal_conductivity] .== 1.0)
     end
 
-    @testset "Deprecated grout keyword arguments" begin
-        # Old keyword arguments give the same well as the new ones
-        same(a, b) = all(isapprox(a[k], b[k]; nans = true) for k in
-            (:thermal_well_index, :grouting_thermal_conductivity,
-            :material_thermal_conductivity, :material_heat_capacity))
-        old = @test_deprecated setup(:u1; radius_grout = 70e-3,
-            grouting_thermal_conductivity = 2.0, grouting_heat_capacity = 1000.0)
-        new = setup(:u1; radius_borehole = 70e-3,
-            fill_thermal_conductivity = 2.0, fill_heat_capacity = 1000.0)
-        @test same(old, new)
-        old = @test_deprecated setup(:coaxial; radius_grout = 110e-3)
-        new = setup(:coaxial; grouting_thickness = 110e-3 - sqrt(2)*50e-3)
-        @test same(old, new)
-        old = @test_deprecated setup(:generic; grouting_thermal_conductivity = 2.0)
-        new = setup(:generic; fill_thermal_conductivity = 2.0)
-        @test same(old, new)
-        @test_throws ErrorException setup(:u1;
-            radius_grout = 70e-3, radius_borehole = 70e-3)
+    @testset "Removed grout keyword arguments" begin
+        # Removed keyword arguments give an error pointing to the new ones
+        for type in (:u1, :coaxial)
+            for (k, v) in ((:radius_grout, 70e-3),
+                    (:grouting_thermal_conductivity, 2.0),
+                    (:grouting_density, 2000.0),
+                    (:grouting_heat_capacity, 1500.0))
+                @test_throws ErrorException setup(type; NamedTuple{(k,)}((v,))...)
+            end
+        end
+        @test_throws ErrorException setup(:generic; grouting_thermal_conductivity = 2.0)
     end
 
     @testset "Coaxial grouting thickness" begin
