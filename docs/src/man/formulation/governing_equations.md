@@ -90,3 +90,27 @@ dominated by fractures or other high-contrast heterogeneities.
 To model fractured systems, Fimbul can be combined with the discrete fracture
 modeling framework in JutulDarcy—see e.g., 
 [the FTES setup function](@ref ftes).
+
+## Wells
+Flow in wells can be modelled in two different ways:
+- As a simple well where flow in and out of the wellbore is computed based on an
+  explicitly computed pressure drawdown from the top to each perforated cell
+  -- see JutulDarcy's `SimpleWell`. In this formulation, the entire wellbore gets
+  a single temparature, which in many cases
+- As a multisegment well where each wellbore is discretized as a 1D object with
+  its own conservation equations for mass and energy, with accompanying pressure
+  and heat variables (either temperature or enthalpy depending on the
+  formulation) -- see JutulDarcy's `MultSegmentWell`
+  
+In geothermal energy, the main product (heat) is in principle leaking form the
+along the entire wellbore, so a multisegment well formulation is the preferred
+modelling choice. For closed-loop geothermal wells (e.g., AGS, BHE and BTES), a
+multisegment well formulation is necessary, since temperature changes along the
+wellbore is crucial to model. All examples in Fimbul use the mutltisegment well
+formulation.
+
+Both simple and multisegment wells (with the exception of closed-loop wells)
+computes mass and conductive heat flow using Peaceman-type well indices:
+
+The exceptiith the exception of closed-loop wells, which use the following
+formulations
