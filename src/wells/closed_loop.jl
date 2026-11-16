@@ -215,9 +215,14 @@ are tagged `:pipe`.
 # Keyword arguments
 - `radius_pipe = 20e-3`: Outer pipe radius [m].
 - `wall_thickness_pipe = 2.5e-3`: Pipe wall thickness [m].
-- `grouting_thickness = 50e-3`: Grout thickness outside the pipe [m].
+- `grouting_thickness = 50e-3`: Thickness of the borehole fill outside the
+  pipe [m]. Can be zero.
 - `pipe_thermal_conductivity = 0.35`: Pipe wall thermal conductivity [W/(m K)].
-- `grouting_thermal_conductivity = 2.3`: Grout thermal conductivity [W/(m K)].
+- `fill = :grout`: Borehole fill material, see
+  [`Fimbul.borehole_fill_properties`](@ref). Only the thermal conductivity is
+  used for the generic well.
+- `fill_thermal_conductivity`: Overrides the thermal conductivity of `fill`
+  [W/(m K)].
 - `dir = :z`: Direction of the well in each reservoir cell.
 - `neighborship`, `perforation_cells_well`, `well_cell_centers`, `end_nodes`:
   General well topology. `neighborship`, `well_cell_centers` and `end_nodes`
@@ -239,8 +244,14 @@ function setup_closed_loop_supply(type::ClosedLoopGenericWell, D::DataDomain, re
     wall_thickness_pipe = 2.5e-3,
     grouting_thickness = 50e-3,
     pipe_thermal_conductivity = 0.35,
-    grouting_thermal_conductivity = 2.3,
+    fill = :grout,
+    fill_thermal_conductivity = missing,
+    grouting_thermal_conductivity = missing, # Deprecated
     kwarg...)
+
+    fill_props = closed_loop_fill_properties(fill, fill_thermal_conductivity,
+        missing, missing;
+        grouting_thermal_conductivity = grouting_thermal_conductivity)
 
     nc = length(reservoir_cells)
     if ismissing(neighborship)
@@ -280,10 +291,10 @@ function setup_closed_loop_supply(type::ClosedLoopGenericWell, D::DataDomain, re
         casing_thickness = wall_thickness_pipe,
         grouting_thickness = grouting_thickness,
         casing_thermal_conductivity = pipe_thermal_conductivity,
-        grouting_thermal_conductivity = grouting_thermal_conductivity,
+        grouting_thermal_conductivity = fill_props.thermal_conductivity,
         kwarg...)
     if ismissing(tag)
-        tag = fill(:pipe, number_of_cells(physical_representation(supply_well)))
+        tag = Base.fill(:pipe, number_of_cells(physical_representation(supply_well)))
     end
     supply_well[:tag, Cells()] = tag
 

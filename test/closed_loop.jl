@@ -172,11 +172,78 @@ using Jutul, JutulDarcy, Fimbul, Test
         @test physical_representation(well).perforations.reservoir == [2, 3, 4, 5, 5]
     end
 
-    function simulate_closed_loop(type; n_step = 5)
+    @testset "Borehole fill" begin
+        # Predefined material with overrides
+        grout = Fimbul.borehole_fill_properties(:grout)
+        @test grout == Fimbul.BOREHOLE_FILL_MATERIALS[:grout]
+        props = Fimbul.borehole_fill_properties(:grout; density = 1800.0)
+        @test props.density == 1800.0
+        @test props.thermal_conductivity == grout.thermal_conductivity
+        @test props.heat_capacity == grout.heat_capacity
+        # Custom material
+        custom = (thermal_conductivity = 1.0, density = 1000.0, heat_capacity = 800.0)
+        @test Fimbul.borehole_fill_properties(custom) == custom
+        @test_throws ErrorException Fimbul.borehole_fill_properties(:unknown)
+        @test_throws ErrorException Fimbul.borehole_fill_properties((density = 1.0,))
+        # Fill properties end up in the well domain
+        for type in (:u1, :coaxial)
+            well = setup(type; fill = custom, fill_heat_capacity = 900.0)
+            gc = findall(isequal(:grout_left), well[:tag])
+            gc = isempty(gc) ? findall(isequal(:grout), well[:tag]) : gc
+            @test all(well[:grouting_thermal_conductivity][gc] .== 1.0)
+            @test all(well[:material_density] .== 1000.0)
+            @test all(well[:material_heat_capacity] .== 900.0)
+        end
+        well = setup(:generic; fill_thermal_conductivity = 1.0)
+        @test all(well[:grouting_thermal_conductivity] .== 1.0)
+    end
+
+    @testset "Deprecated grout keyword arguments" begin
+        # Old keyword arguments give the same well as the new ones
+        same(a, b) = all(isapprox(a[k], b[k]; nans = true) for k in
+            (:thermal_well_index, :grouting_thermal_conductivity,
+            :material_thermal_conductivity, :material_heat_capacity))
+        old = @test_deprecated setup(:u1; radius_grout = 70e-3,
+            grouting_thermal_conductivity = 2.0, grouting_heat_capacity = 1000.0)
+        new = setup(:u1; radius_borehole = 70e-3,
+            fill_thermal_conductivity = 2.0, fill_heat_capacity = 1000.0)
+        @test same(old, new)
+        old = @test_deprecated setup(:coaxial; radius_grout = 110e-3)
+        new = setup(:coaxial; grouting_thickness = 110e-3 - sqrt(2)*50e-3)
+        @test same(old, new)
+        old = @test_deprecated setup(:generic; grouting_thermal_conductivity = 2.0)
+        new = setup(:generic; fill_thermal_conductivity = 2.0)
+        @test same(old, new)
+        @test_throws ErrorException setup(:u1;
+            radius_grout = 70e-3, radius_borehole = 70e-3)
+    end
+
+    @testset "Coaxial grouting thickness" begin
+        r_po = sqrt(2)*50e-3
+        # Default: grout nodes with borehole radius r_po + 30 mm
+        well = setup(:coaxial)
+        @test count(isequal(:grout), well[:tag]) == nz
+        @test all(well[:radius_grout] .≈ r_po + 30e-3)
+        # Zero thickness: no grout nodes, the outer pipe is perforated and
+        # exchanges heat (but not mass) with the reservoir through its wall
+        well = setup(:coaxial; grouting_thickness = 0.0)
+        W = physical_representation(well)
+        @test number_of_cells(W) == 2nz + 1
+        @test count(isequal(:grout), well[:tag]) == 0
+        @test all(well[:tag][W.perforations.self[1:end-1]] .== :pipe_outer)
+        @test all(well[:well_index] .== 0.0)
+        @test all(well[:volume_override_grouting] .== 0.0)
+        L = well[:cell_length][1]
+        R_co = log(r_po/(r_po - 3e-3))/(2π*0.38)
+        @test all(well[:thermal_well_index][1:end-1] .≈ L/R_co)
+        @test_throws ErrorException setup(:coaxial; grouting_thickness = -1e-3)
+    end
+
+    function simulate_closed_loop(type; n_step = 5, kwarg...)
         # The generic pipe flows downwards from the top to the bottom cell. The
         # outlet pressure must exceed the hydrostatic pressure of the pipe, so
         # that the pressure stays positive at the top.
-        well = setup(type)
+        well = setup(type; kwarg...)
         p_loop = 15.0si_unit(:atm)
         inj, prod = closed_loop_well_names(well)
         sys = SinglePhaseSystem(AqueousPhase(), reference_density = 1000.0)
@@ -220,6 +287,17 @@ using Jutul, JutulDarcy, Fimbul, Test
         state = res.result.states[end][:CL]
         @test length(state[:Temperature]) == n_supply + 1
         @test all(T_rock - 0.1 .<= state[:Temperature] .<= T_in + 0.1)
+    end
+
+    @testset "Coaxial well without grout" begin
+        _, res, inj, prod = simulate_closed_loop(:coaxial; grouting_thickness = 0.0)
+        ws = res.wells
+        @test ws[inj][:rate][end] ≈ -ws[prod][:rate][end] rtol = 1e-6
+        T_out = ws[prod][:temperature][end]
+        @test T_rock < T_out < T_in
+        # Less thermal resistance than with grout: more heat is extracted
+        _, res_grout, _, _ = simulate_closed_loop(:coaxial)
+        @test T_out < res_grout.wells[prod][:temperature][end]
     end
 
     @testset "Generic pipe temperature" begin

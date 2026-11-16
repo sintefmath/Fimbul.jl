@@ -3,10 +3,13 @@
 
 Supply part of a coaxial closed-loop well. By default, the inner pipe goes
 down through `reservoir_cells` and the outer annulus back up again, embedded
-in grout. Nodes are tagged `:pipe_inner`, `:pipe_outer` and `:grout`.
+in grout (or another fill material). Nodes are tagged `:pipe_inner`,
+`:pipe_outer` and `:grout`. If `grouting_thickness` is zero, there are no grout
+nodes, and the outer pipe exchanges heat directly with the reservoir.
 
 # Keyword arguments
-- `radius_grout = 100e-3`: Borehole (grout) radius [m].
+- `grouting_thickness = 30e-3`: Thickness of the borehole fill outside the
+  outer pipe [m]. Can be zero.
 - `radius_pipe_inner = 50e-3`: Outer radius of the inner pipe [m].
 - `radius_pipe_outer = sqrt(2)*radius_pipe_inner`: Outer radius of the outer
   pipe [m].
@@ -15,13 +18,16 @@ in grout. Nodes are tagged `:pipe_inner`, `:pipe_outer` and `:grout`.
 - `pipe_thermal_conductivity_inner = 0.38`,
   `pipe_thermal_conductivity_outer = 0.38`: Pipe wall thermal conductivities
   [W/(m K)].
-- `grouting_thermal_conductivity = 2.3`: Grout thermal conductivity [W/(m K)].
-- `grouting_heat_capacity = 1460`: Grout heat capacity [J/(kg K)].
-- `grouting_density = 1500`: Grout density [kg/m³].
+- `fill = :grout`: Borehole fill material, see
+  [`Fimbul.borehole_fill_properties`](@ref).
+- `fill_thermal_conductivity`, `fill_density`, `fill_heat_capacity`: Override
+  the thermal conductivity [W/(m K)], density [kg/m³] and heat capacity
+  [J/(kg K)] of `fill`.
 - `dir = :z`: Direction of the well in each reservoir cell.
 - `neighborship`, `pipe_cells_inner`, `pipe_cells_outer`, `grout_cells`,
   `well_cell_centers`, `end_nodes`: General well topology. Must be given
-  together.
+  together (`grout_cells` must be omitted or empty if `grouting_thickness` is
+  zero).
 - `segment_models`, `tag`: Segment models and node tags for a general topology.
 """
 function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, reservoir_cells;
@@ -36,49 +42,79 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
     dir = :z,
     segment_models = missing,
     end_nodes = missing,
-    radius_grout = 100e-3,
+    grouting_thickness = missing,
     radius_pipe_inner = 50e-3,
     radius_pipe_outer = sqrt(2)*radius_pipe_inner,
     wall_thickness_pipe_inner = 3e-3,
     wall_thickness_pipe_outer = 3e-3,
-    grouting_thermal_conductivity = 2.3,
     pipe_thermal_conductivity_inner = 0.38,
     pipe_thermal_conductivity_outer = 0.38,
-    grouting_heat_capacity = 1460,
-    grouting_density = 1500.0,
+    fill = :grout,
+    fill_thermal_conductivity = missing,
+    fill_density = missing,
+    fill_heat_capacity = missing,
+    # Deprecated keyword arguments
+    radius_grout = missing,
+    grouting_thermal_conductivity = missing,
+    grouting_heat_capacity = missing,
+    grouting_density = missing,
     kwarg...)
+
+    if !ismissing(radius_grout)
+        Base.depwarn("Keyword argument `radius_grout` is deprecated for \
+            coaxial closed-loop wells, use `grouting_thickness` instead.",
+            :setup_closed_loop_well)
+        ismissing(grouting_thickness) || error("Cannot give both \
+            `radius_grout` and `grouting_thickness`.")
+        grouting_thickness = radius_grout - radius_pipe_outer
+    end
+    if ismissing(grouting_thickness)
+        grouting_thickness = 30e-3
+    end
+    grouting_thickness >= 0.0 || error("Grouting thickness must be non-negative.")
+    has_grout = grouting_thickness > 0.0
+    fill_props = closed_loop_fill_properties(fill, fill_thermal_conductivity,
+        fill_density, fill_heat_capacity;
+        grouting_thermal_conductivity = grouting_thermal_conductivity,
+        grouting_density = grouting_density,
+        grouting_heat_capacity = grouting_heat_capacity)
 
     if ismissing(neighborship)
         check_closed_loop_topology_args(pipe_cells_inner, pipe_cells_outer,
             grout_cells, well_cell_centers, end_nodes)
         # Set inner/outer pipe and grout cells
-        nc_pipe = length(reservoir_cells)*2
-        nc_grout = length(reservoir_cells)
         nc_r = length(reservoir_cells)
         pipe_cells_inner = collect(1:nc_r)
         pipe_cells_outer = pipe_cells_inner .+ nc_r
-        grout_cells = pipe_cells_outer .+ nc_r
+        grout_cells = has_grout ? pipe_cells_outer .+ nc_r : Int[]
+        num_cells = 2*nc_r + length(grout_cells)
         # Set connectivity
-        num_cells = nc_pipe + nc_grout
         pi2pi = vcat(pipe_cells_inner[1:end-1]', pipe_cells_inner[2:end]')
         po2po = vcat(pipe_cells_outer[1:end-1]', pipe_cells_outer[2:end]')
         pi2po_bottom = [pipe_cells_inner[end], pipe_cells_outer[end]]
         pi2po = vcat(pipe_cells_inner[1:end-1]', pipe_cells_outer[1:end-1]')
-        po2g = vcat(pipe_cells_outer', grout_cells')
-        neighborship = hcat(pi2pi, po2po, pi2po_bottom, pi2po, po2g)
+        neighborship = hcat(pi2pi, po2po, pi2po_bottom, pi2po)
+        if has_grout
+            po2g = vcat(pipe_cells_outer', grout_cells')
+            neighborship = hcat(neighborship, po2g)
+        end
         # Set centers and end nodes
-        well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1, 3)
+        well_cell_centers = repeat(cell_centers[:, reservoir_cells], 1,
+            div(num_cells, nc_r))
         end_nodes = [nc_r+1]
         if !ismissing(tag)
             @warn "tag argument is ignored when neighborship is not \
                 provided. Tags will be created automatically."
         end
         # Set tag for identifying cell groups (e.g., inner/outer pipes, grout)
-        tag = Vector{Symbol}(undef, nc_pipe + nc_grout)
+        tag = Vector{Symbol}(undef, num_cells)
         tag[pipe_cells_inner] .= :pipe_inner
         tag[pipe_cells_outer] .= :pipe_outer
         tag[grout_cells] .= :grout
     else
+        if !has_grout && ismissing(grout_cells)
+            grout_cells = Int[]
+        end
         if ismissing(pipe_cells_inner) || ismissing(pipe_cells_outer) ||
             ismissing(grout_cells) || ismissing(well_cell_centers) ||
             ismissing(end_nodes)
@@ -86,6 +122,8 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
                 pipe_cells_outer, grout_cells, well_cell_centers, and \
                 end_nodes must also be provided.")
         end
+        has_grout || isempty(grout_cells) || error("grout_cells must be \
+            empty when grouting_thickness is zero.")
         num_cells = length(pipe_cells_inner) + length(pipe_cells_outer) + length(grout_cells)
     end
 
@@ -125,20 +163,27 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
     λ_pipe[pipe_cells_outer] .= pipe_thermal_conductivity_outer
     # Set grouting thermal conductivities
     λ_grout = zeros(num_cells)
-    λ_grout[grout_cells] .= grouting_thermal_conductivity
+    λ_grout[grout_cells] .= fill_props.thermal_conductivity
 
     # Common well arguments
     args = (
         type = type,
         simple_well = false,
-        # WI = 0.0
     )
+    if has_grout
+        perforation_cells_well = collect(grout_cells)
+    else
+        # Without grout, the outer pipe is perforated. It must not exchange
+        # mass with the reservoir.
+        perforation_cells_well = collect(pipe_cells_outer)
+        args = merge(args, (WI = 0.0,))
+    end
 
     # Setup supply well
     supply_well = setup_well(D, reservoir_cells;
         name = name,
         neighborship = neighborship,
-        perforation_cells_well = collect(grout_cells),
+        perforation_cells_well = perforation_cells_well,
         well_cell_centers = well_cell_centers,
         cell_radius = cell_radius,
         cell_radius_inner = cell_radius_inner,
@@ -151,13 +196,14 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
         args..., kwarg...)
     # Augment supply well with closed loop specific data
     augment_closed_loop_domain_coaxial!(supply_well,
-        radius_grout,
-        grouting_heat_capacity,
-        grouting_density,
+        radius_pipe_outer .+ grouting_thickness,
+        fill_props.heat_capacity,
+        fill_props.density,
         tag = tag
     )
     # Set default thermal indices
-    set_default_closed_loop_thermal_indices_coaxial!(supply_well)
+    set_default_closed_loop_thermal_indices_coaxial!(supply_well,
+        pipe_cells_inner, pipe_cells_outer, grout_cells)
 
     return supply_well
 
@@ -191,7 +237,8 @@ function augment_closed_loop_domain_coaxial!(well::DataDomain,
 
 end
 
-function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
+function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain,
+    pipe_cells_inner, pipe_cells_outer, grout_cells)
 
     cell = Cells()
     face = Faces()
@@ -203,27 +250,31 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
     casing_volumes = zeros(Float64, num_nodes)
     grout_volumes = zeros(Float64, num_nodes)
 
-    nc = div(num_nodes, 3)
-    pipe_cells_inner = Int.(1:nc)
-    pipe_cells_outer = Int.(1:nc) .+ nc
-    grout_cells = Int.(1:nc) .+ 2*nc
     N = well.representation.neighborship
     rep = physical_representation(well)
-    for (pno, gc) in enumerate(rep.perforations.self)
+    for (pno, perforated_cell) in enumerate(rep.perforations.self)
 
-        @assert gc ∈ grout_cells
-        seg_pg = findall(N[2, :] .== gc)
-        @assert length(seg_pg) == 1
-        seg_pg = seg_pg[1]
-        pc_out = N[1, seg_pg]
+        if perforated_cell ∈ grout_cells
+            # Grout cell connected to the outer pipe
+            gc = perforated_cell
+            seg_pg = findall(N[2, :] .== gc)
+            @assert length(seg_pg) == 1
+            seg_pg = seg_pg[1]
+            pc_out = N[1, seg_pg]
+        else
+            # No grout: the outer pipe is perforated directly
+            gc = nothing
+            seg_pg = nothing
+            pc_out = perforated_cell
+        end
         @assert pc_out ∈ pipe_cells_outer
-        seg_pp = findall(N[2, :] .== pc_out)
-        @assert length(seg_pp) <= 2
+        seg_pp = findall(j -> N[2, j] == pc_out && N[1, j] ∈ pipe_cells_inner,
+            axes(N, 2))
+        @assert 1 <= length(seg_pp) <= 2
         seg_pp = seg_pp[end]
         pc_in = N[1, seg_pp]
-        @assert pc_in ∈ pipe_cells_inner
 
-        r_grout = well[:radius_grout, cell][gc]
+        r_grout = well[:radius_grout, cell][pc_out]
         r_inner_pipe = well[:radius, cell][pc_in]
         wall_thickness_inner = well[:casing_thickness, cell][pc_in]
         r_outer_pipe = well[:radius, cell][pc_out]
@@ -237,17 +288,19 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
 
         hole_volumes[pc_in] = vol_ip
         hole_volumes[pc_out] = vol_op
-        # Small fluid volume in the grout to avoid singular mass balance
-        # (consistent with the U1 closed-loop well)
-        hole_volumes[gc] = 1e-3*vol_g
         casing_volumes[pc_in] = vol_iw
         casing_volumes[pc_out] = vol_ow
-        casing_volumes[gc] = 0.0
         grout_volumes[pc_in] = 0.0
         grout_volumes[pc_out] = 0.0
-        grout_volumes[gc] = vol_g
+        if !isnothing(gc)
+            # Small fluid volume in the grout to avoid singular mass balance
+            # (consistent with the U1 closed-loop well)
+            hole_volumes[gc] = 1e-3*vol_g
+            casing_volumes[gc] = 0.0
+            grout_volumes[gc] = vol_g
+        end
 
-        λg = well[:grouting_thermal_conductivity, cell][gc]
+        λg = isnothing(gc) ? 0.0 : well[:grouting_thermal_conductivity, cell][gc]
         λpi = well[:casing_thermal_conductivity, cell][pc_in]
         λpo = well[:casing_thermal_conductivity, cell][pc_out]
         Rpp, Rpg, Rgr = closed_loop_thermal_resistance_coaxial(
@@ -259,11 +312,21 @@ function set_default_closed_loop_thermal_indices_coaxial!(well::DataDomain)
         λpg = L/Rpg
         λgr = L/Rgr
 
+        # The thermal well index only accounts for the resistance inside the
+        # borehole, and contains no term for conduction from the borehole wall
+        # to the center of the reservoir cell. The cell temperature is thus
+        # assumed to approximate the borehole wall temperature, as in the
+        # thermal resistance and capacity model of Diersch et al. (2011),
+        # which requires a reservoir grid that is refined around the well.
+        # Without grout, the outer pipe wall is the only resistance.
+        WIth = isnothing(gc) ? L/(Rpg + Rgr) : λgr
+        isfinite(WIth) || error("Thermal well index is infinite. Without \
+            grout, the outer pipe wall must have a positive thickness.")
         if isnan(well[:thermal_well_index, perf][pno])
-            well[:thermal_well_index, perf][pno] = λgr
+            well[:thermal_well_index, perf][pno] = WIth
         end
 
-        if well[:material_thermal_conductivity, face][seg_pg] == 0.0
+        if !isnothing(seg_pg) && well[:material_thermal_conductivity, face][seg_pg] == 0.0
             well[:material_thermal_conductivity, face][seg_pg] = λpg
         end
 
@@ -331,8 +394,14 @@ function closed_loop_thermal_resistance_coaxial(
     R_co = log(r_opo/r_opi)/(2*π*λ_po)
 
     d_g, d_opo = 2*r_g, 2*r_opo
-    x = log(sqrt((d_g^2 + d_opo^2)/(2*d_opo^2)))/log(d_g/d_opo)
-    R_g = log(d_g/d_opo)/(2*π*λ_g)
+    if d_g > d_opo
+        x = log(sqrt((d_g^2 + d_opo^2)/(2*d_opo^2)))/log(d_g/d_opo)
+        R_g = log(d_g/d_opo)/(2*π*λ_g)
+    else
+        # No grout
+        x = 0.0
+        R_g = 0.0
+    end
     R_cg = x*R_g
 
     Rpp = R_ai + R_ci
