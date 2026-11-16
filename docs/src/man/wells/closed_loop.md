@@ -28,7 +28,7 @@ Fimbul.setup_closed_loop_supply
 ## Borehole fill
 
 The material filling the borehole around the pipes (grout by default) is set
-with the `fill` keyword argument of the closed-loop setup functions, either as
+with the `fill_material` keyword argument of the closed-loop setup functions, either as
 a predefined material or as a named tuple of properties. Each property can be
 overridden by the `fill_thermal_conductivity`, `fill_density` and
 `fill_heat_capacity` keyword arguments.

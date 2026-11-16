@@ -187,7 +187,7 @@ using Jutul, JutulDarcy, Fimbul, Test
         @test_throws ErrorException Fimbul.borehole_fill_properties((density = 1.0,))
         # Fill properties end up in the well domain
         for type in (:u1, :coaxial)
-            well = setup(type; fill = custom, fill_heat_capacity = 900.0)
+            well = setup(type; fill_material = custom, fill_heat_capacity = 900.0)
             gc = findall(isequal(:grout_left), well[:tag])
             gc = isempty(gc) ? findall(isequal(:grout), well[:tag]) : gc
             @test all(well[:grouting_thermal_conductivity][gc] .== 1.0)

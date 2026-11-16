@@ -12,11 +12,11 @@ in a borehole filled with grout (or another fill material). Nodes are tagged
 - `wall_thickness_pipe = 3e-3`: Pipe wall thickness [m].
 - `pipe_spacing = 60e-3`: Distance between the pipe centers [m].
 - `pipe_thermal_conductivity = 0.38`: Pipe wall thermal conductivity [W/(m K)].
-- `fill = :grout`: Borehole fill material, see
+- `fill_material = :grout`: Borehole fill material, see
   [`Fimbul.borehole_fill_properties`](@ref).
 - `fill_thermal_conductivity`, `fill_density`, `fill_heat_capacity`: Override
   the thermal conductivity [W/(m K)], density [kg/m³] and heat capacity
-  [J/(kg K)] of `fill`.
+  [J/(kg K)] of `fill_material`.
 - `dir = :z`: Direction of the well in each reservoir cell.
 - `neighborship`, `pipe_cells`, `grout_cells`, `well_cell_centers`,
   `end_nodes`: General well topology. Must be given together.
@@ -38,7 +38,7 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     wall_thickness_pipe = 3e-3,
     pipe_spacing = 60e-3,
     pipe_thermal_conductivity = 0.38,
-    fill = :grout,
+    fill_material = :grout,
     fill_thermal_conductivity = missing,
     fill_density = missing,
     fill_heat_capacity = missing,
@@ -51,7 +51,7 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
 
     check_removed_kwargs(; radius_grout, grouting_thermal_conductivity,
         grouting_heat_capacity, grouting_density)
-    fill_props = borehole_fill_properties(fill;
+    fill_props = borehole_fill_properties(fill_material;
         thermal_conductivity = fill_thermal_conductivity,
         density = fill_density,
         heat_capacity = fill_heat_capacity)
@@ -117,22 +117,22 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     # Setup pipe radius
     nc = maximum(neighborship)
     if radius_pipe isa Number
-        radius_pipe = Base.fill(radius_pipe, nc)
+        radius_pipe = fill(radius_pipe, nc)
         radius_pipe[grout_cells] .= 0.0
     end
     # Setup wall thickness
     if wall_thickness_pipe isa Number
-        wall_thickness_pipe = Base.fill(wall_thickness_pipe, nc)
+        wall_thickness_pipe = fill(wall_thickness_pipe, nc)
         wall_thickness_pipe[grout_cells] .= 0.0
     end
     # Setup pipe wall thermal conductivities
     if pipe_thermal_conductivity isa Number
-        pipe_thermal_conductivity = Base.fill(pipe_thermal_conductivity, nc)
+        pipe_thermal_conductivity = fill(pipe_thermal_conductivity, nc)
         pipe_thermal_conductivity[grout_cells] .= 0.0
     end
     # Setup grouting thermal conductivities
     if grouting_thermal_conductivity isa Number
-        grouting_thermal_conductivity = Base.fill(grouting_thermal_conductivity, nc)
+        grouting_thermal_conductivity = fill(grouting_thermal_conductivity, nc)
         grouting_thermal_conductivity[pipe_cells] .= 0.0
     end
 

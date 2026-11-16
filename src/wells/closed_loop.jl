@@ -218,7 +218,7 @@ are tagged `:pipe`.
 - `grouting_thickness = 50e-3`: Thickness of the borehole fill outside the
   pipe [m]. Can be zero.
 - `pipe_thermal_conductivity = 0.35`: Pipe wall thermal conductivity [W/(m K)].
-- `fill = :grout`: Borehole fill material, see
+- `fill_material = :grout`: Borehole fill material, see
   [`Fimbul.borehole_fill_properties`](@ref). Only the thermal conductivity is
   used for the generic well.
 - `fill_thermal_conductivity`: Overrides the thermal conductivity of `fill`
@@ -244,14 +244,14 @@ function setup_closed_loop_supply(type::ClosedLoopGenericWell, D::DataDomain, re
     wall_thickness_pipe = 2.5e-3,
     grouting_thickness = 50e-3,
     pipe_thermal_conductivity = 0.35,
-    fill = :grout,
+    fill_material = :grout,
     fill_thermal_conductivity = missing,
     grouting_thermal_conductivity = missing, # Removed, gives an error
     kwarg...)
 
     check_removed_kwargs(;
         grouting_thermal_conductivity = grouting_thermal_conductivity)
-    fill_props = borehole_fill_properties(fill;
+    fill_props = borehole_fill_properties(fill_material;
         thermal_conductivity = fill_thermal_conductivity)
 
     nc = length(reservoir_cells)
@@ -295,7 +295,7 @@ function setup_closed_loop_supply(type::ClosedLoopGenericWell, D::DataDomain, re
         grouting_thermal_conductivity = fill_props.thermal_conductivity,
         kwarg...)
     if ismissing(tag)
-        tag = Base.fill(:pipe, number_of_cells(physical_representation(supply_well)))
+        tag = fill(:pipe, number_of_cells(physical_representation(supply_well)))
     end
     supply_well[:tag, Cells()] = tag
 

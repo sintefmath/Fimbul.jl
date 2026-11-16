@@ -18,11 +18,11 @@ nodes, and the outer pipe exchanges heat directly with the reservoir.
 - `pipe_thermal_conductivity_inner = 0.38`,
   `pipe_thermal_conductivity_outer = 0.38`: Pipe wall thermal conductivities
   [W/(m K)].
-- `fill = :grout`: Borehole fill material, see
+- `fill_material = :grout`: Borehole fill material, see
   [`Fimbul.borehole_fill_properties`](@ref).
 - `fill_thermal_conductivity`, `fill_density`, `fill_heat_capacity`: Override
   the thermal conductivity [W/(m K)], density [kg/m³] and heat capacity
-  [J/(kg K)] of `fill`.
+  [J/(kg K)] of `fill_material`.
 - `dir = :z`: Direction of the well in each reservoir cell.
 - `neighborship`, `pipe_cells_inner`, `pipe_cells_outer`, `grout_cells`,
   `well_cell_centers`, `end_nodes`: General well topology. Must be given
@@ -49,7 +49,7 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
     wall_thickness_pipe_outer = 3e-3,
     pipe_thermal_conductivity_inner = 0.38,
     pipe_thermal_conductivity_outer = 0.38,
-    fill = :grout,
+    fill_material = :grout,
     fill_thermal_conductivity = missing,
     fill_density = missing,
     fill_heat_capacity = missing,
@@ -64,7 +64,7 @@ function setup_closed_loop_supply(type::ClosedLoopCoaxialWell, D::DataDomain, re
         grouting_heat_capacity, grouting_density)
     grouting_thickness >= 0.0 || error("Grouting thickness must be non-negative.")
     has_grout = grouting_thickness > 0.0
-    fill_props = borehole_fill_properties(fill;
+    fill_props = borehole_fill_properties(fill_material;
         thermal_conductivity = fill_thermal_conductivity,
         density = fill_density,
         heat_capacity = fill_heat_capacity)

@@ -106,7 +106,7 @@ end
         well = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
             name = :BTES,
             well_args...,
-            fill = :grout,
+            fill_material = :grout,
             fill_density = 2000.0,
             fill_heat_capacity = 1500.0,
             fill_thermal_conductivity = 2.3

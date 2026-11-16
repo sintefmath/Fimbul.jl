@@ -125,7 +125,7 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
     well = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
         name = :CL,
         well_args...,
-        fill = :grout,
+        fill_material = :grout,
         fill_density = ρg,
         fill_heat_capacity = Cpg,
         fill_thermal_conductivity = λg

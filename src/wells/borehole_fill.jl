@@ -9,29 +9,29 @@ const BOREHOLE_FILL_MATERIALS = Dict{Symbol, NamedTuple}(
 )
 
 """
-    borehole_fill_properties(fill = :grout;
+    borehole_fill_properties(material = :grout;
         thermal_conductivity = missing, density = missing, heat_capacity = missing)
 
 Thermal properties of the material filling the borehole around the pipes of a
 closed-loop well, returned as a named tuple with fields `thermal_conductivity`
 [W/(m K)], `density` [kg/m³] and `heat_capacity` [J/(kg K)].
 
-`fill` is either the name of a predefined material (`:grout`) or a named tuple
+`material` is either the name of a predefined material (`:grout`) or a named tuple
 with the three properties. Each property can be overridden by the
 corresponding keyword argument.
 """
-function borehole_fill_properties(fill::Symbol = :grout; kwarg...)
-    haskey(BOREHOLE_FILL_MATERIALS, fill) || error("Unknown borehole fill \
-        material :$fill. Available materials: \
+function borehole_fill_properties(material::Symbol = :grout; kwarg...)
+    haskey(BOREHOLE_FILL_MATERIALS, material) || error("Unknown borehole fill \
+        material :$material. Available materials: \
         $(join(":" .* string.(collect(keys(BOREHOLE_FILL_MATERIALS))), ", ")).")
-    return borehole_fill_properties(BOREHOLE_FILL_MATERIALS[fill]; kwarg...)
+    return borehole_fill_properties(BOREHOLE_FILL_MATERIALS[material]; kwarg...)
 end
 
-function borehole_fill_properties(fill::NamedTuple;
+function borehole_fill_properties(material::NamedTuple;
     thermal_conductivity = missing, density = missing, heat_capacity = missing)
-    override(value, key) = ismissing(value) ? fill[key] : value
+    override(value, key) = ismissing(value) ? material[key] : value
     for key in (:thermal_conductivity, :density, :heat_capacity)
-        haskey(fill, key) || error("Borehole fill must define $key.")
+        haskey(material, key) || error("Borehole fill must define $key.")
     end
     return (
         thermal_conductivity = override(thermal_conductivity, :thermal_conductivity),
