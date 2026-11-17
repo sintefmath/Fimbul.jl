@@ -191,8 +191,11 @@ function btes(
     num_wells = length(well_coords_3d)
 
     # ## Create mesh
-    # Use the (x,y) projection of each well trajectory as a mesh constraint
-    well_coordinates = [wc[1:2, :] for wc in well_coords_3d]
+    # Use the (x,y) projection of each well trajectory as a mesh constraint.
+    # Repeated points are removed, so that a vertical well is a point
+    # constraint: a curve of zero length would give a zero distance between
+    # constraints, and with it no refinement around the wells.
+    well_coordinates = [unique_consecutive_columns(wc[1:2, :]) for wc in well_coords_3d]
     hz = diff(depths)./n_z
     hxy = well_spacing/n_xy
 
@@ -219,8 +222,15 @@ function btes(
     nl = length(layers)
     geo = tpfv_geometry(mesh)
 
-    # Reservoir cells traversed by a well trajectory, top to bottom
+    # Reservoir cells traversed by a well trajectory, top to bottom. The well
+    # positions are mesh nodes, so the trajectory is shifted half a cell away
+    # from the field center to run through a cell rather than along its edges.
     function trajectory_cells(wc)
+        xy = wc[1:2, 1]
+        d = norm(xy)
+        v = d > 0 ? xy./d : [1.0, 0.0]
+        wc = copy(wc)
+        wc[1:2, :] .+= (hxy_min/2).*v
         cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), geometry = geo)
         filter!(c -> layers[c] ∈ well_layers, cells)
         return cells
@@ -372,6 +382,15 @@ function btes(field::AbstractMatrix; kwargs...)
     # Special case: a single well, given as a single 3 x m matrix, representing
     # a field with a single sector containing a single well
     return btes([[Matrix{Float64}(field)]]; kwargs...)
+end
+
+# Columns of x without consecutive repetitions
+function unique_consecutive_columns(x::AbstractMatrix; tol = 1e-10)
+    keep = [1]
+    for i in 2:size(x, 2)
+        norm(x[:, i] - x[:, keep[end]]) > tol && push!(keep, i)
+    end
+    return x[:, keep]
 end
 
 # ## Patterns

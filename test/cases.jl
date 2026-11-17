@@ -187,6 +187,14 @@ end
         z_reservoir = geo.cell_centroids[3, well.perforations.reservoir[perfs]]
         @test z_well ≈ z_reservoir
     end
+    # The mesh is refined around the wells: the perforated cells have the
+    # horizontal size set by well_spacing/n_xy
+    hxy = 5.0/kw.n_xy
+    rcells = unique(vcat([physical_representation(case.model.models[w]).perforations.reservoir
+        for w in keys(case.input_data[:sectors])]...))
+    msh = physical_representation(reservoir_model(case.model).data_domain)
+    area = [geo.volumes[c]/cell_dims(msh, c)[3] for c in rcells]
+    @test all(sqrt.(area) .< 1.5*hxy)
     simulate_reservoir(case[1:1])
     # Reversed discharge: the sector well is fed at its return part, and
     # produced from its supply part
