@@ -29,6 +29,7 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     pipe_cells = missing,
     grout_cells = missing,
     tag = missing,
+    borehole = missing,
     well_cell_centers = missing,
     dir = :z,
     segment_models = missing,
@@ -162,13 +163,204 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
         pipe_spacing,
         fill_props.heat_capacity,
         fill_props.density;
-        tag = tag
+        tag = tag,
+        borehole = borehole
     )
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_u1!(
     supply_well, pipe_cells, grout_cells)
 
     return supply_well
+
+end
+
+"""
+    discretize_closed_loop_u1_manifold(cells, cell_centers; <keyword arguments>)
+
+Discretize a group of U-tube boreholes coupled in parallel between a shared
+inlet and a shared outlet node, for use with [`setup_closed_loop_well`](@ref)
+(with `closed_loop_type = :u1`).
+
+`cells` holds one vector of reservoir cells per borehole, each ordered from top
+to bottom. Nodes 1 and 2 of the resulting well are the shared inlet and outlet:
+fluid enters node 1, which is the node the facility injects into, splits between
+the boreholes, and recombines at node 2, the end node of the supply part,
+where the return part is connected. Both manifold endpoints are pipe nodes, so the segments feeding the
+boreholes carry flow, and the split between them is resolved by the segment flow
+models rather than prescribed.
+
+Returns a named tuple of the topology arguments needed by `setup_closed_loop_well`,
+along with `manifold_segments`, the column indices of the manifold segments in
+`neighborship`.
+
+# Keyword arguments
+- `pipe_spacing = 60e-3`: Distance between the two legs of each U-tube [m].
+- `wellhead = missing`: Position of the shared inlet and outlet nodes. Defaults
+  to the mean of the borehole tops in x-y, half a meter above the shallowest.
+"""
+function discretize_closed_loop_u1_manifold(
+    cells::AbstractVector{<:AbstractVector{<:Integer}},
+    cell_centers;
+    pipe_spacing = 60e-3,
+    wellhead = missing)
+
+    num_boreholes = length(cells)
+    num_boreholes > 0 || error("Expected at least one borehole")
+    all(c -> length(c) > 0, cells) ||
+        error("Each borehole must have at least one reservoir cell")
+
+    # Nodes 1 and 2 are the shared inlet and outlet
+    inlet, outlet = 1, 2
+    if ismissing(wellhead)
+        tops = hcat([cell_centers[:, c[1]] for c in cells]...)
+        wellhead = [
+            sum(tops[1, :])/num_boreholes,
+            sum(tops[2, :])/num_boreholes,
+            minimum(tops[3, :]) - 0.5
+        ]
+    end
+    wellhead = reshape(collect(Float64, wellhead), 3, 1)
+
+    reservoir_cells = Int[]
+    pipe_cells = [inlet, outlet]
+    grout_cells = Int[]
+    tag = [:manifold, :manifold]
+    borehole = [0, 0]
+    centers = Matrix{Float64}[wellhead, wellhead]
+    segments = Vector{Int}[]
+    manifold_segments = Int[]
+
+    acc = (reservoir_cells = reservoir_cells, pipe_cells = pipe_cells,
+        grout_cells = grout_cells, segments = segments, centers = centers,
+        tag = tag, borehole = borehole)
+    offset = 2
+    for (bno, c) in enumerate(cells)
+        pipe_b, offset = append_u1_borehole!(acc, c, cell_centers, bno, offset;
+            pipe_spacing = pipe_spacing)
+        # Manifold: shared inlet -> borehole -> shared outlet
+        push!(segments, [inlet, pipe_b[1]])
+        push!(manifold_segments, length(segments))
+        push!(segments, [pipe_b[end], outlet])
+        push!(manifold_segments, length(segments))
+    end
+
+    return (
+        reservoir_cells = reservoir_cells,
+        pipe_cells = pipe_cells,
+        grout_cells = grout_cells,
+        neighborship = hcat(segments...),
+        well_cell_centers = hcat(centers...),
+        end_nodes = [outlet],
+        tag = tag,
+        borehole = borehole,
+        manifold_segments = manifold_segments,
+        return_reservoir_cell = cells[1][1],
+    )
+
+end
+
+# Append the pipe and grout nodes of a single U-tube borehole through the
+# reservoir cells `c` (top to bottom) to the topology in `acc`, numbering the
+# new nodes from `offset + 1`. Returns the pipe nodes of the borehole, from the
+# top of the first leg to the top of the second, and the new offset.
+function append_u1_borehole!(acc, c, cell_centers, bno, offset; pipe_spacing = 60e-3)
+    nb = length(c)
+    mb = 2*nb
+    # Reservoir cells, down the first leg and up the second
+    append!(acc.reservoir_cells, vcat(c, reverse(c)))
+    # Pipe nodes for this borehole, then the grout nodes alongside them
+    pipe_b = collect(1:mb) .+ offset
+    offset += mb
+    grout_b = collect(1:mb) .+ offset
+    offset += mb
+    append!(acc.pipe_cells, pipe_b)
+    append!(acc.grout_cells, grout_b)
+    segments = acc.segments
+    # Pipe to pipe, down and up again. The U-bend is implicit.
+    for i in 1:mb-1
+        push!(segments, [pipe_b[i], pipe_b[i+1]])
+    end
+    # Pipe to grout. These must precede the grout-to-grout segments:
+    # set_default_closed_loop_thermal_indices_u1! takes the first segment
+    # into a grout node to be the one from its own pipe node.
+    for i in 1:mb
+        push!(segments, [pipe_b[i], grout_b[i]])
+    end
+    # Grout to grout, pairing the two legs at equal depth
+    for i in 1:nb
+        push!(segments, [grout_b[i], grout_b[mb+1-i]])
+    end
+    # Cell centers: the legs are offset in x, and each grout node sits at
+    # the same position as the pipe node it surrounds
+    wc = hcat(
+        cell_centers[:, c] .- [pipe_spacing/2, 0.0, 0.0],
+        cell_centers[:, reverse(c)] .+ [pipe_spacing/2, 0.0, 0.0]
+    )
+    push!(acc.centers, wc, wc)
+    append!(acc.tag, vcat(
+        fill(:pipe_left, nb), fill(:pipe_right, nb),
+        fill(:grout_left, nb), fill(:grout_right, nb)))
+    append!(acc.borehole, fill(bno, 2*mb))
+    return (pipe_b, offset)
+end
+
+"""
+    discretize_closed_loop_u1_series(cells, cell_centers; pipe_spacing = 60e-3)
+
+Discretize a group of U-tube boreholes coupled in series, for use with
+[`setup_closed_loop_well`](@ref) (with `closed_loop_type = :u1`).
+
+`cells` holds one vector of reservoir cells per borehole, each ordered from top
+to bottom, in the order the fluid passes through them. Fluid enters at the top
+of the first leg of the first borehole (node 1), and the top of the second leg
+of each borehole is connected to the top of the first leg of the next. The top
+of the second leg of the last borehole is the end node of the supply part, where
+the return part is connected.
+
+Returns a named tuple of the topology arguments needed by `setup_closed_loop_well`,
+along with `connector_segments`, the column indices of the segments connecting
+consecutive boreholes in `neighborship`. The node field `borehole` gives the
+borehole number of each node.
+"""
+function discretize_closed_loop_u1_series(
+    cells::AbstractVector{<:AbstractVector{<:Integer}},
+    cell_centers;
+    pipe_spacing = 60e-3)
+
+    num_boreholes = length(cells)
+    num_boreholes > 0 || error("Expected at least one borehole")
+    all(c -> length(c) > 0, cells) ||
+        error("Each borehole must have at least one reservoir cell")
+
+    acc = (reservoir_cells = Int[], pipe_cells = Int[], grout_cells = Int[],
+        segments = Vector{Int}[], centers = Matrix{Float64}[],
+        tag = Symbol[], borehole = Int[])
+    connector_segments = Int[]
+    offset = 0
+    pipe_prev = Int[]
+    for (bno, c) in enumerate(cells)
+        pipe_b, offset = append_u1_borehole!(acc, c, cell_centers, bno, offset;
+            pipe_spacing = pipe_spacing)
+        if bno > 1
+            # Surface pipe from the outlet of the previous borehole
+            push!(acc.segments, [pipe_prev[end], pipe_b[1]])
+            push!(connector_segments, length(acc.segments))
+        end
+        pipe_prev = pipe_b
+    end
+
+    return (
+        reservoir_cells = acc.reservoir_cells,
+        pipe_cells = acc.pipe_cells,
+        grout_cells = acc.grout_cells,
+        neighborship = hcat(acc.segments...),
+        well_cell_centers = hcat(acc.centers...),
+        end_nodes = [pipe_prev[end]],
+        tag = acc.tag,
+        borehole = acc.borehole,
+        connector_segments = connector_segments,
+        return_reservoir_cell = cells[end][1],
+    )
 
 end
 
@@ -179,7 +371,8 @@ function augment_closed_loop_domain_u1!(well::DataDomain,
     grouting_density;
     pipe_grout_thermal_index = missing,
     grout_grout_thermal_index = missing,
-    tag = missing
+    tag = missing,
+    borehole = missing
 )
 
     c = Cells()
@@ -198,6 +391,10 @@ function augment_closed_loop_domain_u1!(well::DataDomain,
 
     if !ismissing(tag)
         well[:tag, c] = tag
+    end
+
+    if !ismissing(borehole)
+        well[:borehole, c] = borehole
     end
 
 end

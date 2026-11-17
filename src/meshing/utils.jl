@@ -1,38 +1,44 @@
+"""
+    fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
+
+Points in a sunflower (Vogel spiral) pattern, returned as a `2 x num_points`
+matrix. Point `n` is placed at angle `n*Δθ`, with `Δθ = 2π/φ^2` and `φ` the
+golden ratio, and at radius `radius*sqrt((n - 1/2)/(num_points - 1/2))`. The
+half-step offset closes the gap that otherwise forms at the center of the
+pattern. Points `F` apart in this order, for a Fibonacci number `F`, lie on a
+spiral ("spine") through the pattern.
+
+The pattern is scaled either by `spacing`, the median distance from a point to
+its nearest neighbor, or by `radius`, the distance from the center to the
+outermost point. A single point is placed at the origin.
+"""
 function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
-    
-    # Define coordinate function using golden ratio
     N = num_points
-    φ = (1 + sqrt(5))/2 # ≈ golden ratio
-    Δθ = 2*π/φ^2
-    
-    # Generate points as matrix (2×N)
+    N >= 1 || error("num_points must be at least 1, got $N")
+    Δθ = 2π/Base.MathConstants.golden^2
     points = Matrix{Float64}(undef, 2, N)
-    
     for n = 1:N
-        r_n = sqrt(n/N)
-        θ_n = n * Δθ
-        points[1, n] = r_n * cos(θ_n)
-        points[2, n] = r_n * sin(θ_n)
+        r_n = N == 1 ? 0.0 : sqrt((n - 0.5)/(N - 0.5))
+        θ_n = n*Δθ
+        points[1, n] = r_n*cos(θ_n)
+        points[2, n] = r_n*sin(θ_n)
     end
-    
-    # Set radius from spacing if not provided
     if !ismissing(spacing)
-        @assert ismissing(radius) "Please provide either radius or spacing"
-        # Calculate spacing between first two points
-        p1 = points[:, 1]
-        p2 = points[:, 2]
-        current_spacing = norm(p1 - p2)
-        radius = 1.3513 * spacing / current_spacing
+        ismissing(radius) || error("Please provide either radius or spacing")
+        N == 1 && return points
+        scale = spacing/median(nearest_neighbor_distances(points))
     elseif !ismissing(radius)
-        @assert ismissing(spacing) "Please provide either radius or spacing"
+        scale = radius
     else
-        radius = 1.0
+        scale = 1.0
     end
-    
-    # Scale points by radius
-    points .*= radius
-    
-    return points
+    return points.*scale
+end
+
+# Distance from each column of x to its nearest neighbor among the others
+function nearest_neighbor_distances(x::AbstractMatrix)
+    n = size(x, 2)
+    return [minimum(norm(x[:, i] - x[:, j]) for j in 1:n if j != i) for i in 1:n]
 end
 
 function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
@@ -261,8 +267,294 @@ function max_distance(x::AbstractMatrix)
     return min_max_distance(x)[2]
 end
 
+function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector;
+    sector_dims = missing)
+
+    num_wells = size(xy, 2)
+    well_coords = Vector{Matrix{Float64}}(undef, num_wells)
+    for i in 1:num_wells
+        x_top, y_top, z_top = xy[1, i], xy[2, i], 0.0 + 1e-3
+        x_bottom, y_bottom, z_bottom = xy[1, i], xy[2, i], depths[end] - 1e-3
+        well_coords[i] = permutedims([x_top y_top z_top; x_bottom y_bottom z_bottom])
+    end
+    if sector_division == :angular
+        sector_indices = group_into_sectors_angular(xy, num_sectors)
+    elseif sector_division == :cartesian
+        sector_indices = group_into_sectors_cartesian(xy, num_sectors; sector_dims = sector_dims)
+    elseif sector_division == :sequential
+        # Consecutive groups of wells, in the order given
+        sector_indices = [collect(a:b) for (a, b) in equal_index_ranges(num_wells, num_sectors)]
+    elseif sector_division == :spiral
+        # Bundles of sunflower spines, with the wells in sunflower order
+        sector_indices = group_into_sectors_spiral(num_wells, num_sectors)
+    else
+        error("Unknown sector division: $sector_division")
+    end
+
+    return [well_coords[idx] for idx in sector_indices]
+
+end
+
 """
-Determines whether a point is inside a polygon.
+    group_into_sectors_spiral(num_wells, num_sectors)
+
+Group the points of a sunflower pattern (see [`fibonacci_pattern_2d`](@ref)),
+given in sunflower order, into sectors made of adjacent spines. Points `F`
+apart lie on the same spine, for a Fibonacci number `F`, so that a family of
+`F` spines holds all points. The spines are ordered counter-clockwise and split
+into `num_sectors` bundles of adjacent spines with as equal a number of points
+as possible. Within a bundle, the points are ordered from the center
+outwards: the first point of each spine, counter-clockwise, then the second
+point of each spine, and so on.
+
+The spine family is chosen among the Fibonacci numbers `num_sectors ≤ F ≤
+num_wells/2` to give the most even sectors, and among those the family whose
+spines connect the nearest points.
+"""
+function group_into_sectors_spiral(num_wells::Int, num_sectors::Int)
+    N = num_wells
+    num_sectors <= N || error("Cannot divide $N wells into $num_sectors sectors.")
+    num_sectors == 1 && return [collect(1:N)]
+    Δθ = 2π/Base.MathConstants.golden^2
+    unit_points = fibonacci_pattern_2d(N; spacing = missing, radius = 1.0)
+    # Candidate spine families
+    fib = [1, 2]
+    while fib[end] < N
+        push!(fib, fib[end] + fib[end-1])
+    end
+    candidates = filter(F -> num_sectors <= F <= max(num_sectors, N ÷ 2), unique(fib))
+    isempty(candidates) && (candidates = [num_sectors])
+    best = nothing
+    for F in candidates
+        # Spines j = 1, ..., F hold the points j, j + F, j + 2F, ...
+        spines = [collect(j:F:N) for j in 1:F]
+        # Counter-clockwise order of the spines, compared at a common position
+        # along the spiral: spine j turns by δ for every step of F points
+        δ = mod(F*Δθ + π, 2π) - π
+        φ = [mod(j*Δθ - δ*j/F, 2π) for j in 1:F]
+        order = sortperm(φ)
+        counts = length.(spines[order])
+        # Split the spines into contiguous bundles, trying every starting spine
+        for start in 0:F-1
+            c = circshift(counts, -start)
+            cuts = spine_bundle_cuts(c, num_sectors)
+            isnothing(cuts) && continue
+            sizes = [sum(c[a:b]) for (a, b) in cuts]
+            imbalance = maximum(sizes) - minimum(sizes)
+            # Mean distance between consecutive points on a spine
+            step = sum(norm(unit_points[:, n + F] - unit_points[:, n]) for n in 1:N-F; init = 0.0)/max(N - F, 1)
+            score = (imbalance, step, start)
+            if isnothing(best) || score < best[1]
+                best = (score, spines, circshift(order, -start), cuts)
+            end
+        end
+    end
+    _, spines, order, cuts = best
+    # Each well has a level (its position along its spine, from the center)
+    # and a rank (the counter-clockwise position of its spine)
+    sectors = [[(level, rank, spines[order[rank]][level])
+        for rank in a:b for level in eachindex(spines[order[rank]])]
+        for (a, b) in cuts]
+    rebalance_spiral_sectors!(sectors, length(order))
+    return [last.(sort(sector)) for sector in sectors]
+end
+
+# Even out the number of wells in the sectors, to within one, by passing the
+# outermost well on the boundary spine of a sector to its neighbor, hop by hop
+# around the field from the largest to the smallest sector. Wells passed across
+# the start of the counter-clockwise spine order get their rank shifted by the
+# number of spines, so that the ranks within a sector stay contiguous.
+function rebalance_spiral_sectors!(sectors, num_spines)
+    K = length(sectors)
+    for _ in 1:sum(length, sectors)
+        sizes = length.(sectors)
+        i, j = argmax(sizes), argmin(sizes)
+        sizes[i] - sizes[j] <= 1 && break
+        # Shortest way around the ring of sectors from i to j
+        forward = mod(j - i, K) <= mod(i - j, K)
+        step = forward ? 1 : -1
+        k = i
+        while k != j
+            next = mod1(k + step, K)
+            sector = sectors[k]
+            # Boundary spine towards the neighbor, and its outermost well
+            boundary = forward ? maximum(w[2] for w in sector) : minimum(w[2] for w in sector)
+            on_boundary = findall(w -> w[2] == boundary, sector)
+            pick = on_boundary[argmax([sector[m][1] for m in on_boundary])]
+            level, rank, well = sector[pick]
+            deleteat!(sector, pick)
+            if forward && next < k
+                rank -= num_spines
+            elseif !forward && next > k
+                rank += num_spines
+            end
+            push!(sectors[next], (level, rank, well))
+            k = next
+        end
+    end
+    return sectors
+end
+
+# Split items with the given counts into num_groups contiguous, non-empty
+# groups, minimizing the sum of squared deviations of the group totals from an
+# equal share (dynamic programming over the cut positions). Returns the index
+# ranges, or nothing if there are fewer items than groups.
+function spine_bundle_cuts(counts, num_groups)
+    n = length(counts)
+    n >= num_groups || return nothing
+    target = sum(counts)/num_groups
+    cum = [0; cumsum(counts)]
+    cost(i, j) = (cum[j+1] - cum[i] - target)^2  # group of items i..j
+    # best[k, j]: minimal cost of splitting items 1..j into k groups
+    best = fill(Inf, num_groups, n)
+    prev = zeros(Int, num_groups, n)
+    for j in 1:n
+        best[1, j] = cost(1, j)
+    end
+    for k in 2:num_groups, j in k:n, i in k:j
+        c = best[k-1, i-1] + cost(i, j)
+        if c < best[k, j]
+            best[k, j] = c
+            prev[k, j] = i
+        end
+    end
+    ranges = Vector{Tuple{Int, Int}}(undef, num_groups)
+    j = n
+    for k in num_groups:-1:1
+        i = k == 1 ? 1 : prev[k, j]
+        ranges[k] = (i, j)
+        j = i - 1
+    end
+    return ranges
+end
+
+function group_into_sectors_angular(xy::AbstractMatrix, num_sectors::Int)
+    # Divide the well field into roughly equal angle sectors
+
+    n = size(xy, 2)
+    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
+    θ = atan.(xy[2,:], xy[1,:]) .+ π
+    order_θ = sortperm(θ)
+    wells_per_sector = div(n, num_sectors)
+    rem = n - wells_per_sector*num_sectors
+    wells_per_sector = fill(wells_per_sector, num_sectors)
+    wells_per_sector[1:rem] .+= 1
+
+    sector_indices = Vector{Vector{Int}}()
+    wtot = 0
+    for sno in 1:num_sectors
+        idx = order_θ[(1:wells_per_sector[sno]) .+ wtot]
+        wtot += wells_per_sector[sno]
+        order_r = sortperm(r[idx])
+        push!(sector_indices, idx[order_r])
+    end
+
+    return sector_indices
+end
+
+function equal_index_ranges(total::Int, n_groups::Int)
+    # Split `total` items into n_groups contiguous, as-equal-as-possible chunks
+    base = div(total, n_groups)
+    rem = total - base*n_groups
+    sizes = fill(base, n_groups)
+    sizes[1:rem] .+= 1
+
+    ranges = Vector{Tuple{Int,Int}}()
+    s = 0
+    for sz in sizes
+        push!(ranges, (s+1, s+sz))
+        s += sz
+    end
+    return ranges
+end
+
+# Dimensions (nx, ny) of the blocks of wells making up the sectors of a
+# rectangular field, for sectors of sector_size wells: the given sector_dims,
+# or the factor pair of sector_size closest to square, wider than tall
+function rectangular_sector_dims(sector_size::Int, sector_dims = missing)
+    if !ismissing(sector_dims)
+        length(sector_dims) == 2 && all(>(0), sector_dims) ||
+            error("sector_dims must be (nx, ny) with nx, ny > 0, got $sector_dims.")
+        return Tuple(Int.(sector_dims))
+    end
+    m = max(sector_size, 1)
+    by = maximum(d for d in 1:isqrt(m) if m % d == 0)
+    return (m ÷ by, by)
+end
+
+# Number of wells per row of a rectangular field, a whole number of sector
+# blocks wide, chosen so that the field is close to square
+function rectangular_grid_width(num_wells::Int, num_sectors::Int, sector_dims)
+    bx, by = sector_dims
+    kx = clamp(round(Int, sqrt(num_sectors*by/bx)), 1, max(num_sectors, 1))
+    return clamp(kx*bx, 1, num_wells)
+end
+
+"""
+    group_into_sectors_cartesian(xy, num_sectors; sector_dims = missing)
+
+Group the wells of a rectangular field, given by their positions `xy`, into
+sectors. The full rows of the field are tiled from the bottom up with blocks of
+`sector_dims = (nx, ny)` wells, by default the factor pair of the sector size
+closest to square. The remaining wells, at the top of the field (and to the
+right, if the field is not a whole number of blocks wide), are divided into the
+remaining sectors in column order. Within each sector, the wells are ordered
+column by column, alternating upwards and downwards.
+"""
+function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
+    sector_dims = missing)
+
+    n = size(xy, 2)
+    cols = sort(unique(xy[1, :]))
+    rows = sort(unique(xy[2, :]))
+    col_index = Dict(x => j for (j, x) in enumerate(cols))
+    row_index = Dict(y => j for (j, y) in enumerate(rows))
+    ci = [col_index[xy[1, i]] for i in 1:n]
+    ri = [row_index[xy[2, i]] for i in 1:n]
+
+    bx, by = rectangular_sector_dims(n ÷ num_sectors, sector_dims)
+    bx = min(bx, length(cols))
+    kx = length(cols) ÷ bx
+    # Blocks in a block row must be full; stop at the first block row that is
+    # not, or when the blocks would use up all the sectors
+    in_block(i, br, bc) = (br - 1)*by < ri[i] <= br*by && (bc - 1)*bx < ci[i] <= bc*bx
+    blocks = Vector{Vector{Int}}()
+    br = 1
+    while length(blocks) + kx <= num_sectors
+        row_blocks = [[i for i in 1:n if in_block(i, br, bc)] for bc in 1:kx]
+        all(b -> length(b) == bx*by, row_blocks) || break
+        append!(blocks, row_blocks)
+        br += 1
+    end
+    in_blocks = falses(n)
+    for b in blocks
+        in_blocks[b] .= true
+    end
+    remaining = findall(.!in_blocks)
+    if !isempty(remaining) && length(blocks) == num_sectors
+        # The remaining wells need a sector: merge them with the last block
+        append!(remaining, pop!(blocks))
+    end
+    num_rest = num_sectors - length(blocks)
+    num_rest <= length(remaining) || error("Cannot divide the $n wells into \
+        $num_sectors sectors with blocks of $bx x $by wells.")
+
+    # Order the wells column by column, alternating upwards and downwards
+    zigzag(idx) = sort(idx, by = i -> (ci[i], isodd(ci[i]) ? ri[i] : -ri[i]))
+    sector_indices = [zigzag(b) for b in blocks]
+    remaining = zigzag(remaining)
+    if num_rest > 0
+        for (a, b) in equal_index_ranges(length(remaining), num_rest)
+            push!(sector_indices, remaining[a:b])
+        end
+    end
+    return sector_indices
+end
+
+"""
+Determines whether a point is inside a polygon. Uses the "even-odd" rule to find whether a point is 
+inside or outside a polygon; if a horizontal ray from the point to infinity crosses an edge of the polygon 
+an odd number of times, then a point is inside; else, it is outside. 
 
 # Arguments
 - `point::AbstractVector`: A point (x, y) to check.
@@ -287,16 +579,6 @@ function point_in_polygon(point::AbstractVector, polygon::AbstractMatrix)
     return inside
 end
 
-"""
-Determines whether multiple points are inside a polygon.
-
-# Arguments
-- `points::AbstractMatrix`: Matrix (2×M) of points to check.
-- `polygon::AbstractMatrix`: Matrix (2×N) representing the vertices of the polygon.
-
-# Returns
-- `Vector{Bool}`: Vector where `true` indicates the point is inside the polygon.
-"""
 function points_in_polygon(points::AbstractMatrix, polygon::AbstractMatrix)
     return [point_in_polygon(points[:, i], polygon) for i in 1:size(points, 2)]
 end

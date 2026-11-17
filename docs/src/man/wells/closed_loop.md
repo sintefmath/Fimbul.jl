@@ -25,6 +25,12 @@ ClosedLoopCoaxialWell
 Fimbul.setup_closed_loop_supply
 ```
 
+## Controls
+
+```@docs
+ClosedLoopRestControl
+```
+
 ## Borehole fill
 
 The material filling the borehole around the pipes (grout by default) is set

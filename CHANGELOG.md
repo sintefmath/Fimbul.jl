@@ -9,7 +9,11 @@
 - By default, the return part is perforated in the reservoir cell of the supply end node (if perforated).
 - Consistent keyword arguments for the closed-loop setup: `wall_thickness` (generic) is renamed to `wall_thickness_pipe`, and `inner_pipe_thermal_conductivity`/`outer_pipe_thermal_conductivity` (coaxial) to `pipe_thermal_conductivity_inner`/`pipe_thermal_conductivity_outer`. Topology arguments (cell groups, `well_cell_centers`, `end_nodes`) without `neighborship` now give an error for all types instead of being ignored.
 - `setup_btes_well` and `setup_vertical_btes_well` default to 1U wells (`closed_loop_type = :u1`).
+- `fibonacci_pattern_2d`: point `n` is placed at radius `sqrt((n - 1/2)/(N - 1/2))` times the outer radius instead of `sqrt(n/N)`, which closes the gap at the center of the pattern, and `spacing` is the median distance between neighboring points. The sunflower pattern of `btes` therefore places the wells slightly differently.
+- `btes`: `num_wells` and `well_spacing` can no longer both be given to the pattern form, since one follows from the other and the field size. Without a field size, the missing one defaults to 48 wells or 5 m.
+- `btes`: with `topology = :sectors_parallel`, each sector is by default a single closed-loop well `S<n>` with its boreholes in series (`well_grouping = :sector`), instead of one well `B<n>` per borehole chained with `ReinjectionTarget` controls. Use `well_grouping = :borehole` for the previous behavior, e.g. to control individual boreholes. With `reversed_discharge = true`, a sector well is discharged by injecting into its return part and producing from its supply part.
 - `btes`: the sectors in `input_data[:sectors]` list the closed-loop wells instead of the supply and return names.
+- `btes`: the wells are perforated in layer 2 only by default (`well_layers = [2]`), so the boreholes start below the insulation layer. During rest periods, the supply parts of the closed-loop wells are put under `ClosedLoopRestControl` and the return parts are disabled, instead of disabling all wells. By default, discharging runs through each sector in the same direction as charging (`reversed_discharge = false`), whereas it previously ran from the outermost to the innermost well.
 - Borehole geometry and fill of closed-loop wells: 1U wells take the borehole radius `radius_borehole` (formerly `radius_grout`), and coaxial wells take the fill thickness outside the outer pipe `grouting_thickness` (formerly `radius_grout`), as generic wells. The fill properties are set with `fill_material`, `fill_thermal_conductivity`, `fill_density` and `fill_heat_capacity` (formerly `grouting_thermal_conductivity`, `grouting_density` and `grouting_heat_capacity`). The old keyword arguments are removed and give an error.
 - Coaxial wells: the default fill is `:grout` (density 2000 kg/m³ and heat capacity 1500 J/(kg K), as for 1U wells, instead of 1500 kg/m³ and 1460 J/(kg K)), and the default fill thickness is 30 mm (borehole radius ≈ 100.7 mm instead of 100 mm).
 
@@ -17,6 +21,10 @@
 
 - New abstract type `AbstractClosedLoopWell` with the concrete types `ClosedLoopGenericWell`, `ClosedLoop1UWell` and `ClosedLoopCoaxialWell`. The type is stored as the `type` of the `MultiSegmentWell`, and `closed_loop_type` accepts either a type or `:generic`, `:u1` and `:coaxial`. New closed-loop types implement `setup_closed_loop_supply`.
 - `ags` uses `ClosedLoopGenericWell` with a general well topology.
+- `btes`: configurable well fields. The wells are placed with a built-in pattern (`btes(pattern; ...)` with `:sunflower`, `:rectangular` or `:circular`), or given explicitly as sectors of well trajectories (`btes(field; ...)`). The sectors are coupled in parallel with the boreholes of each sector in series (`topology = :sectors_parallel`), or in series with the boreholes of each sector in parallel between a shared inlet and outlet (`topology = :sectors_series`). New keyword arguments `reversed_discharge`, `well_grouping` and `permeability`. A sector modelled as a single well needs far fewer timesteps than chained wells, since the coupling between its boreholes is resolved within the well.
+- `btes`: the patterns take a field size (`radius` for `:sunflower` and `:circular`, `extent = (Lx, Ly)` for `:rectangular`) and either `num_wells` or `well_spacing`. The other one follows from the field size, and the number of wells is always honored exactly. The wells are grouped into sectors with `sector_grouping`: bundles of adjacent spiral spines (`:spiral`, default for `:sunflower`), circle sectors (`:angular`, default for `:circular`), consecutive wells from the center outwards (`:sequential`, for `:sunflower` and `:circular`), or blocks of the grid (`:cartesian`, for `:rectangular`: blocks of `sector_dims` wells, by default as square as possible, tile the full rows from the bottom up, and the remaining wells at the top form the last sectors; without `extent`, the field is a whole number of blocks wide). Spiral sectors are rebalanced by moving outermost wells between neighboring sectors, so that their sizes differ by at most one.
+- `plot_btes_field` and `plot_btes_field!` (GLMakie extension): plot the wells of a BTES field colored by sector, with the flow path through each sector and the structure of the pattern (sunflower spines, circular rings or rectangular grid). `btes` stores the well field, pattern and spacing in `input_data`.
+- `ClosedLoopRestControl`: control for closed-loop wells at rest, which holds the wellhead pressure so that the fluid in the loop can expand and contract with temperature.
 - Borehole fill materials for closed-loop wells (`fill_material = :grout` by default, or a named tuple of properties), see `Fimbul.borehole_fill_properties`.
 - Coaxial wells without grout (`grouting_thickness = 0`): the outer pipe exchanges heat directly with the reservoir through its wall.
 - All closed-loop types accept `dir` (also per reservoir cell), generic wells tag their nodes `:pipe`, and `setup_vertical_closed_loop_well` is exported. The setup for each type is documented in `setup_closed_loop_supply`.
@@ -27,10 +35,11 @@
 
 ### Documentation
 
-- New API page for closed-loop wells (setup functions, closed-loop well types and borehole fill).
+- New API page for closed-loop wells (setup functions, closed-loop well types, controls and borehole fill).
 
 ### Compatibility
 
+- Requires Jutul ≥ 0.5.5, whose `find_enclosing_cells` finds all cells along a trajectory. `btes` relies on it to give every borehole the same cells.
 - Requires JutulDarcy ≥ 0.4.1 (and < 0.5), where `setup_reservoir_model` adds the original names of merged wells to the facility. Fimbul 0.4.0 does not work with JutulDarcy 0.4.1 (`H2OSystem` models fail to set up and simulate).
 
 ## [v0.4.0]
