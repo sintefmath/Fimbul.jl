@@ -155,6 +155,10 @@ end
     # Default: one closed-loop well per sector, with the boreholes in series
     case = btes(:sunflower; kw...)
     @test case.input_data[:topology] == :sectors_parallel
+    # The field is kept for plotting
+    @test case.input_data[:pattern] == :sunflower
+    @test sum(length, case.input_data[:field]) == kw.num_wells
+    @test case.input_data[:well_spacing] ≈ 5.0
     @test length(is_closed_loop(case)) == kw.num_sectors
     control = case.forces[1][:Facility].control
     geo = tpfv_geometry(physical_representation(reservoir_model(case.model).data_domain))

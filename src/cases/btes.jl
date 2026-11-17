@@ -176,11 +176,13 @@ function btes(
         radius = radius, extent = extent, sector_grouping = sector_grouping,
         sector_dims = sector_dims, num_sectors = num_sectors, depths = depths)
 
-    return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,well_grouping = well_grouping,
+    case = btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,well_grouping = well_grouping,
     density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,permeability = permeability,
     geothermal_gradient = geothermal_gradient,temperature_charge = temperature_charge,temperature_discharge = temperature_discharge,
     rate_charge = rate_charge,rate_discharge = rate_discharge,reversed_discharge = reversed_discharge,temperature_surface = temperature_surface,num_years = num_years,charge_period = charge_period,
     discharge_period = discharge_period,report_interval = report_interval,utes_schedule_args = utes_schedule_args,n_z = n_z,n_xy = n_xy,mesh_args = mesh_args)
+    case.input_data[:pattern] = pattern
+    return case
 
 end
 
@@ -394,6 +396,8 @@ function btes(
     info[:sectors] = sectors
     info[:timestamps] = timestamps
     info[:topology] = topology
+    info[:field] = field
+    info[:well_spacing] = well_spacing
 
     # ## Set parameters
     parameters = nothing

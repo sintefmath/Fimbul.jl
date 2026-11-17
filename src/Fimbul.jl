@@ -15,6 +15,7 @@ module Fimbul
     export set_dirichlet_bcs
     # Visualization
     export plot_well_data!, plot_mswell_values!
+    export plot_btes_field, plot_btes_field!
     export plot_phase_diagram_contours!, plot_phase_diagram_contours
     export plot_reservoir_state_ph!, plot_reservoir_state_ph
     export plot_reservoir_state_phase_diagram!, plot_reservoir_state_phase_diagram

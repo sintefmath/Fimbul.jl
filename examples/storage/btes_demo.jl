@@ -10,9 +10,9 @@ using HYPRE
 using GLMakie
 
 # ## Set up simulation cases
-# We create BTES systems with 30 wells that extend to 100 m depth, divided into
-# 5 sectors of 6 wells each. The wells are placed in a sunflower, a circular
-# and a rectangular (6 x 5) pattern, all with 5 m between neighboring wells.
+# We create BTES systems with 40 wells that extend to 100 m depth, divided into
+# 5 sectors of 8 wells each. The wells are placed in a sunflower, a circular
+# and a rectangular (8 x 5) pattern, all with 5 m between neighboring wells.
 # The systems operate on a seasonal cycle: wells are charged during summer
 # months (April to September) with hot water at 90°C, and discharged during
 # winter months (October to March) with cold water at 10°C. This seasonal
@@ -23,7 +23,7 @@ using GLMakie
 # spines (`sector_grouping = :spiral`, the default). For the circular pattern,
 # the wells are grouped into sectors from the center outwards
 # (`sector_grouping = :sequential`), instead of into circle sectors, which is
-# the default. For the rectangular pattern, the sectors are blocks of 3 x 2
+# the default. For the rectangular pattern, the sectors are blocks of 4 x 2
 # wells, with the last sector in the top row (`sector_grouping = :cartesian`).
 #
 # !!! tip "Adjusting the well fields"
@@ -37,11 +37,16 @@ using GLMakie
 #     last sector of 9 wells in the two top rows. The sunflower sectors are
 #     made of whole spines when the number of sectors is 2, 3, 5 or 8;
 #     otherwise, a few outer wells are moved between neighboring sectors to
-#     even them out. Larger fields take longer to simulate.
+#     even them out.
+#
+#     The field in this example is kept small so that it runs quickly. The
+#     differences between the patterns grow with the number of wells, so
+#     increase `num_wells` (e.g. to 100) to see larger differences, at the cost
+#     of longer simulations.
 patterns = [:sunflower, :circular, :rectangular]
 pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
     :rectangular => "Rectangular")
-num_wells, num_sectors = 30, 5
+num_wells, num_sectors = 40, 5
 pattern_args = Dict(:sunflower => (sector_grouping = :spiral,),
     :circular => (sector_grouping = :sequential,),
     :rectangular => (sector_grouping = :cartesian,))
@@ -65,13 +70,13 @@ cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 # faster to simulate than one well per borehole (`well_grouping = :borehole`).
 #
 # For the sunflower pattern, the sectors are bundles of adjacent spiral spines
-# (see below), with the flow running from the center outwards. With 30 wells in
+# (see below), with the flow running from the center outwards. With 40 wells in
 # 5 sectors, each sector is a single spine of the 5-spine family. For the
 # circular pattern, the wells are numbered from the center outwards,
 # counter-clockwise on each ring, and the sectors are consecutive groups in
-# this order. For the rectangular pattern, the sectors are blocks of 3 x 2
-# wells, tiling the field from the bottom up, and the wells left over in the
-# top row form the last sector. The flow runs through each sector column by
+# this order. For the rectangular pattern, the sectors are blocks of 4 x 2
+# wells, tiling the field from the bottom up, and the wells in the top row form
+# the last sector. The flow runs through each sector column by
 # column.
 #
 # The structure underlying each pattern is shown in light gray:
@@ -82,73 +87,17 @@ cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 # - Circular: a center well surrounded by concentric rings, one well spacing
 #   apart.
 # - Rectangular: the Cartesian grid on which the wells are placed.
-structure_color = (:gray, 0.4)
-
-function plot_sunflower_spines!(ax, N, R; num_points = 200)
-    Δθ = 2π/Base.MathConstants.golden^2
-    ## The two largest spine families with at least two wells per spine, which
-    ## include the family that the sectors are made of
-    fib = [1, 2]
-    while fib[end] + fib[end-1] <= N/2
-        push!(fib, fib[end] + fib[end-1])
-    end
-    for F in fib[end-1:end]
-        ## Turning angle between wells F apart, taken as the smallest equivalent
-        ## angle, so that the spine through them is a smooth spiral
-        δ = mod(F*Δθ + π, 2π) - π
-        for n in 1:F
-            t = range(0.0, (N - n)/F, length = num_points)
-            r = R.*sqrt.((n .+ F.*t .- 0.5)./(N - 0.5))
-            θ = n*Δθ .+ δ.*t
-            lines!(ax, r.*cos.(θ), r.*sin.(θ); color = structure_color, linewidth = 1)
-        end
-    end
-end
-
-function plot_circular_rings!(ax, R, spacing)
-    for k in 1:round(Int, R/spacing)
-        arc!(ax, Point2f(0, 0), k*spacing, 0, 2π; color = structure_color, linewidth = 1)
-    end
-end
-
-function plot_cartesian_grid!(ax, xy)
-    xs, ys = sort(unique(xy[1, :])), sort(unique(xy[2, :]))
-    for x in xs
-        lines!(ax, [x, x], [ys[1], ys[end]]; color = structure_color, linewidth = 1)
-    end
-    for y in ys
-        lines!(ax, [xs[1], xs[end]], [y, y]; color = structure_color, linewidth = 1)
-    end
-end
-
-# We plot the well positions of each pattern, colored by sector, with the wells
-# of each sector connected in the order the fluid passes them during charging.
-# The first well of each sector is marked with a larger symbol.
+#
+# We plot the well positions of each pattern with `plot_btes_field!`, which
+# colors the wells by sector and connects the wells of each sector in the
+# order the fluid passes them during charging. The first well of each sector
+# is marked with a larger symbol.
 colors = Makie.wong_colors()
-sector_colors = Makie.to_colormap(:tab10)
 fig = Figure(size = (1200, 450))
 for (pno, p) in enumerate(patterns)
-    field, spacing = Fimbul.btes_well_field(p;
-        num_wells = num_wells, num_sectors = num_sectors, pattern_args[p]...,
-        depths = case_args.depths)
-    xy_all = hcat([wc[1:2, 1] for sector in field for wc in sector]...)
-    R = maximum(sqrt.(sum(xy_all.^2, dims = 1)))
     ax = Axis(fig[1, pno]; title = pattern_names[p], aspect = DataAspect(),
         xlabel = "x [m]", ylabel = "y [m]")
-    if p == :sunflower
-        plot_sunflower_spines!(ax, num_wells, R)
-    elseif p == :circular
-        plot_circular_rings!(ax, R, spacing)
-    else
-        plot_cartesian_grid!(ax, xy_all)
-    end
-    for (sno, sector) in enumerate(field)
-        xy = hcat([wc[1:2, 1] for wc in sector]...)
-        lines!(ax, xy[1, :], xy[2, :]; color = sector_colors[sno], linewidth = 2)
-        scatter!(ax, xy[1, :], xy[2, :]; color = sector_colors[sno], markersize = 10,
-            label = "Sector $sno")
-        scatter!(ax, xy[1, 1:1], xy[2, 1:1]; color = sector_colors[sno], markersize = 20)
-    end
+    plot_btes_field!(ax, cases[p])
     pno == 1 && Legend(fig[2, 1:3], ax; orientation = :horizontal)
 end
 fig
@@ -174,7 +123,6 @@ function setup_btes_simulator(case)
         target_its = 10,
         relaxation = true,
         output_substates = true,
-        info_level = -1,
     )
     sel = JutulDarcy.ControlChangeTimestepSelector(
         case.model, 0.0, convert_to_si(5.0, :second))
@@ -226,7 +174,7 @@ discharge_ranges = step_ranges(is_discharge)
 
 # ## Results for the sunflower pattern
 # ### Interactive visualization of results
-# We first plot the final temperature distribution in the reservoir and well
+# We first plot the temperature distribution in the reservoir and well
 # performance over time for the sunflower pattern. The reservoir plot shows the
 # thermal plumes developed around each well sector, while the well results show
 # the temperature and flow rate evolution throughout the simulation.
@@ -237,7 +185,7 @@ plot_reservoir(case.model, result.states;
     step = length(result.states),
     colormap = :seaborn_icefire_gradient)
 
-#
+# ### Well performance over time
 plot_well_results(result.wells, field = :temperature)
 
 # ### Temperature evolution within the boreholes
@@ -341,7 +289,9 @@ Colorbar(fig[1:length(patterns), length(steps)+1];
 fig
 
 # ### Charged and discharged energy
-# Finally, we compare how much energy each pattern stores and recovers. The net
+# Finally, we compare how much energy each pattern stores and recovers. With
+# only 40 wells, the differences between the patterns are small; they become
+# larger for fields with more wells. The net
 # energy exchanged with the ground over a ministep of length Δt is
 # ``Δt \sum_w q_w h_w``, where ``q_w`` is the surface mass rate of well part
 # ``w`` (positive for injection) and ``h_w`` its specific enthalpy at the
