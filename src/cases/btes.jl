@@ -190,24 +190,9 @@ function btes(
     nl = length(layers)
     geo = tpfv_geometry(mesh)
 
-    # Reservoir cells traversed by a well trajectory, top to bottom.
-    #
-    # find_enclosing_cells samples the trajectory and tests each sample point
-    # against the cells, so the spacing must be finer than the thinnest cell
-    # along the well or that cell is skipped. The end points are also pulled a
-    # hair inside the trajectory: a point exactly on the outer boundary of the
-    # mesh sits on the boundary face where the inside test has no margin, and
-    # whether it counts is then decided by roundoff.
-    z_nodes = sort(unique(round.(getindex.(mesh.node_points, 3), digits = 6)))
-    hz_min = minimum(diff(z_nodes))
+    # Reservoir cells traversed by a well trajectory, top to bottom
     function trajectory_cells(wc)
-        wc = copy(wc)
-        L = sum(norm(wc[:, i+1] - wc[:, i]) for i in 1:size(wc, 2)-1)
-        ε = min(1e-3, 1e-3*L)
-        t = (wc[:, 2] - wc[:, 1]); wc[:, 1] += ε*t/norm(t)
-        t = (wc[:, end] - wc[:, end-1]); wc[:, end] -= ε*t/norm(t)
-        n = max(100, ceil(Int, 4*L/hz_min))
-        cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), n = n)
+        cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), geometry = geo)
         filter!(c -> layers[c] ∈ well_layers, cells)
         return cells
     end

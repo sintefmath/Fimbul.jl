@@ -34,6 +34,7 @@
 
 ### Compatibility
 
+- Requires Jutul ≥ 0.5.5, whose `find_enclosing_cells` finds all cells along a trajectory. `btes` relies on it to give every borehole the same cells.
 - Requires JutulDarcy ≥ 0.4.1 (and < 0.5), where `setup_reservoir_model` adds the original names of merged wells to the facility. Fimbul 0.4.0 does not work with JutulDarcy 0.4.1 (`H2OSystem` models fail to set up and simulate).
 
 ## [v0.4.0]
