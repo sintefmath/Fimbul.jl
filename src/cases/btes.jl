@@ -7,7 +7,7 @@ Setup function for borehole thermal energy storage (BTES) system.
 The first form places the wells using one of the built-in patterns. The second
 form takes an explicit well field, and does not accept the pattern arguments
 (`num_wells`, `radius`, `extent`, `num_sectors`, `sector_grouping` and
-`block_size`), since the placement and grouping are given by `field` itself.
+`sector_dims`), since the placement and grouping are given by `field` itself.
 
 # Arguments
 - `pattern = :sunflower`: Well placement pattern.
@@ -67,10 +67,10 @@ form takes an explicit well field, and does not accept the pattern arguments
     sector holds the wells closest to the center.
   - `:cartesian` (default and only option for `:rectangular`): a grid of
     blocks, with the wells of each block ordered column by column. The blocks
-    are chosen to give the most even sectors, or set by `block_size`.
-- `block_size`: Size `(nx, ny)` of the blocks of the `:rectangular` pattern, in
-  number of wells along x and y. The number of blocks must equal
-  `num_sectors`. Only used with the `pattern` form.
+    are chosen to give the most even sectors, or set by `sector_dims`.
+- `sector_dims`: Dimensions `(nx, ny)` of each sector of the `:rectangular`
+  pattern, in number of wells along x and y. The resulting number of sectors
+  must equal `num_sectors`. Only used with the `pattern` form.
 - `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [2]`: Layers in which the wells are perforated. Layer 1 is the
   insulation cover; the pipes pass through it but exchange nothing with it, so
@@ -137,7 +137,7 @@ function btes(
     radius = missing,
     extent = missing,
     sector_grouping = missing,
-    block_size = missing,
+    sector_dims = missing,
     num_sectors = 6,
     depths = [0.0, 0.5, 50, 65],
     well_layers = [2],
@@ -167,7 +167,7 @@ function btes(
     field, well_spacing = btes_well_field(pattern;
         num_wells = num_wells, well_spacing = well_spacing,
         radius = radius, extent = extent, sector_grouping = sector_grouping,
-        block_size = block_size, num_sectors = num_sectors, depths = depths)
+        sector_dims = sector_dims, num_sectors = num_sectors, depths = depths)
 
     return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,well_grouping = well_grouping,
     density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,permeability = permeability,
@@ -432,7 +432,7 @@ end
 """
     btes_well_field(pattern = :sunflower; num_wells = missing, well_spacing = missing,
         radius = missing, extent = missing, sector_grouping = missing,
-        block_size = missing, num_sectors = 6, depths = [0.0, 0.5, 50, 65])
+        sector_dims = missing, num_sectors = 6, depths = [0.0, 0.5, 50, 65])
 
 Well field for [`btes`](@ref) with a built-in pattern, returned as
 `(field, well_spacing)`. See [`btes`](@ref) for the patterns and how the number
@@ -444,7 +444,7 @@ function btes_well_field(pattern::Symbol = :sunflower;
     radius = missing,
     extent = missing,
     sector_grouping = missing,
-    block_size = missing,
+    sector_dims = missing,
     num_sectors = 6,
     depths = [0.0, 0.5, 50, 65],
     )
@@ -494,12 +494,12 @@ function btes_well_field(pattern::Symbol = :sunflower;
         xy, well_spacing = rectangular_pattern(num_wells, well_spacing, field_size)
     end
     division = sector_grouping
-    ismissing(block_size) || pattern == :rectangular ||
-        error("block_size is only used with the :rectangular pattern.")
+    ismissing(sector_dims) || pattern == :rectangular ||
+        error("sector_dims is only used with the :rectangular pattern.")
     size(xy, 2) >= 1 || error("No wells fit in a :$pattern field of size \
         $field_size with spacing $well_spacing.")
     field = field_from_points(division, xy, min(num_sectors, size(xy, 2)), depths;
-        block_size = block_size)
+        sector_dims = sector_dims)
     return (field, Float64(well_spacing))
 end
 

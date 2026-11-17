@@ -390,7 +390,7 @@ end
     end
     # Rectangular sectors as blocks of a given size
     field, s = Fimbul.btes_well_field(:rectangular; num_wells = 36,
-        num_sectors = 6, block_size = (3, 2))
+        num_sectors = 6, sector_dims = (3, 2))
     @test all(length.(field) .== 6)
     for sector in field
         xy = hcat([w[1:2, 1] for w in sector]...)
@@ -398,9 +398,9 @@ end
         @test length(unique(xy[2, :])) == 2
     end
     @test_throws ErrorException Fimbul.btes_well_field(:rectangular;
-        num_wells = 36, num_sectors = 5, block_size = (3, 2))
+        num_wells = 36, num_sectors = 5, sector_dims = (3, 2))
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower;
-        num_wells = 36, num_sectors = 6, block_size = (3, 2))
+        num_wells = 36, num_sectors = 6, sector_dims = (3, 2))
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower;
         sector_grouping = :angular)
     # The sunflower pattern has no gap at the center: the largest empty circle

@@ -10,9 +10,9 @@ using HYPRE
 using GLMakie
 
 # ## Set up simulation cases
-# We create BTES systems with 48 wells that extend to 100 m depth, divided into
-# 8 sectors of 6 wells each. The wells are placed in a sunflower, a circular
-# and a rectangular (6 x 8) pattern, all with 5 m between neighboring wells.
+# We create BTES systems with 30 wells that extend to 100 m depth, divided into
+# 5 sectors of 6 wells each. The wells are placed in a sunflower, a circular
+# and a rectangular (5 x 6) pattern, all with 5 m between neighboring wells.
 # The systems operate on a seasonal cycle: wells are charged during summer
 # months (April to September) with hot water at 90°C, and discharged during
 # winter months (October to March) with cold water at 10°C. This seasonal
@@ -23,17 +23,27 @@ using GLMakie
 # spines (`sector_grouping = :spiral`, the default). For the circular pattern,
 # the wells are grouped into sectors from the center outwards
 # (`sector_grouping = :sequential`), instead of into circle sectors, which is
-# the default. For the rectangular pattern, the field is set to span 25 m x 35 m
-# (`extent`), which gives a 6 x 8 grid of wells 5 m apart, and the sectors are
-# blocks of 3 x 2 wells (`block_size = (3, 2)`).
+# the default. For the rectangular pattern, each sector is a column of the grid
+# (`sector_grouping = :cartesian`).
+#
+# !!! tip "Adjusting the well fields"
+#     The size of the fields is set by `num_wells` and `num_sectors`. Instead
+#     of the number of wells, the spacing between them can be given
+#     (`well_spacing`), and the size of the field can be set with `radius`
+#     (sunflower and circular) or `extent = (Lx, Ly)` (rectangular), see
+#     [`btes`](@ref). For example, 48 wells in 8 sectors with
+#     `extent = (25.0, 35.0)` and `sector_dims = (3, 2)` for the rectangular
+#     pattern gives a 6 x 8 grid divided into blocks of 3 x 2 wells. The
+#     sunflower sectors are made of whole spines when the number of sectors is
+#     2, 3, 5 or 8; otherwise, a few outer wells are moved between neighboring
+#     sectors to even them out. Larger fields take longer to simulate.
 patterns = [:sunflower, :circular, :rectangular]
 pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
     :rectangular => "Rectangular")
-num_wells, num_sectors = 7, 5
+num_wells, num_sectors = 30, 5
 pattern_args = Dict(:sunflower => (sector_grouping = :spiral,),
     :circular => (sector_grouping = :sequential,),
-    :rectangular => (sector_grouping = :cartesian, extent = (25.0, 35.0),
-        block_size = (3, 2)))
+    :rectangular => (sector_grouping = :cartesian,))
 case_args = (
     num_wells = num_wells,
     num_sectors = num_sectors,
@@ -54,13 +64,12 @@ cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 # faster to simulate than one well per borehole (`well_grouping = :borehole`).
 #
 # For the sunflower pattern, the sectors are bundles of adjacent spiral spines
-# (see below), with the flow running from the center outwards. With 48 wells in
-# 8 sectors, each sector is a single spine of the 8-spine family. For the
-# circular pattern,
-# the wells are numbered from the center outwards, counter-clockwise on each
-# ring, and the sectors are consecutive groups in this order. For the
-# rectangular pattern, the sectors are blocks of 3 x 2 wells, which the flow
-# runs through column by column.
+# (see below), with the flow running from the center outwards. With 30 wells in
+# 5 sectors, each sector is a single spine of the 5-spine family. For the
+# circular pattern, the wells are numbered from the center outwards,
+# counter-clockwise on each ring, and the sectors are consecutive groups in
+# this order. For the rectangular pattern, each sector is a column of the grid,
+# which the flow runs through from bottom to top.
 #
 # The structure underlying each pattern is shown in light gray:
 # - Sunflower: well ``n`` sits at radius ``R\sqrt{(n - 1/2)/(N - 1/2)}`` and
@@ -289,33 +298,39 @@ fig
 # the three patterns. We examine the temperature distribution at the end of
 # each of the four charging periods to see how the thermal plume grows. For
 # better visualization, we only display cells below 50 m depth with
-# temperatures above 15°C (warmer than the natural ground temperature).
+# temperatures above 15°C (warmer than the natural ground temperature), seen
+# from above with x to the right and y upwards.
 axis_args = (
     zreversed = true,
-    perspectiveness = 0.75,
     aspect = :data,
-    elevation = 0.2π,
+    elevation = π/2,
+    azimuth = -π/2,
+    perspectiveness = 0.0,
 )
-T_range = (15.0, convert_from_si(T_ch, :Celsius))
+T_range = (15.0, convert_from_si(T_ch*0.95, :Celsius))
 steps = last.(charge_ranges)
-fig = Figure(size = (1200, 900))
+fig = Figure(size = (1100, 850))
 for (pno, p) in enumerate(patterns)
     case, result = cases[p], results[p]
     msh = physical_representation(reservoir_model(case.model).data_domain)
     geo = tpfv_geometry(msh)
     bottom = geo.cell_centroids[3,:] .>= 50.0
     for (cno, step) in enumerate(steps)
-        ax = Axis3(fig[pno, cno];
-            axis_args...,
-            limits = (-40, 40, -40, 40, 40, 125),
-            title = "$(pattern_names[p]), charge $cno")
+        ax = Axis3(fig[pno, cno]; axis_args...,
+            limits = (-40, 40, -40, 40, 40, 125))
         T = result.result.states[step][:Reservoir][:Temperature]
         T = convert_from_si.(T, :Celsius)
-        cells = bottom .& (T .>= 15.0)
-        plot_cell_data!(ax, msh, T; cells = cells,
+        plot_cell_data!(ax, msh, T; cells = bottom,
             colormap = :seaborn_icefire_gradient, colorrange = T_range)
         hidedecorations!(ax)
+        hidespines!(ax)
     end
+    Label(fig[pno, 0], pattern_names[p]; rotation = π/2, fontsize = 18,
+        font = :bold, tellheight = false)
+end
+for cno in eachindex(steps)
+    Label(fig[0, cno], "Charge $cno"; fontsize = 18, font = :bold,
+        tellwidth = false)
 end
 Colorbar(fig[1:length(patterns), length(steps)+1];
     colormap = :seaborn_icefire_gradient, colorrange = T_range,

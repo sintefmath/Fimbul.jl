@@ -268,7 +268,7 @@ function max_distance(x::AbstractMatrix)
 end
 
 function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector;
-    block_size = missing)
+    sector_dims = missing)
 
     num_wells = size(xy, 2)
     well_coords = Vector{Matrix{Float64}}(undef, num_wells)
@@ -280,7 +280,7 @@ function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_secto
     if sector_division == :angular
         sector_indices = group_into_sectors_angular(xy, num_sectors)
     elseif sector_division == :cartesian
-        sector_indices = group_into_sectors_cartesian(xy, num_sectors; block_size = block_size)
+        sector_indices = group_into_sectors_cartesian(xy, num_sectors; sector_dims = sector_dims)
     elseif sector_division == :sequential
         # Consecutive groups of wells, in the order given
         sector_indices = [collect(a:b) for (a, b) in equal_index_ranges(num_wells, num_sectors)]
@@ -469,7 +469,7 @@ function equal_index_ranges(total::Int, n_groups::Int)
 end
 
 function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
-    block_size = missing)
+    sector_dims = missing)
     # Divide the well field into a grid of roughly equal Cartesian blocks
     # The order of the wells within a sector is done in a zigzag order, 
     # where the first column is populated from the top, then the next column is populated 
@@ -492,17 +492,17 @@ function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
         aspect = abs(log((n_rows_total/n_row_bands)/(n_cols_total/n_col_bands)))
         return (maximum(counts) - minimum(counts), aspect), row_bands, col_bands
     end
-    if ismissing(block_size)
+    if ismissing(sector_dims)
         splits = [band_split(d, num_sectors ÷ d) for d in 1:num_sectors
             if num_sectors % d == 0 && d <= n_rows_total && num_sectors ÷ d <= n_cols_total]
         isempty(splits) && error("Cannot divide a $n_cols_total x $n_rows_total \
             grid of wells into $num_sectors sectors.")
         _, row_bands, col_bands = splits[argmin(first.(splits))]
     else
-        # Blocks of block_size[1] columns and block_size[2] rows
-        length(block_size) == 2 && all(>(0), block_size) ||
-            error("block_size must be (nx, ny) with nx, ny > 0, got $block_size.")
-        bx, by = block_size
+        # Blocks of sector_dims[1] columns and sector_dims[2] rows
+        length(sector_dims) == 2 && all(>(0), sector_dims) ||
+            error("sector_dims must be (nx, ny) with nx, ny > 0, got $sector_dims.")
+        bx, by = sector_dims
         col_bands = [(c, min(c + bx - 1, n_cols_total)) for c in 1:bx:n_cols_total]
         row_bands = [(r, min(r + by - 1, n_rows_total)) for r in 1:by:n_rows_total]
         num_blocks = length(col_bands)*length(row_bands)
