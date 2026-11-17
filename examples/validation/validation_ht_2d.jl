@@ -29,7 +29,7 @@ const SINGLE_PHASE_TEMPERATURE_LEVELS = collect(0.0:25.0:125.0)
 const TWO_PHASE_TEMPERATURE_LEVELS = collect(0.0:50.0:350.0)
 const SINGLE_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:50.0)
 const TWO_PHASE_PRESSURE_LEVELS = collect(0.0:5.0:35.0)
-const VAPOR_SATURATION_LEVELS = [0.0, 1e-6, 0.2, 0.4, 0.6, 0.8, 1.0];
+const VAPOR_SATURATION_LEVELS = [0.0, 1.0e-6, 0.2, 0.4, 0.6, 0.8, 1.0];
 
 # ## Set up and simulate the benchmark cases
 # We simulate both fluid-source variants from Weis et al. (2014): the
@@ -46,8 +46,8 @@ function simulate_benchmark_case(benchmark_case; nx = nx, nz = nz)
 
     simulator, config = setup_reservoir_simulator(
         case;
-        tol_cnv = 1e-5,
-        tol_mb = 1e-8,
+        tol_cnv = 1.0e-5,
+        tol_mb = 1.0e-8,
         max_timestep = Inf,
         timesteps = :none,
         relaxation = true,
@@ -71,8 +71,8 @@ function section_cell_axes(case)
     geometry = tpfv_geometry(physical_representation(domain))
     centroids = geometry.cell_centroids
     x0 = case.input_data[:x_coordinate_origin]
-    x = sort(unique(vec(centroids[1, :] .- x0))) ./ 1e3
-    depth = sort(unique(vec(centroids[3, :]))) ./ 1e3
+    x = sort(unique(vec(centroids[1, :] .- x0))) ./ 1.0e3
+    depth = sort(unique(vec(centroids[3, :]))) ./ 1.0e3
     return (x_km = x, depth_km = depth)
 end
 
@@ -102,8 +102,8 @@ function source_location_km(case)
     source_cell = case.input_data[:source_cell]
     x0 = case.input_data[:x_coordinate_origin]
     return (
-        x_km = (centroids[1, source_cell] - x0) / 1e3,
-        depth_km = centroids[3, source_cell] / 1e3,
+        x_km = (centroids[1, source_cell] - x0) / 1.0e3,
+        depth_km = centroids[3, source_cell] / 1.0e3,
     )
 end
 
@@ -156,7 +156,8 @@ function final_state_field_specs(case, results)
 
     if source_regime == :two_phase
         vapor_saturation = clamp.(section_data(case, to_vapor_saturation(state[:Saturations]); top_value = 0.0), 0.0, 1.0)
-        push!(specs,
+        push!(
+            specs,
             (
                 title = "Vapor saturation after $(final_years) years",
                 values = vapor_saturation,
@@ -178,7 +179,7 @@ function plot_final_state(case, results)
     specs = state.specs
     hydrotherm = state.hydrotherm
 
-    fig = Figure(size = (520*length(specs), 520))
+    fig = Figure(size = (520 * length(specs), 520))
     for (i, spec) in enumerate(specs)
         ax = Axis(
             fig[1, i];
@@ -187,26 +188,29 @@ function plot_final_state(case, results)
             xlabel = "Distance [km]",
             ylabel = ifelse(i == 1, "Depth [km]", ""),
             yreversed = true,
-            aspect = AxisAspect(4/3),
+            aspect = AxisAspect(4 / 3),
         )
-        plt = contourf!(ax, axes.x_km, axes.depth_km, spec.values;
+        plt = contourf!(
+            ax, axes.x_km, axes.depth_km, spec.values;
             colormap = spec.colormap,
             levels = spec.levels,
         )
-        contour!(ax, hydrotherm.x_km, hydrotherm.depth_km, spec.hydrotherm_values;
+        contour!(
+            ax, hydrotherm.x_km, hydrotherm.depth_km, spec.hydrotherm_values;
             levels = spec.levels,
             color = :white,
             linewidth = 5,
             linestyle = :dash,
         )
-        contour!(ax, axes.x_km, axes.depth_km, spec.values;
+        contour!(
+            ax, axes.x_km, axes.depth_km, spec.values;
             color = :white,
             levels = spec.levels,
         )
         if i == 2
             le = [
                 LineElement(color = :white),
-                LineElement(color = :white, linestyle = :dash, linewidth = 5)
+                LineElement(color = :white, linestyle = :dash, linewidth = 5),
             ]
             axislegend(
                 ax, le, ["Fimbul", "HYDROTHERM"];
@@ -218,7 +222,8 @@ function plot_final_state(case, results)
         if i > 1
             hideydecorations!(ax, ticks = false)
         end
-        Colorbar(fig[2, i], plt;
+        Colorbar(
+            fig[2, i], plt;
             vertical = false,
             label = spec.colorbar_label,
             ticks = contour_colorbar_ticks(spec.levels),
@@ -234,10 +239,12 @@ end;
 # The moderate-enthalpy source generates an upward-rising thermal plume that
 # stays in the liquid regime. At late time, the deepest part of the plume also
 # carries the highest absolute pressures near the source.
-plot_reservoir(single_phase.case, single_phase.results.states;
+plot_reservoir(
+    single_phase.case, single_phase.results.states;
     key = :Temperature, step = length(single_phase.case.dt),
-    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz,
-    fancy = false)
+    colormap = :seaborn_icefire_gradient, aspect = (9, 0.1, 3), axis_view = :xz,
+    fancy = false
+)
 
 # ### Validate against reference data
 fig_single_phase_final = plot_final_state(single_phase.case, single_phase.results)
@@ -248,10 +255,12 @@ fig_single_phase_final
 # the two-phase field during ascent. At late time, the plume maintains high
 # deep pressures near the source and develops a liquid-saturation deficit where
 # vapor forms in the rising core.
-plot_reservoir(two_phase.case, two_phase.results.states;
+plot_reservoir(
+    two_phase.case, two_phase.results.states;
     key = :Temperature, step = length(two_phase.case.dt),
-    colormap = :seaborn_icefire_gradient, aspect = (9,0.1,3), axis_view = :xz,
-    fancy = false)
+    colormap = :seaborn_icefire_gradient, aspect = (9, 0.1, 3), axis_view = :xz,
+    fancy = false
+)
 
 # ### Validate against reference data
 fig_two_phase = plot_final_state(two_phase.case, two_phase.results)

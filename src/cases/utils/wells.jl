@@ -1,6 +1,8 @@
-function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{Int64}, geometry=missing;
-    top_node = false, output_directions=false, kwargs...)
-    
+function get_well_neighborship(
+        mesh, coordinates_or_cells, connectivity::Matrix{Int64}, geometry = missing;
+        top_node = false, output_directions = false, kwargs...
+    )
+
     # If geometry is not provided, use the mesh geometry
     if ismissing(geometry)
         geometry = tpfv_geometry(mesh)
@@ -17,21 +19,23 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
     # For each well section, find the corresponding reservoir and set up neighborship
     if top_node
         push!(well_cells, [1])
-        push!(neighborship, zeros(2,0))
+        push!(neighborship, zeros(2, 0))
         push!(sections, [1])
         wc_max = 1
     else
         wc_max = 0
     end
-    size(connectivity) == (length(coordinates_or_cells)+top_node, 2) || 
-    error("Connectivity matrix must have size (number of well sections, 2) \
+    size(connectivity) == (length(coordinates_or_cells) + top_node, 2) ||
+        error("Connectivity matrix must have size (number of well sections, 2) \
     or (number of well sections + 1, 2) if top_node is true.")
     for (sno, x) in enumerate(coordinates_or_cells)
         sno = sno + top_node
         # Find reservoir cells corresponding to the well section
         if x isa Matrix{Float64}
-            out = Jutul.find_enclosing_cells(mesh, x;
-                geometry=geometry, extra_out=output_directions, kwargs...)
+            out = Jutul.find_enclosing_cells(
+                mesh, x;
+                geometry = geometry, extra_out = output_directions, kwargs...
+            )
             if output_directions
                 rc, extra = out
             else
@@ -46,13 +50,13 @@ function get_well_neighborship(mesh, coordinates_or_cells, connectivity::Matrix{
         wc_max += length(wc)
         push!(well_cells, wc)
         # Section neighborship
-        n = vcat(wc[1:end-1]', wc[2:end]')
+        n = vcat(wc[1:(end - 1)]', wc[2:end]')
         push!(neighborship, n)
         push!(sections, fill(sno, length(wc)))
 
         # Direction vectors for each well cell
         if output_directions
-            dir = Vector.(extra[:direction].*extra[:lengths])
+            dir = Vector.(extra[:direction] .* extra[:lengths])
             append!(directions, dir)
         end
 
@@ -131,23 +135,23 @@ in `compute_peaceman_index`.
 Set `fractures=true` to operate on the fracture well indices instead of the
 matrix well indices.
 """
-function adjust_well_indices!(well, well_name, fractures=false)
+function adjust_well_indices!(well, well_name, fractures = false)
     if !fractures
         cd = :cell_dims
         pr = :perforation_radius
         dr = :drainage_radius
         pd = :perforation_direction
-        e  = Perforations()
+        e = Perforations()
     else
         cd = :cell_dims_frac
         pr = :perforation_radius_frac
         dr = :drainage_radius_frac
         pd = :perforation_direction_frac
-        e  = JutulDarcy.FracturePerforations()
+        e = JutulDarcy.FracturePerforations()
     end
-    Δ      = well[cd, e]
+    Δ = well[cd, e]
     radius = well[pr, e]
-    dir    = well[pd, e]
+    dir = well[pd, e]
     num_violations = 0
     for (k, (Δk, rk, dk)) in enumerate(zip(Δ, radius, dir))
         if dk == :x
@@ -161,7 +165,7 @@ function adjust_well_indices!(well, well_name, fractures=false)
         end
         re = 0.14 * sqrt(Δk[i]^2 + Δk[j]^2)
         if re <= 3 * rk
-            well[dr, e][k] = rk * (1.0 + 1e-3)
+            well[dr, e][k] = rk * (1.0 + 1.0e-3)
             num_violations += 1
         end
     end

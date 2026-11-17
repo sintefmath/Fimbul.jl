@@ -56,35 +56,35 @@ well trajectory given as an m×3 matrix. The well is set up using
 A `JutulCase` for coaxial geothermal well simulation.
 """
 function coaxial_bhe(;
-    # Well trajectory (m×3 matrix)
-    well_trajectory = default_coaxial_trajectory(),
-    # Geological parameters
-    depths = [0.0, 500.0, 1500.0, 2000.0, 2500.0, 3000.0],
-    permeability = [1e-3, 1e-3, 1e-3, 1e-2, 1e-3]*darcy,
-    porosity = [0.01, 0.01, 0.01, 0.05, 0.01],
-    rock_thermal_conductivity = [2.5, 2.5, 2.8, 3.5, 2.5]*watt/(meter*Kelvin),
-    rock_heat_capacity = [900, 900, 900, 900, 900]*joule/(kilogram*Kelvin),
-    rock_density = [2600, 2600, 2600, 2600]*kilogram/meter^3,
-    # Thermal parameters
-    temperature_surface = convert_to_si(10.0, :Celsius),
-    thermal_gradient = 0.03Kelvin/meter,
-    # Operational parameters
-    rate = 50meter^3/hour,
-    temperature_inj = convert_to_si(25.0, :Celsius),
-    inject_into = :inner,
-    num_years = 30,
-    report_interval = year/4,
-    schedule_args = NamedTuple(),
-    # Mesh parameters
-    hz = missing,
-    hz_min = 15.0,
-    hxy_min = 2.5,
-    hxy_max = 20*hxy_min,
-    mesh_args = NamedTuple(),
-    # Well parameters
-    well_name = :CoaxialWell,
-    well_args = NamedTuple()
-)
+        # Well trajectory (m×3 matrix)
+        well_trajectory = default_coaxial_trajectory(),
+        # Geological parameters
+        depths = [0.0, 500.0, 1500.0, 2000.0, 2500.0, 3000.0],
+        permeability = [1.0e-3, 1.0e-3, 1.0e-3, 1.0e-2, 1.0e-3] * darcy,
+        porosity = [0.01, 0.01, 0.01, 0.05, 0.01],
+        rock_thermal_conductivity = [2.5, 2.5, 2.8, 3.5, 2.5] * watt / (meter * Kelvin),
+        rock_heat_capacity = [900, 900, 900, 900, 900] * joule / (kilogram * Kelvin),
+        rock_density = [2600, 2600, 2600, 2600] * kilogram / meter^3,
+        # Thermal parameters
+        temperature_surface = convert_to_si(10.0, :Celsius),
+        thermal_gradient = 0.03Kelvin / meter,
+        # Operational parameters
+        rate = 50meter^3 / hour,
+        temperature_inj = convert_to_si(25.0, :Celsius),
+        inject_into = :inner,
+        num_years = 30,
+        report_interval = year / 4,
+        schedule_args = NamedTuple(),
+        # Mesh parameters
+        hz = missing,
+        hz_min = 15.0,
+        hxy_min = 2.5,
+        hxy_max = 20 * hxy_min,
+        mesh_args = NamedTuple(),
+        # Well parameters
+        well_name = :CoaxialWell,
+        well_args = NamedTuple()
+    )
     @assert size(well_trajectory, 2) == 3 "well_trajectory must be an m×3 matrix"
     @assert size(well_trajectory, 1) >= 2 "well_trajectory must have at least 2 points"
     @assert inject_into ∈ (:inner, :outer) "inject_into must be :inner or :outer"
@@ -99,12 +99,12 @@ function coaxial_bhe(;
         z_max_well = maximum(well_trajectory[:, 3])
         for (i, d) in enumerate(dz)
             layer_top = depths[i]
-            layer_bot = depths[i+1]
+            layer_bot = depths[i + 1]
             well_in_layer = z_max_well >= layer_top && z_min_well <= layer_bot
             if well_in_layer
                 # Finer resolution in layers containing the wellbore
-                n = ceil(Int, dz[i]/hz_min)
-                hz[i] = d/n
+                n = ceil(Int, dz[i] / hz_min)
+                hz[i] = d / n
             end
             hz[i] = min(hz[i], d / 5)
         end
@@ -116,7 +116,8 @@ function coaxial_bhe(;
     constraints = get_well_constraints(well_trajectory, hxy_min)
 
     # ## Create domain
-    domain, layers, metrics = layered_reservoir_domain(constraints, depths,
+    domain, layers, metrics = layered_reservoir_domain(
+        constraints, depths,
         (
             permeability = permeability,
             porosity = porosity,
@@ -130,14 +131,16 @@ function coaxial_bhe(;
             hxy_max = hxy_max,
             offset_rel = 1.0,
             interpolation = interpolation,
-            mesh_args...
+            mesh_args...,
         )
     )
 
     # ## Set up the coaxial well with direction vectors
     mesh = physical_representation(domain)
-    cells, extra = Jutul.find_enclosing_cells(mesh, well_trajectory, n = 1_000,
-        extra_out = true)
+    cells, extra = Jutul.find_enclosing_cells(
+        mesh, well_trajectory, n = 1_000,
+        extra_out = true
+    )
     # For vertical trajectories, derive perforation length from reservoir cell
     # z-size to avoid tiny sampled sliver segments in thin layers.
     vertical_trajectory = isapprox(maximum(well_trajectory[:, 1]) - minimum(well_trajectory[:, 1]), 0.0) &&
@@ -148,7 +151,8 @@ function coaxial_bhe(;
         dir = Vector.(extra[:direction] .* extra[:lengths])
     end
 
-    well = setup_closed_loop_well(domain, cells;
+    well = setup_closed_loop_well(
+        domain, cells;
         name = well_name,
         closed_loop_type = :coaxial,
         dir = dir,
@@ -159,8 +163,10 @@ function coaxial_bhe(;
     # connected, and shutting one of them gives a dead end.
     model = setup_reservoir_model(
         domain, :geothermal; wells = [well], energy_formulation = :total,
-        can_shut_wells = false)
-    bc, state0, p, T = set_dirichlet_bcs(model;
+        can_shut_wells = false
+    )
+    bc, state0, p, T = set_dirichlet_bcs(
+        model;
         pressure_surface = 10atm,
         temperature_surface = temperature_surface,
         geothermal_gradient = thermal_gradient,
@@ -172,10 +178,11 @@ function coaxial_bhe(;
 
     # ## Set up controls based on flow direction
     rho = reservoir_model(model).system.rho_ref[1]
-    
+
     rate_target = TotalRateTarget(rate)
     ctrl_inj = InjectorControl(
-        rate_target, [1.0], density = rho, temperature = temperature_inj)
+        rate_target, [1.0], density = rho, temperature = temperature_inj
+    )
     bhp_target = BottomHolePressureTarget(5atm)
     ctrl_prod = ProducerControl(bhp_target)
 
@@ -194,10 +201,11 @@ function coaxial_bhe(;
     forces = setup_reservoir_forces(model, control = control, bc = bc)
 
     dt, forces = make_schedule(
-        [forces], [(1,1), (1,1)];
+        [forces], [(1, 1), (1, 1)];
         num_years = num_years,
         report_interval = report_interval,
-        schedule_args...)
+        schedule_args...
+    )
 
     # ## Additional case info
     info = Dict(
@@ -251,7 +259,7 @@ function get_well_constraints(well_trajectory, hxy_min)
     cell_constraints = Vector{Matrix{Float64}}()
     for wc in [well_trajectory]
         cc_new = unique(wc[:, 1:2], dims = 1)'  # 2×N matrix
-        cc_new = cc_new .+ [hxy_min, hxy_min]./2
+        cc_new = cc_new .+ [hxy_min, hxy_min] ./ 2
         if !isempty(cell_constraints)
             for cc in cell_constraints
                 remove = falses(size(cc_new, 2))

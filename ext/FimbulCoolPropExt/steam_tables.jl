@@ -26,10 +26,10 @@ variable updates branch-free in the OBL-style formulation.
 function Fimbul.build_steam_tables_h2o(;
         n_pressure::Int = 100,
         n_enthalpy::Int = 100,
-        p_min::Float64  = 1e4,
-        p_max::Float64  = 100e6,
-        h_min::Float64  = 1e3,
-        h_max::Float64  = 5e6,
+        p_min::Float64 = 1.0e4,
+        p_max::Float64 = 100.0e6,
+        h_min::Float64 = 1.0e3,
+        h_max::Float64 = 5.0e6,
         info_level::Int = 0
     )
     # Check input validity
@@ -186,18 +186,18 @@ function Fimbul.build_steam_tables_h2o(;
     make_table_2d(p, h, S_vap_ph)
 
     return Dict{Symbol, Any}(
-        :temperature         => make_table_2d(p, h, T_tab),
-        :enthalpy            => make_table_2d(p, T, h_tab),
+        :temperature => make_table_2d(p, h, T_tab),
+        :enthalpy => make_table_2d(p, T, h_tab),
         :enthalpy_liquid_sat => h_l_itp,
-        :enthalpy_vapor_sat  => h_v_itp,
-        :density_liquid_ph   => make_table_2d(p, h, ρ_liq_ph),
-        :density_vapor_ph    => make_table_2d(p, h, ρ_vap_ph),
-        :density_mix         => make_table_2d(p, h, ρ_tab),
+        :enthalpy_vapor_sat => h_v_itp,
+        :density_liquid_ph => make_table_2d(p, h, ρ_liq_ph),
+        :density_vapor_ph => make_table_2d(p, h, ρ_vap_ph),
+        :density_mix => make_table_2d(p, h, ρ_tab),
         :viscosity_liquid_ph => make_table_2d(p, h, μ_liq_ph),
-        :viscosity_vapor_ph  => make_table_2d(p, h, μ_vap_ph),
-        :viscosity_mix       => make_table_2d(p, h, μ_tab),
-        :enthalpy_liquid_ph  => make_table_2d(p, h, h_liq_ph),
-        :enthalpy_vapor_ph   => make_table_2d(p, h, h_vap_ph),
+        :viscosity_vapor_ph => make_table_2d(p, h, μ_vap_ph),
+        :viscosity_mix => make_table_2d(p, h, μ_tab),
+        :enthalpy_liquid_ph => make_table_2d(p, h, h_liq_ph),
+        :enthalpy_vapor_ph => make_table_2d(p, h, h_vap_ph),
         :saturation_vapor_ph => make_table_2d(p, h, S_vap_ph),
     )
 end
@@ -241,7 +241,7 @@ function make_table_2d(x, y, v)
     return Jutul.get_2d_interpolator(x, y, v; cap_endpoints = true)
 end
 
-function pad_table(x, y, v, ϵ_xy = 1.0, ϵ_v=1e-3)
+function pad_table(x, y, v, ϵ_xy = 1.0, ϵ_v = 1.0e-3)
 
     x_min, x_max = minimum(x), maximum(x)
     y_min, y_max = minimum(y), maximum(y)
@@ -252,11 +252,11 @@ function pad_table(x, y, v, ϵ_xy = 1.0, ϵ_v=1e-3)
     y_padded = vcat(y_min - Δy * ϵ_xy, y, y_max + Δy * ϵ_xy)
 
     v_padded = zeros(size(v) .+ 2)
-    v_padded[2:end-1, 2:end-1] .= v
-    v_padded[1, :] .= v_padded[2, :].* (1 - ϵ_v)
-    v_padded[end, :] .= v_padded[end-1, :].* (1 + ϵ_v)
-    v_padded[:, 1] .= v_padded[:, 2].* (1 - ϵ_v)
-    v_padded[:, end] .= v_padded[:, end-1].* (1 + ϵ_v)
+    v_padded[2:(end - 1), 2:(end - 1)] .= v
+    v_padded[1, :] .= v_padded[2, :] .* (1 - ϵ_v)
+    v_padded[end, :] .= v_padded[end - 1, :] .* (1 + ϵ_v)
+    v_padded[:, 1] .= v_padded[:, 2] .* (1 - ϵ_v)
+    v_padded[:, end] .= v_padded[:, end - 1] .* (1 + ϵ_v)
 
     return x_padded, y_padded, v_padded
 

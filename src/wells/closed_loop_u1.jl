@@ -22,45 +22,53 @@ in a borehole filled with grout (or another fill material). Nodes are tagged
   `end_nodes`: General well topology. Must be given together.
 - `segment_models`, `tag`: Segment models and node tags for a general topology.
 """
-function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservoir_cells;
-    name = :CL_supply,
-    cell_centers = D[:cell_centroids],
-    neighborship = missing,
-    pipe_cells = missing,
-    grout_cells = missing,
-    tag = missing,
-    borehole = missing,
-    well_cell_centers = missing,
-    dir = :z,
-    segment_models = missing,
-    end_nodes = missing,
-    radius_borehole = 65e-3,
-    radius_pipe = 15e-3,
-    wall_thickness_pipe = 3e-3,
-    pipe_spacing = 60e-3,
-    pipe_thermal_conductivity = 0.38,
-    fill_material = :grout,
-    fill_thermal_conductivity = missing,
-    fill_density = missing,
-    fill_heat_capacity = missing,
-    # Removed keyword arguments, give an error
-    radius_grout = missing,
-    grouting_thermal_conductivity = missing,
-    grouting_heat_capacity = missing,
-    grouting_density = missing,
-    kwarg...)
+function setup_closed_loop_supply(
+        type::ClosedLoop1UWell, D::DataDomain, reservoir_cells;
+        name = :CL_supply,
+        cell_centers = D[:cell_centroids],
+        neighborship = missing,
+        pipe_cells = missing,
+        grout_cells = missing,
+        tag = missing,
+        borehole = missing,
+        well_cell_centers = missing,
+        dir = :z,
+        segment_models = missing,
+        end_nodes = missing,
+        radius_borehole = 65.0e-3,
+        radius_pipe = 15.0e-3,
+        wall_thickness_pipe = 3.0e-3,
+        pipe_spacing = 60.0e-3,
+        pipe_thermal_conductivity = 0.38,
+        fill_material = :grout,
+        fill_thermal_conductivity = missing,
+        fill_density = missing,
+        fill_heat_capacity = missing,
+        # Removed keyword arguments, give an error
+        radius_grout = missing,
+        grouting_thermal_conductivity = missing,
+        grouting_heat_capacity = missing,
+        grouting_density = missing,
+        kwarg...
+    )
 
-    check_removed_kwargs(; radius_grout, grouting_thermal_conductivity,
-        grouting_heat_capacity, grouting_density)
-    fill_props = borehole_fill_properties(fill_material;
+    check_removed_kwargs(;
+        radius_grout, grouting_thermal_conductivity,
+        grouting_heat_capacity, grouting_density
+    )
+    fill_props = borehole_fill_properties(
+        fill_material;
         thermal_conductivity = fill_thermal_conductivity,
         density = fill_density,
-        heat_capacity = fill_heat_capacity)
+        heat_capacity = fill_heat_capacity
+    )
     grouting_thermal_conductivity = fill_props.thermal_conductivity
 
     if ismissing(neighborship)
-        check_closed_loop_topology_args(pipe_cells, grout_cells,
-            well_cell_centers, end_nodes)
+        check_closed_loop_topology_args(
+            pipe_cells, grout_cells,
+            well_cell_centers, end_nodes
+        )
         # Create grout and pipe cells
         reservoir_cells = vcat(reservoir_cells, reverse(reservoir_cells))
         if dir isa AbstractVector
@@ -74,13 +82,13 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
         pipe_cells = collect(1:nc_pipe)
         grout_cells = collect(1:nc_grout) .+ nc_pipe
         # Set up connectivity
-        pipe_to_pipe = vcat(pipe_cells[1:end-1]', pipe_cells[2:end]')
+        pipe_to_pipe = vcat(pipe_cells[1:(end - 1)]', pipe_cells[2:end]')
         pipe_to_grout = vcat(pipe_cells', grout_cells')
         grout_to_grout = vcat(grout_cells[left_ix]', reverse(grout_cells[right_ix]'))
         neighborship = hcat(pipe_to_pipe, pipe_to_grout, grout_to_grout)
         # Set up well cell centers and end nodes
-        wc_supply = cell_centers[:, reservoir_cells[1:nc_mid]] .- [pipe_spacing/2, 0.0, 0.0]
-        wc_return = cell_centers[:, reservoir_cells[nc_mid+1:end]] .+ [pipe_spacing/2, 0.0, 0.0]
+        wc_supply = cell_centers[:, reservoir_cells[1:nc_mid]] .- [pipe_spacing / 2, 0.0, 0.0]
+        wc_return = cell_centers[:, reservoir_cells[(nc_mid + 1):end]] .+ [pipe_spacing / 2, 0.0, 0.0]
         well_cell_centers = repeat(hcat(wc_supply, wc_return), 1, 2)
         end_nodes = [pipe_cells[end]]
         # Set tag for identifying cell groups (e.g., pipe legs, grout zones)
@@ -95,7 +103,7 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
         tag[grout_cells[right_ix]] .= :grout_right
     else
         if ismissing(pipe_cells) || ismissing(grout_cells) ||
-            ismissing(well_cell_centers) || ismissing(end_nodes)
+                ismissing(well_cell_centers) || ismissing(end_nodes)
             error("If neighborship is provided, pipe_cells, grout_cells, \
                 well_cell_centers, and end_nodes must also be provided.")
         end
@@ -144,7 +152,8 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
         # WI = 0.0
     )
     # Set up supply well
-    supply_well = setup_well(D, reservoir_cells;
+    supply_well = setup_well(
+        D, reservoir_cells;
         name = name,
         neighborship = neighborship,
         perforation_cells_well = grout_cells,
@@ -156,9 +165,11 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
         segment_models = segment_models,
         end_nodes = end_nodes,
         dir = dir,
-        args..., kwarg...)
+        args..., kwarg...
+    )
     # Augment supply well with closed_loop-specific properties
-    augment_closed_loop_domain_u1!(supply_well,
+    augment_closed_loop_domain_u1!(
+        supply_well,
         radius_borehole,
         pipe_spacing,
         fill_props.heat_capacity,
@@ -168,7 +179,8 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     )
     # Set default thermal indices
     set_default_closed_loop_thermal_indices_u1!(
-    supply_well, pipe_cells, grout_cells)
+        supply_well, pipe_cells, grout_cells
+    )
 
     return supply_well
 
@@ -199,10 +211,11 @@ along with `manifold_segments`, the column indices of the manifold segments in
   to the mean of the borehole tops in x-y, half a meter above the shallowest.
 """
 function discretize_closed_loop_u1_manifold(
-    cells::AbstractVector{<:AbstractVector{<:Integer}},
-    cell_centers;
-    pipe_spacing = 60e-3,
-    wellhead = missing)
+        cells::AbstractVector{<:AbstractVector{<:Integer}},
+        cell_centers;
+        pipe_spacing = 60.0e-3,
+        wellhead = missing
+    )
 
     num_boreholes = length(cells)
     num_boreholes > 0 || error("Expected at least one borehole")
@@ -214,9 +227,9 @@ function discretize_closed_loop_u1_manifold(
     if ismissing(wellhead)
         tops = hcat([cell_centers[:, c[1]] for c in cells]...)
         wellhead = [
-            sum(tops[1, :])/num_boreholes,
-            sum(tops[2, :])/num_boreholes,
-            minimum(tops[3, :]) - 0.5
+            sum(tops[1, :]) / num_boreholes,
+            sum(tops[2, :]) / num_boreholes,
+            minimum(tops[3, :]) - 0.5,
         ]
     end
     wellhead = reshape(collect(Float64, wellhead), 3, 1)
@@ -230,13 +243,17 @@ function discretize_closed_loop_u1_manifold(
     segments = Vector{Int}[]
     manifold_segments = Int[]
 
-    acc = (reservoir_cells = reservoir_cells, pipe_cells = pipe_cells,
+    acc = (
+        reservoir_cells = reservoir_cells, pipe_cells = pipe_cells,
         grout_cells = grout_cells, segments = segments, centers = centers,
-        tag = tag, borehole = borehole)
+        tag = tag, borehole = borehole,
+    )
     offset = 2
     for (bno, c) in enumerate(cells)
-        pipe_b, offset = append_u1_borehole!(acc, c, cell_centers, bno, offset;
-            pipe_spacing = pipe_spacing)
+        pipe_b, offset = append_u1_borehole!(
+            acc, c, cell_centers, bno, offset;
+            pipe_spacing = pipe_spacing
+        )
         # Manifold: shared inlet -> borehole -> shared outlet
         push!(segments, [inlet, pipe_b[1]])
         push!(manifold_segments, length(segments))
@@ -263,9 +280,9 @@ end
 # reservoir cells `c` (top to bottom) to the topology in `acc`, numbering the
 # new nodes from `offset + 1`. Returns the pipe nodes of the borehole, from the
 # top of the first leg to the top of the second, and the new offset.
-function append_u1_borehole!(acc, c, cell_centers, bno, offset; pipe_spacing = 60e-3)
+function append_u1_borehole!(acc, c, cell_centers, bno, offset; pipe_spacing = 60.0e-3)
     nb = length(c)
-    mb = 2*nb
+    mb = 2 * nb
     # Reservoir cells, down the first leg and up the second
     append!(acc.reservoir_cells, vcat(c, reverse(c)))
     # Pipe nodes for this borehole, then the grout nodes alongside them
@@ -277,8 +294,8 @@ function append_u1_borehole!(acc, c, cell_centers, bno, offset; pipe_spacing = 6
     append!(acc.grout_cells, grout_b)
     segments = acc.segments
     # Pipe to pipe, down and up again. The U-bend is implicit.
-    for i in 1:mb-1
-        push!(segments, [pipe_b[i], pipe_b[i+1]])
+    for i in 1:(mb - 1)
+        push!(segments, [pipe_b[i], pipe_b[i + 1]])
     end
     # Pipe to grout. These must precede the grout-to-grout segments:
     # set_default_closed_loop_thermal_indices_u1! takes the first segment
@@ -288,19 +305,22 @@ function append_u1_borehole!(acc, c, cell_centers, bno, offset; pipe_spacing = 6
     end
     # Grout to grout, pairing the two legs at equal depth
     for i in 1:nb
-        push!(segments, [grout_b[i], grout_b[mb+1-i]])
+        push!(segments, [grout_b[i], grout_b[mb + 1 - i]])
     end
     # Cell centers: the legs are offset in x, and each grout node sits at
     # the same position as the pipe node it surrounds
     wc = hcat(
-        cell_centers[:, c] .- [pipe_spacing/2, 0.0, 0.0],
-        cell_centers[:, reverse(c)] .+ [pipe_spacing/2, 0.0, 0.0]
+        cell_centers[:, c] .- [pipe_spacing / 2, 0.0, 0.0],
+        cell_centers[:, reverse(c)] .+ [pipe_spacing / 2, 0.0, 0.0]
     )
     push!(acc.centers, wc, wc)
-    append!(acc.tag, vcat(
-        fill(:pipe_left, nb), fill(:pipe_right, nb),
-        fill(:grout_left, nb), fill(:grout_right, nb)))
-    append!(acc.borehole, fill(bno, 2*mb))
+    append!(
+        acc.tag, vcat(
+            fill(:pipe_left, nb), fill(:pipe_right, nb),
+            fill(:grout_left, nb), fill(:grout_right, nb)
+        )
+    )
+    append!(acc.borehole, fill(bno, 2 * mb))
     return (pipe_b, offset)
 end
 
@@ -323,24 +343,29 @@ consecutive boreholes in `neighborship`. The node field `borehole` gives the
 borehole number of each node.
 """
 function discretize_closed_loop_u1_series(
-    cells::AbstractVector{<:AbstractVector{<:Integer}},
-    cell_centers;
-    pipe_spacing = 60e-3)
+        cells::AbstractVector{<:AbstractVector{<:Integer}},
+        cell_centers;
+        pipe_spacing = 60.0e-3
+    )
 
     num_boreholes = length(cells)
     num_boreholes > 0 || error("Expected at least one borehole")
     all(c -> length(c) > 0, cells) ||
         error("Each borehole must have at least one reservoir cell")
 
-    acc = (reservoir_cells = Int[], pipe_cells = Int[], grout_cells = Int[],
+    acc = (
+        reservoir_cells = Int[], pipe_cells = Int[], grout_cells = Int[],
         segments = Vector{Int}[], centers = Matrix{Float64}[],
-        tag = Symbol[], borehole = Int[])
+        tag = Symbol[], borehole = Int[],
+    )
     connector_segments = Int[]
     offset = 0
     pipe_prev = Int[]
     for (bno, c) in enumerate(cells)
-        pipe_b, offset = append_u1_borehole!(acc, c, cell_centers, bno, offset;
-            pipe_spacing = pipe_spacing)
+        pipe_b, offset = append_u1_borehole!(
+            acc, c, cell_centers, bno, offset;
+            pipe_spacing = pipe_spacing
+        )
         if bno > 1
             # Surface pipe from the outlet of the previous borehole
             push!(acc.segments, [pipe_prev[end], pipe_b[1]])
@@ -364,16 +389,17 @@ function discretize_closed_loop_u1_series(
 
 end
 
-function augment_closed_loop_domain_u1!(well::DataDomain,
-    radius_grout,
-    pipe_spacing,
-    grouting_heat_capacity,
-    grouting_density;
-    pipe_grout_thermal_index = missing,
-    grout_grout_thermal_index = missing,
-    tag = missing,
-    borehole = missing
-)
+function augment_closed_loop_domain_u1!(
+        well::DataDomain,
+        radius_grout,
+        pipe_spacing,
+        grouting_heat_capacity,
+        grouting_density;
+        pipe_grout_thermal_index = missing,
+        grout_grout_thermal_index = missing,
+        tag = missing,
+        borehole = missing
+    )
 
     c = Cells()
     p = Perforations()
@@ -393,14 +419,14 @@ function augment_closed_loop_domain_u1!(well::DataDomain,
         well[:tag, c] = tag
     end
 
-    if !ismissing(borehole)
+    return if !ismissing(borehole)
         well[:borehole, c] = borehole
     end
 
 end
 
 function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cells, grout_cells)
-    
+
     cell = Cells()
     face = Faces()
     perf = Perforations()
@@ -433,23 +459,24 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         vol_p, vol_w, vol_g = closed_loop_volume_u1(
             L, r_grout, r_pipe + wall_thickness, wall_thickness
         )
-       
+
         hole_volumes[pipe_cell] = vol_p
-        hole_volumes[grout_cell] = 1e-3*vol_g
+        hole_volumes[grout_cell] = 1.0e-3 * vol_g
         casing_volumes[pipe_cell] = 0.0
         casing_volumes[grout_cell] = 0.0
         grout_volumes[pipe_cell] = 0.0
         grout_volumes[grout_cell] = vol_g
-        
+
         pipe_spacing = well[:pipe_spacing, perf][pno]
         λg = well[:grouting_thermal_conductivity, cell][grout_cell]
         λp = well[:casing_thermal_conductivity, cell][pipe_cell]
 
         Rpg, Rgr, Rgg = closed_loop_thermal_resistance_u1(
-            r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, λg, λp)
-        λpg = L/Rpg
-        λgr = L/Rgr
-        λgg = L/Rgg
+            r_grout, r_pipe + wall_thickness, wall_thickness, pipe_spacing, λg, λp
+        )
+        λpg = L / Rpg
+        λgr = L / Rgr
+        λgg = L / Rgg
 
         # The thermal well index only accounts for the resistance inside the
         # borehole (grout to borehole wall), and contains no term for
@@ -488,7 +515,7 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
 
     well[:volume_override_hole, cell] = hole_volumes
     well[:volume_override_casing, cell] = casing_volumes
-    well[:volume_override_grouting, cell] = grout_volumes
+    return well[:volume_override_grouting, cell] = grout_volumes
 end
 
 function closed_loop_volume_u1(length, radius_grout, radius_pipe, wall_thickness)
@@ -496,22 +523,23 @@ function closed_loop_volume_u1(length, radius_grout, radius_pipe, wall_thickness
     # Compute pipe and grout volume
     L = length
     rg, rp_in, rp_out = radius_grout, radius_pipe - wall_thickness, radius_pipe
-    vol_hole = π*rp_in^2*L
-    vol_pipe = π*rp_out^2*L
+    vol_hole = π * rp_in^2 * L
+    vol_pipe = π * rp_out^2 * L
     vol_wall = vol_pipe - vol_hole
-    vol_grout = π*rg^2*L/2 - vol_pipe
+    vol_grout = π * rg^2 * L / 2 - vol_pipe
 
     return vol_hole, vol_wall, vol_grout
 
 end
 
 function closed_loop_thermal_resistance_u1(
-    radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
-    thermal_conductivity_grout, thermal_conductivity_pipe)
+        radius_grout, radius_pipe, wall_thickness_pipe, pipe_spacing,
+        thermal_conductivity_grout, thermal_conductivity_pipe
+    )
     # Convenient short-hand notation
     radius_pipe_outer = radius_pipe
     radius_pipe_inner = radius_pipe - wall_thickness_pipe
-    rg, rp_in, rp_out, w = 
+    rg, rp_in, rp_out, w =
         radius_grout, radius_pipe_inner, radius_pipe_outer, pipe_spacing
     λg, λp = thermal_conductivity_grout, thermal_conductivity_pipe
 
@@ -519,19 +547,19 @@ function closed_loop_thermal_resistance_u1(
     # Advection-dependent pipe thermal resistance
     Ra = 0.0 # TODO: Implement this
     # Conduction-dependent pipe thermal resistance
-    Rc_a = log(rp_out/rp_in)/(2*π*λp)
-    dg, dp_out = 2*rg, 2*rp_out
-    x = log(sqrt(dg^2 + 2*dp_out^2)/(2*dp_out))/log(dg/(sqrt(2)*dp_out))
+    Rc_a = log(rp_out / rp_in) / (2 * π * λp)
+    dg, dp_out = 2 * rg, 2 * rp_out
+    x = log(sqrt(dg^2 + 2 * dp_out^2) / (2 * dp_out)) / log(dg / (sqrt(2) * dp_out))
     # Grout thermal resistance
-    Rg = acosh((dg^2 + dp_out^2 - w^2)/(2*dg*dp_out))/(2*π*λg)*(1.601 - 0.888*w/dg)
+    Rg = acosh((dg^2 + dp_out^2 - w^2) / (2 * dg * dp_out)) / (2 * π * λg) * (1.601 - 0.888 * w / dg)
     # Conduction-dependent grout thermal resistance
-    Rc_b = x*Rg
+    Rc_b = x * Rg
     # Combined thermal resistance of pipe and grout
     Rpg = Ra + Rc_a + Rc_b
-    Rgr = (1-x)*Rg
+    Rgr = (1 - x) * Rg
     # Grout-to-grout thermal resistance
-    Rar = acosh((2*w^2 - dp_out^2)/dp_out^2)/(2*π*λg)
-    Rgg = 2*Rgr*(Rar - 2*x*Rg)/(2*Rgr - Rar + 2*x*Rg)
+    Rar = acosh((2 * w^2 - dp_out^2) / dp_out^2) / (2 * π * λg)
+    Rgg = 2 * Rgr * (Rar - 2 * x * Rg) / (2 * Rgr - Rar + 2 * x * Rg)
 
     return Rpg, Rgr, Rgg
 

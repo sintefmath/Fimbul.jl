@@ -44,12 +44,16 @@ using GLMakie
 #     increase `num_wells` (e.g. to 100) to see larger differences, at the cost
 #     of longer simulations.
 patterns = [:sunflower, :circular, :rectangular]
-pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
-    :rectangular => "Rectangular")
+pattern_names = Dict(
+    :sunflower => "Sunflower", :circular => "Circular",
+    :rectangular => "Rectangular"
+)
 num_wells, num_sectors = 40, 5
-pattern_args = Dict(:sunflower => (sector_grouping = :spiral,),
+pattern_args = Dict(
+    :sunflower => (sector_grouping = :spiral,),
     :circular => (sector_grouping = :sequential,),
-    :rectangular => (sector_grouping = :cartesian,))
+    :rectangular => (sector_grouping = :cartesian,)
+)
 case_args = (
     num_wells = num_wells,
     num_sectors = num_sectors,
@@ -95,8 +99,10 @@ cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 colors = Makie.wong_colors()
 fig = Figure(size = (1200, 450))
 for (pno, p) in enumerate(patterns)
-    ax = Axis(fig[1, pno]; title = pattern_names[p], aspect = DataAspect(),
-        xlabel = "x [m]", ylabel = "y [m]")
+    ax = Axis(
+        fig[1, pno]; title = pattern_names[p], aspect = DataAspect(),
+        xlabel = "x [m]", ylabel = "y [m]"
+    )
     plot_btes_field!(ax, cases[p])
     pno == 1 && Legend(fig[2, 1:3], ax; orientation = :horizontal)
 end
@@ -113,11 +119,12 @@ fig
 # timestep selector that reduces the timestep to 5 seconds during control
 # changes to maintain numerical stability and convergence.
 function setup_btes_simulator(case)
-    simulator, config = setup_reservoir_simulator(case;
-        tol_cnv = 1e-2,
-        tol_mb = 1e-6,
-        tol_cnve_well = 1e-2,
-        tol_cnv_well = 1e-2,
+    simulator, config = setup_reservoir_simulator(
+        case;
+        tol_cnv = 1.0e-2,
+        tol_mb = 1.0e-6,
+        tol_cnve_well = 1.0e-2,
+        tol_cnv_well = 1.0e-2,
         timesteps = :auto,
         initial_dt = 5.0,
         target_its = 10,
@@ -125,9 +132,10 @@ function setup_btes_simulator(case)
         output_substates = true,
     )
     sel = JutulDarcy.ControlChangeTimestepSelector(
-        case.model, 0.0, convert_to_si(5.0, :second))
+        case.model, 0.0, convert_to_si(5.0, :second)
+    )
     push!(config[:timestep_selectors], sel)
-    config[:timestep_max_decrease] = 1e-6
+    config[:timestep_max_decrease] = 1.0e-6
     return simulator, config
 end
 
@@ -135,12 +143,16 @@ end
 # Run the full 4-year simulation for each pattern. Note that these simulations
 # can take a few minutes to run. Setting `info_level = 0` will show a progress
 # bar while the simulations run.
-results = Dict(map(patterns) do p
-    case = cases[p]
-    simulator, config = setup_btes_simulator(case)
-    p => simulate_reservoir(case;
-        simulator = simulator, config = config, info_level = 0)
-end);
+results = Dict(
+    map(patterns) do p
+        case = cases[p]
+        simulator, config = setup_btes_simulator(case)
+        p => simulate_reservoir(
+            case;
+            simulator = simulator, config = config, info_level = 0
+        )
+    end
+);
 
 # Since we stored the ministep states, `result.states` holds the reservoir
 # state after every ministep, while `result.result.states` holds the full state
@@ -154,8 +166,10 @@ end);
 T_ch = convert_to_si(90.0, :Celsius)
 T_dch = convert_to_si(10.0, :Celsius)
 function is_injecting(forces, T_inj)
-    return any(c -> c isa InjectorControl && c.temperature == T_inj,
-        values(forces[:Facility].control))
+    return any(
+        c -> c isa InjectorControl && c.temperature == T_inj,
+        values(forces[:Facility].control)
+    )
 end
 schedule = cases[patterns[1]].forces
 is_charge = [is_injecting(f, T_ch) for f in schedule]
@@ -165,8 +179,8 @@ is_discharge = [is_injecting(f, T_dch) for f in schedule]
 # a step is the state at its end, so the last step of each range gives the
 # state at the end of the period.
 function step_ranges(mask)
-    starts = findall(i -> mask[i] && (i == 1 || !mask[i-1]), eachindex(mask))
-    stops = findall(i -> mask[i] && (i == length(mask) || !mask[i+1]), eachindex(mask))
+    starts = findall(i -> mask[i] && (i == 1 || !mask[i - 1]), eachindex(mask))
+    stops = findall(i -> mask[i] && (i == length(mask) || !mask[i + 1]), eachindex(mask))
     return [a:b for (a, b) in zip(starts, stops)]
 end
 charge_ranges = step_ranges(is_charge)
@@ -183,11 +197,13 @@ case_name = :sunflower
 case, result = cases[case_name], results[case_name];
 
 # ### Interactive visualization of reservoir results
-plot_reservoir(case.model, result.states;
+plot_reservoir(
+    case.model, result.states;
     well_fontsize = 0,
     key = :Temperature,
     step = length(result.states),
-    colormap = :seaborn_icefire_gradient)
+    colormap = :seaborn_icefire_gradient
+)
 
 # ### Well performance over time
 plot_well_results(result.wells, field = :temperature)
@@ -213,17 +229,22 @@ function plot_btes_temperature(ax, case, result, sector, timesteps)
     d = case.model.models[well].data_domain
     borehole, tag = d[:borehole, Cells()], d[:tag, Cells()]
     for (sno, step) in enumerate(timesteps)
-        label = String("$(round((time[step]),digits=1)) days")
+        label = String("$(round((time[step]), digits = 1)) days")
         T = result.result.states[step][well][:Temperature]
         T = convert_from_si.(T, :Celsius)
         for b in 1:maximum(borehole)
             lbl = b == 1 ? label : nothing
-            nodes = findall(i -> borehole[i] == b &&
-                tag[i] in (:pipe_left, :pipe_right), eachindex(borehole))
-            plot_mswell_values!(ax, case.model, well, T;
-            nodes = nodes, geo = geo, color = colors[sno], linewidth = 6, label = lbl)
+            nodes = findall(
+                i -> borehole[i] == b &&
+                    tag[i] in (:pipe_left, :pipe_right), eachindex(borehole)
+            )
+            plot_mswell_values!(
+                ax, case.model, well, T;
+                nodes = nodes, geo = geo, color = colors[sno], linewidth = 6, label = lbl
+            )
         end
     end
+    return
 end
 
 # #### Temperature evolution during the first charging cycle
@@ -231,19 +252,23 @@ end
 # as hot water flows from the first to the last well of the sector.
 fig = Figure(size = (1000, 750))
 sector = 1
-ax = Axis(fig[1, 1]; title = "Temperature evolution, sector $sector (charging)",
-xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
+ax = Axis(
+    fig[1, 1]; title = "Temperature evolution, sector $sector (charging)",
+    xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true
+)
 plot_btes_temperature(ax, case, result, sector, charge_ranges[1])
-Legend(fig[1,2], ax; fontsize = 20)
+Legend(fig[1, 2], ax; fontsize = 20)
 
 # #### Temperature evolution during the first discharging cycle
 # Next, we show how stored thermal energy is extracted as cold water flows
 # through the sector in the opposite direction, from the last to the first
 # well.
-ax = Axis(fig[2, 1]; title = "Temperature evolution, sector $sector (discharging)",
-xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
+ax = Axis(
+    fig[2, 1]; title = "Temperature evolution, sector $sector (discharging)",
+    xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true
+)
 plot_btes_temperature(ax, case, result, sector, discharge_ranges[1])
-Legend(fig[2,2], ax; fontsize = 20)
+Legend(fig[2, 2], ax; fontsize = 20)
 
 fig
 
@@ -257,38 +282,48 @@ fig
 axis_args = (
     zreversed = true,
     aspect = :data,
-    elevation = π/2,
-    azimuth = -π/2,
+    elevation = π / 2,
+    azimuth = -π / 2,
     perspectiveness = 0.0,
 )
-T_range = (15.0, convert_from_si(T_ch*0.95, :Celsius))
+T_range = (15.0, convert_from_si(T_ch * 0.95, :Celsius))
 steps = last.(charge_ranges)
 fig = Figure(size = (1100, 850))
 for (pno, p) in enumerate(patterns)
     case, result = cases[p], results[p]
     msh = physical_representation(reservoir_model(case.model).data_domain)
     geo = tpfv_geometry(msh)
-    bottom = geo.cell_centroids[3,:] .>= 50.0
+    bottom = geo.cell_centroids[3, :] .>= 50.0
     for (cno, step) in enumerate(steps)
-        ax = Axis3(fig[pno, cno]; axis_args...,
-            limits = (-40, 40, -40, 40, 40, 125))
+        ax = Axis3(
+            fig[pno, cno]; axis_args...,
+            limits = (-40, 40, -40, 40, 40, 125)
+        )
         T = result.result.states[step][:Reservoir][:Temperature]
         T = convert_from_si.(T, :Celsius)
-        plot_cell_data!(ax, msh, T; cells = bottom,
-            colormap = :seaborn_icefire_gradient, colorrange = T_range)
+        plot_cell_data!(
+            ax, msh, T; cells = bottom,
+            colormap = :seaborn_icefire_gradient, colorrange = T_range
+        )
         hidedecorations!(ax)
         hidespines!(ax)
     end
-    Label(fig[pno, 0], pattern_names[p]; rotation = π/2, fontsize = 18,
-        font = :bold, tellheight = false)
+    Label(
+        fig[pno, 0], pattern_names[p]; rotation = π / 2, fontsize = 18,
+        font = :bold, tellheight = false
+    )
 end
 for cno in eachindex(steps)
-    Label(fig[0, cno], "Charge $cno"; fontsize = 18, font = :bold,
-        tellwidth = false)
+    Label(
+        fig[0, cno], "Charge $cno"; fontsize = 18, font = :bold,
+        tellwidth = false
+    )
 end
-Colorbar(fig[1:length(patterns), length(steps)+1];
+Colorbar(
+    fig[1:length(patterns), length(steps) + 1];
     colormap = :seaborn_icefire_gradient, colorrange = T_range,
-    label = "T [°C]", vertical = true)
+    label = "T [°C]", vertical = true
+)
 fig
 
 # ### Charged and discharged energy
@@ -313,42 +348,54 @@ function exchanged_energy(result, steps)
         @assert length(ministep_states) == length(dt)
         for (state, Δt) in zip(ministep_states, dt)
             f = state[:Facility]
-            E += Δt*sum(f[:TotalSurfaceMassRate].*f[:SurfaceEnthalpy])
+            E += Δt * sum(f[:TotalSurfaceMassRate] .* f[:SurfaceEnthalpy])
         end
     end
     return E
 end
 
-MWh = si_unit(:mega)*si_unit(:watt)*si_unit(:hour)
-E_charged = Dict(p =>
-    [exchanged_energy(results[p], r) for r in charge_ranges]./MWh
-    for p in patterns)
-E_discharged = Dict(p =>
-    [-exchanged_energy(results[p], r) for r in discharge_ranges]./MWh
-    for p in patterns)
+MWh = si_unit(:mega) * si_unit(:watt) * si_unit(:hour)
+E_charged = Dict(
+    p =>
+        [exchanged_energy(results[p], r) for r in charge_ranges] ./ MWh
+        for p in patterns
+)
+E_discharged = Dict(
+    p =>
+        [-exchanged_energy(results[p], r) for r in discharge_ranges] ./ MWh
+        for p in patterns
+)
 
 # We plot the charged energy as light bars and the discharged energy as dark
 # bars on top, with the recovery factor of each cycle above.
 num_cycles = min(length(charge_ranges), length(discharge_ranges))
 num_patterns = length(patterns)
-width = 0.8/num_patterns
+width = 0.8 / num_patterns
 E_max = maximum(maximum.(values(E_charged)))
 fig = Figure(size = (1000, 500))
-ax = Axis(fig[1, 1]; xlabel = "Cycle", ylabel = "Energy [MWh]",
+ax = Axis(
+    fig[1, 1]; xlabel = "Cycle", ylabel = "Energy [MWh]",
     xticks = 1:num_cycles,
-    title = "Charged (light) and discharged (dark) energy per cycle")
+    title = "Charged (light) and discharged (dark) energy per cycle"
+)
 for (pno, p) in enumerate(patterns)
-    x = (1:num_cycles) .+ (pno - (num_patterns + 1)/2)*width
+    x = (1:num_cycles) .+ (pno - (num_patterns + 1) / 2) * width
     E_ch = E_charged[p][1:num_cycles]
     E_dch = E_discharged[p][1:num_cycles]
-    barplot!(ax, x, E_ch; width = width, color = (colors[pno], 0.35),
-        strokecolor = :black, strokewidth = 1)
-    barplot!(ax, x, E_dch; width = width, color = colors[pno],
-        strokecolor = :black, strokewidth = 1, label = pattern_names[p])
-    text!(ax, x, E_ch .+ 0.01*E_max;
-        text = ["$(round(Int, 100*r))%" for r in E_dch./E_ch],
-        align = (:center, :bottom), fontsize = 14)
+    barplot!(
+        ax, x, E_ch; width = width, color = (colors[pno], 0.35),
+        strokecolor = :black, strokewidth = 1
+    )
+    barplot!(
+        ax, x, E_dch; width = width, color = colors[pno],
+        strokecolor = :black, strokewidth = 1, label = pattern_names[p]
+    )
+    text!(
+        ax, x, E_ch .+ 0.01 * E_max;
+        text = ["$(round(Int, 100 * r))%" for r in E_dch ./ E_ch],
+        align = (:center, :bottom), fontsize = 14
+    )
 end
-ylims!(ax, 0, 1.1*E_max)
+ylims!(ax, 0, 1.1 * E_max)
 Legend(fig[2, 1], ax; orientation = :horizontal)
 fig

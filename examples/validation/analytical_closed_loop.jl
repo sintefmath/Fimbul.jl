@@ -27,27 +27,27 @@ darcy = si_unit(:darcy);
 # assume a constant ground temperature of 10 °C.
 T_in = convert_to_si(80.0, :Celsius)   # Inlet temperature (supply fluid)
 T_rock = convert_to_si(10.0, :Celsius) # Ground temperature (constant far-field)
-Q = 20.0*meter^3/day                   # Volumetric flow rate through well
+Q = 20.0 * meter^3 / day                   # Volumetric flow rate through well
 
 # ### Fluid properties (water-based heat transfer fluid)
 # To enable comparison with analytical solutions, we use constant fluid
 # properties.
-ρf = 988.1*kilogram/meter^3          # Fluid density at operating temperature
-Cpf = 4184.0*Joule/(kilogram*Kelvin) # Specific heat capacity of fluid
-λf = 0.6405*Watt/(meter*Kelvin)      # Thermal conductivity of fluid
+ρf = 988.1 * kilogram / meter^3          # Fluid density at operating temperature
+Cpf = 4184.0 * Joule / (kilogram * Kelvin) # Specific heat capacity of fluid
+λf = 0.6405 * Watt / (meter * Kelvin)      # Thermal conductivity of fluid
 
 # ### Rock formation properties (typical for sedimentary rock)
 ϕ = 0.01                            # Porosity (very low for compact rock)
-K = 1e-3*darcy                      # Permeability (practically impermeable)
-ρr = 2650.0*kilogram/meter^3        # Rock density
-Cpr = 900.0*Joule/(kilogram*Kelvin) # Rock specific heat capacity
-λr = 2.5*Watt/(meter*Kelvin)        # Rock thermal conductivity
+K = 1.0e-3 * darcy                      # Permeability (practically impermeable)
+ρr = 2650.0 * kilogram / meter^3        # Rock density
+Cpr = 900.0 * Joule / (kilogram * Kelvin) # Rock specific heat capacity
+λr = 2.5 * Watt / (meter * Kelvin)        # Rock thermal conductivity
 
 # ### Closed-loop installation materials
-ρg = 2000.0*kilogram/meter^3         # Grout density (cement/sand mixture)
-Cpg = 1500.0*Joule/(kilogram*Kelvin) # Grout specific heat capacity
-λg = 2.3*Watt/(meter*Kelvin)         # Grout thermal conductivity
-λp = 0.38*Watt/(meter*Kelvin);       # Pipe wall thermal conductivity (HDPE)
+ρg = 2000.0 * kilogram / meter^3         # Grout density (cement/sand mixture)
+Cpg = 1500.0 * Joule / (kilogram * Kelvin) # Grout specific heat capacity
+λg = 2.3 * Watt / (meter * Kelvin)         # Grout thermal conductivity
+λp = 0.38 * Watt / (meter * Kelvin);       # Pipe wall thermal conductivity (HDPE)
 
 # ### Closed-loop configurations
 # We will consider two different closed-loop configurations: U-tube and coaxial.
@@ -64,25 +64,25 @@ Cpg = 1500.0*Joule/(kilogram*Kelvin) # Grout specific heat capacity
 # provides thermal contact with the rock formation while maintaining structural
 # integrity of the borehole.
 
-L = 100.0*meter # Closed-loop well length (vertical depth)
+L = 100.0 * meter # Closed-loop well length (vertical depth)
 cfg_u1 = ( # U-tube parameters
     closed_loop_type = :u1,
-    radius_borehole = 65e-3*meter,      # Borehole radius (grout outer boundary)
-    radius_pipe = 16e-3*meter,          # Pipe outer radius (both supply/return)
-    wall_thickness_pipe = 2.9e-3*meter, # Pipe wall thickness
-    pipe_spacing = 60e-3*meter,         # Center-to-center distance between pipes
+    radius_borehole = 65.0e-3 * meter,      # Borehole radius (grout outer boundary)
+    radius_pipe = 16.0e-3 * meter,          # Pipe outer radius (both supply/return)
+    wall_thickness_pipe = 2.9e-3 * meter, # Pipe wall thickness
+    pipe_spacing = 60.0e-3 * meter,         # Center-to-center distance between pipes
     pipe_thermal_conductivity = λp,     # Thermal conductivity of pipe material
 )
 
 cfg_coax = ( # Coaxial parameters
     closed_loop_type = :coaxial,
-    grouting_thickness = 25e-3*meter,       # Grout thickness outside outer pipe
-    radius_pipe_inner = 12e-3*meter,        # Inner pipe outer radius
-    wall_thickness_pipe_inner = 3e-3*meter, # Inner pipe wall thickness
-    radius_pipe_outer = 25e-3*meter,        # Outer pipe outer radius
-    wall_thickness_pipe_outer = 4e-3*meter, # Outer pipe wall thickness
+    grouting_thickness = 25.0e-3 * meter,       # Grout thickness outside outer pipe
+    radius_pipe_inner = 12.0e-3 * meter,        # Inner pipe outer radius
+    wall_thickness_pipe_inner = 3.0e-3 * meter, # Inner pipe wall thickness
+    radius_pipe_outer = 25.0e-3 * meter,        # Outer pipe outer radius
+    wall_thickness_pipe_outer = 4.0e-3 * meter, # Outer pipe wall thickness
     pipe_thermal_conductivity_inner = λp,   # Inner pipe material conductivity
-    pipe_thermal_conductivity_outer = λp    # Outer pipe material conductivity
+    pipe_thermal_conductivity_outer = λp,    # Outer pipe material conductivity
 );
 
 # ## Utility functions
@@ -92,10 +92,10 @@ cfg_coax = ( # Coaxial parameters
 # horizontal directions.
 
 function setup_closed_loop_single( # Utility function to set up closed-loop simulation case
-    type;          # Type of closed-loop geometry (:u1 or :coaxial)
-    nz = 100,      # Number of cells in vertical direction
-    n_step = 1,    # Number of time steps
-    inlet = :outer # Inlet pipe for coaxial geometry (:outer or :inner
+        type;          # Type of closed-loop geometry (:u1 or :coaxial)
+        nz = 100,      # Number of cells in vertical direction
+        n_step = 1,    # Number of time steps
+        inlet = :outer # Inlet pipe for coaxial geometry (:outer or :inner
     )
 
     ## Select well configuration based on geometry type
@@ -108,9 +108,10 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
     end
     ## Create computational domain
     dims = (1, 1, nz)
-    Δ = (100000.0*dims[3]/L, 100000.0*dims[3]/L, L)
+    Δ = (100000.0 * dims[3] / L, 100000.0 * dims[3] / L, L)
     msh = CartesianMesh(dims, Δ)
-    reservoir = reservoir_domain(msh;
+    reservoir = reservoir_domain(
+        msh;
         rock_density = ρr,
         rock_heat_capacity = Cpr,
         rock_thermal_conductivity = λr,
@@ -122,7 +123,8 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
     ## Set up closed-loop well. The supply and return parts are merged into a
     ## single well named :CL, controlled as :CL_supply and :CL_return (U1)
     ## or :CL_inner and :CL_outer (coaxial).
-    well = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
+    well = Fimbul.setup_vertical_btes_well(
+        reservoir, 1, 1;
         name = :CL,
         well_args...,
         fill_material = :grout,
@@ -135,15 +137,18 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
     model = setup_reservoir_model(reservoir, sys; wells = [well], thermal = true)
     ## Set up controls and boundary conditions
     ctrl_inj = InjectorControl( # Injection control with fixed temperature
-        TotalRateTarget(Q), [1.0], 
-        density=ρf, temperature=T_in)
+        TotalRateTarget(Q), [1.0],
+        density = ρf, temperature = T_in
+    )
     ctrl_prod = ProducerControl( # Production control with fixed BHP
-        BottomHolePressureTarget(1.0*atm))
+        BottomHolePressureTarget(1.0 * atm)
+    )
     geo = tpfv_geometry(msh)
     bc_cells = geo.boundary_neighbors
     domain = reservoir_model(model).data_domain
     bc = flow_boundary_condition( # Fixed pressure and temperature BCs
-        bc_cells, domain, 5.0*atm, T_rock)
+        bc_cells, domain, 5.0 * atm, T_rock
+    )
     ## Set up forces and initial state
     if type == :coaxial && inlet == :outer # Coax with injection in outer pipe
         ctrl_supply = ctrl_prod
@@ -157,67 +162,73 @@ function setup_closed_loop_single( # Utility function to set up closed-loop simu
         supply_name => ctrl_supply,
         return_name => ctrl_return
     )
-    forces = setup_reservoir_forces(model; control=controls, bc = bc)
+    forces = setup_reservoir_forces(model; control = controls, bc = bc)
     state0 = setup_reservoir_state( # Initialize with uniform pressure and temperature
-        model; Pressure = 5*atm, Temperature = T_rock)
+        model; Pressure = 5 * atm, Temperature = T_rock
+    )
     ## Set time large enough to ensure steady-state
     rg = type == :u1 ? well_args.radius_borehole :
         well_args.radius_pipe_outer + well_args.grouting_thickness
-    time = 5/4*2*rg*(ϕ*ρf*Cpf + (1 - ϕ)*ρr*Cpr)/(ϕ*λf + (1 - ϕ)*λr)*10
-    dt = fill(time/n_step, n_step)
+    time = 5 / 4 * 2 * rg * (ϕ * ρf * Cpf + (1 - ϕ) * ρr * Cpr) / (ϕ * λf + (1 - ϕ) * λr) * 10
+    dt = fill(time / n_step, n_step)
     ## Create Jutul case
     case = JutulCase(model, dt, forces; state0 = state0)
     ## Set up simulator with temperature-based timestep selector
     sim, cfg = setup_reservoir_simulator(
-        case; initial_dt = 1.0);
-    sel = VariableChangeTimestepSelector(:Temperature, 2.5; 
-        relative = false, model = :CL)
+        case; initial_dt = 1.0
+    )
+    sel = VariableChangeTimestepSelector(
+        :Temperature, 2.5;
+        relative = false, model = :CL
+    )
     push!(cfg[:timestep_selectors], sel)
 
     return case, sim, cfg
 end
 
 function plot_closed_loop( # Utility function to plot closed-loop simulation results
-    case, simulated, analytical; title = "Closed-loop temperature profiles"
+        case, simulated, analytical; title = "Closed-loop temperature profiles"
     )
 
     ## Create figure
     fig = Figure(size = (800, 600))
-    ax = Axis(fig[1, 1], 
-        title = title, 
-        xlabel = "Temperature (°C)", 
+    ax = Axis(
+        fig[1, 1],
+        title = title,
+        xlabel = "Temperature (°C)",
         ylabel = "Depth (m)",
         yreversed = true  # Surface at top, depth increases downward
     )
     ## Extract numerical solution from final state
     well = case.model.models[:CL].data_domain
     sim_temp = convert_from_si.(
-        simulated.result.states[end][:CL][:Temperature], :Celsius)
-    za = collect(range(0, L, step=0.1)) # Analytical depth points
+        simulated.result.states[end][:CL][:Temperature], :Celsius
+    )
+    za = collect(range(0, L, step = 0.1)) # Analytical depth points
     tag_handles = []
     solution_handles = []
     tag_names = String[]
     solution_names = ["Analytical", "Fimbul"]
     ## Plot results for each well tag (except the return node)
     tags = filter(!=(:return), unique(well[:tag]))
-    colors = cgrad(:BrBG_4, 4, categorical=true)[[1,2,4,3]]
+    colors = cgrad(:BrBG_4, 4, categorical = true)[[1, 2, 4, 3]]
     err_inf = -Inf
     for (i, tag) in enumerate(tags)
         ## Tag name for printing
         name = titlecase(replace(string(tag), "_" => " "))
         ## Plot analytical solution
         Ta = convert_from_si.(analytical[tag].(za), :Celsius)
-        la = lines!(ax, Ta, za; color=colors[i], linewidth = 8, linestyle = :dash, label=name)
+        la = lines!(ax, Ta, za; color = colors[i], linewidth = 8, linestyle = :dash, label = name)
         ## Plot numerical solution
         cells = well[:tag] .== tag
         Tn = sim_temp[cells]
         zn = well[:cell_centroids][3, cells]
-        ln = lines!(ax, Tn, zn; color=colors[i], linewidth = 2)
+        ln = lines!(ax, Tn, zn; color = colors[i], linewidth = 2)
         ## Store handles and names for legend
         push!(tag_handles, la)
         push!(tag_names, name)
         if i == 1
-           push!(solution_handles, la, ln)
+            push!(solution_handles, la, ln)
         end
         ## Compute maximum error for tag
         Ta_n = convert_from_si.(analytical[tag].(zn), :Celsius)
@@ -225,18 +236,20 @@ function plot_closed_loop( # Utility function to plot closed-loop simulation res
         err_inf = max(err_inf, e_inf)
     end
     ## Add legend
-    Legend(fig[1, 2], [tag_handles, solution_handles], [tag_names, solution_names],
-        ["Tags", "Solutions"]; orientation = :vertical)
+    Legend(
+        fig[1, 2], [tag_handles, solution_handles], [tag_names, solution_names],
+        ["Tags", "Solutions"]; orientation = :vertical
+    )
 
     return fig, err_inf
-    
+
 end;
 
 # ## Validate U-tube configuration
 # We set up and simulate a closed-loop system with U-tube geometry, and compare
 # the numerical results against the analytical solution. This validates the
 # implementation for the most common closed-loop configuration.
-case_u1, sim, cfg = setup_closed_loop_single(:u1; nz=125);
+case_u1, sim, cfg = setup_closed_loop_single(:u1; nz = 125);
 res_u1 = simulate_reservoir(case_u1; simulator = sim, config = cfg)
 
 # ### Analytical solution
@@ -245,21 +258,25 @@ res_u1 = simulate_reservoir(case_u1; simulator = sim, config = cfg)
 # [eskilson_1988](@cite) as described in [feflow_btes](@cite). The function can
 # be called with explicit parameters, but also has a convenience version that
 # extracts parameters directly from the well model.
-analytical_u1 = Fimbul.analytical_closed_loop_u1(Q, T_in, T_rock,
-    ρf, Cpf, case_u1.model.models[:CL].data_domain)
+analytical_u1 = Fimbul.analytical_closed_loop_u1(
+    Q, T_in, T_rock,
+    ρf, Cpf, case_u1.model.models[:CL].data_domain
+)
 
 # ### Plot comparison
 # The numerical solution agrees very well with the analytical solution.
-fig, err_inf = plot_closed_loop(case_u1, res_u1, analytical_u1;
-    title = "U-tube temperature profiles")
-println("Maximum error in U-tube configuration: $(round(err_inf, digits=3)) °C")
+fig, err_inf = plot_closed_loop(
+    case_u1, res_u1, analytical_u1;
+    title = "U-tube temperature profiles"
+)
+println("Maximum error in U-tube configuration: $(round(err_inf, digits = 3)) °C")
 fig
 
 # ## Validate coaxial configuration with outer pipe inlet
 # Next, we set up and simulate a closed-loop system with coaxial geometry,
 # injecting fluid through the outer (annular) pipe, and compare the numerical
 # results against the analytical solution.
-case_coax_outer, sim, cfg = setup_closed_loop_single(:coaxial; nz=125, inlet = :outer)
+case_coax_outer, sim, cfg = setup_closed_loop_single(:coaxial; nz = 125, inlet = :outer)
 res_coax_outer = simulate_reservoir(case_coax_outer; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
@@ -269,15 +286,19 @@ res_coax_outer = simulate_reservoir(case_coax_outer; simulator = sim, config = c
 # called with all parameters, or extract parameters from the well model. The
 # function also accepts an `inlet` keyword argument to specify whether the
 # fluid is injected through the outer or inner pipe.
-analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
-    ρf, Cpf, case_coax_outer.model.models[:CL].data_domain; inlet = :outer)
+analytical_coax_outer = Fimbul.analytical_closed_loop_coaxial(
+    Q, T_in, T_rock,
+    ρf, Cpf, case_coax_outer.model.models[:CL].data_domain; inlet = :outer
+)
 
 # ### Plot comparison
 # Coaxial systems typically show different thermal behavior than U-tubes due to
 # the closer thermal coupling between supply and return flows.
-fig, err_inf = plot_closed_loop(case_coax_outer, res_coax_outer, analytical_coax_outer;
-    title = "Coaxial temperature profiles (outer inlet)")
-println("Maximum error in coaxial outer inlet configuration: $(round(err_inf, digits=3)) °C")
+fig, err_inf = plot_closed_loop(
+    case_coax_outer, res_coax_outer, analytical_coax_outer;
+    title = "Coaxial temperature profiles (outer inlet)"
+)
+println("Maximum error in coaxial outer inlet configuration: $(round(err_inf, digits = 3)) °C")
 fig
 
 # ## Validate coaxial configuration with inner pipe inlet
@@ -286,17 +307,21 @@ fig
 # exposed to the rock before it reaches the bottom of the well, ensuring a
 # higher temperature difference along the entire wellbore, and consequently more
 # heat storage.
-case_coax_inner, sim, cfg = setup_closed_loop_single(:coaxial; nz=125, inlet = :inner)
+case_coax_inner, sim, cfg = setup_closed_loop_single(:coaxial; nz = 125, inlet = :inner)
 res_coax_inner = simulate_reservoir(case_coax_inner; simulator = sim, config = cfg, info_level = 0)
 
 # ### Analytical solution
 # We compute the analytical solution for the coaxial configuration with inner
 # pipe inlet.
-analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(Q, T_in, T_rock,
-    ρf, Cpf, case_coax_inner.model.models[:CL].data_domain; inlet = :inner)
+analytical_coax_inner = Fimbul.analytical_closed_loop_coaxial(
+    Q, T_in, T_rock,
+    ρf, Cpf, case_coax_inner.model.models[:CL].data_domain; inlet = :inner
+)
 
 # ### Plot comparison
-fig, err_inf = plot_closed_loop(case_coax_inner, res_coax_inner, analytical_coax_inner;
-    title = "Coaxial temperature profiles (inner inlet)")
-println("Maximum error in coaxial inner inlet configuration: $(round(err_inf, digits=3)) °C")
+fig, err_inf = plot_closed_loop(
+    case_coax_inner, res_coax_inner, analytical_coax_inner;
+    title = "Coaxial temperature profiles (inner inlet)"
+)
+println("Maximum error in coaxial inner inlet configuration: $(round(err_inf, digits = 3)) °C")
 fig

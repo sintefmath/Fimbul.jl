@@ -1,5 +1,5 @@
-const DEFAULT_PHASE_PRESSURE_LIMITS = (1e5, 50e6)
-const DEFAULT_PHASE_ENTHALPY_LIMITS = (500e3, 3500e3)
+const DEFAULT_PHASE_PRESSURE_LIMITS = (1.0e5, 50.0e6)
+const DEFAULT_PHASE_ENTHALPY_LIMITS = (500.0e3, 3500.0e3)
 
 _plot_value(container, key::Symbol) = container[key]
 _plot_value(container::NamedTuple, key::Symbol) = getproperty(container, key)
@@ -57,9 +57,9 @@ function default_phase_diagram_limits(table)
     return p_limits, h_limits
 end
 
-function padded_limits(values; min_pad = 1e5)
+function padded_limits(values; min_pad = 1.0e5)
     lo, hi = extrema(values)
-    pad = max(0.05*(hi - lo), min_pad)
+    pad = max(0.05 * (hi - lo), min_pad)
     return max(lo - pad, 0.0), hi + pad
 end
 
@@ -160,23 +160,26 @@ function phase_diagram_figure(; figure_kwargs = (;), axis_kwargs = (;))
     return fig, ax
 end
 
-function Fimbul.plot_phase_diagram_contours!(ax, tables;
-    variable = :temperature,
-    pressure_limits = nothing,
-    enthalpy_limits = nothing,
-    n_pressure = 150,
-    n_enthalpy = 150,
-    levels = 20,
-    filled = true,
-    lines = false,
-    include_envelope = true,
-    value_transform = nothing,
-    contourf_kwargs = (;),
-    contour_kwargs = (;),
-    envelope_kwargs = (;))
+function Fimbul.plot_phase_diagram_contours!(
+        ax, tables;
+        variable = :temperature,
+        pressure_limits = nothing,
+        enthalpy_limits = nothing,
+        n_pressure = 150,
+        n_enthalpy = 150,
+        levels = 20,
+        filled = true,
+        lines = false,
+        include_envelope = true,
+        value_transform = nothing,
+        contourf_kwargs = (;),
+        contour_kwargs = (;),
+        envelope_kwargs = (;)
+    )
 
     table = phase_diagram_table(tables, variable)
-    pressure_limits, enthalpy_limits = resolve_phase_diagram_limits(table;
+    pressure_limits, enthalpy_limits = resolve_phase_diagram_limits(
+        table;
         pressure_limits = pressure_limits,
         enthalpy_limits = enthalpy_limits,
     )
@@ -190,15 +193,15 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
     p_grid = range(first(pressure_limits), last(pressure_limits); length = n_pressure)
     h_grid = range(first(enthalpy_limits), last(enthalpy_limits); length = n_enthalpy)
     values = evaluate_phase_diagram_grid(table, p_grid, h_grid, transform)
-    
+
     if filled
         contourf_defaults = (; levels = levels, colormap = cgrad(:seaborn_icefire_gradient, levels, categorical = true, alpha = 1.0))
-        hcf = contourf!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contourf_defaults..., contourf_kwargs...)
+        hcf = contourf!(ax, h_grid ./ 1.0e3, p_grid ./ 1.0e6, values; contourf_defaults..., contourf_kwargs...)
     end
 
     if lines
         contour_defaults = (; levels = max(levels - 1, 1), color = (:white, 0.6), linewidth = 0.75)
-        hcl = contour!(ax, h_grid ./ 1e3, p_grid ./ 1e6, values; contour_defaults..., contour_kwargs...)
+        hcl = contour!(ax, h_grid ./ 1.0e3, p_grid ./ 1.0e6, values; contour_defaults..., contour_kwargs...)
     end
 
     if include_envelope
@@ -211,12 +214,12 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
 
             keep_l = keep_p .& (h_l_sat .>= enthalpy_limits[1]) .&& (h_l_sat .<= enthalpy_limits[2])
             if any(keep_l)
-                henv_liq = lines!(ax, h_l_sat[keep_l] ./ 1e3, p_sat[keep_l] ./ 1e6; envelope_defaults..., envelope_kwargs...)
+                henv_liq = lines!(ax, h_l_sat[keep_l] ./ 1.0e3, p_sat[keep_l] ./ 1.0e6; envelope_defaults..., envelope_kwargs...)
             end
 
             keep_v = keep_p .& (h_v_sat .>= enthalpy_limits[1]) .&& (h_v_sat .<= enthalpy_limits[2])
             if any(keep_v)
-                henv_vap = lines!(ax, h_v_sat[keep_v] ./ 1e3, p_sat[keep_v] ./ 1e6; envelope_defaults..., envelope_kwargs...)
+                henv_vap = lines!(ax, h_v_sat[keep_v] ./ 1.0e3, p_sat[keep_v] ./ 1.0e6; envelope_defaults..., envelope_kwargs...)
             end
         end
     end
@@ -231,25 +234,29 @@ function Fimbul.plot_phase_diagram_contours!(ax, tables;
     )
 end
 
-function Fimbul.plot_phase_diagram_contours(tables;
-    figure_kwargs = (;),
-    axis_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_phase_diagram_contours(
+        tables;
+        figure_kwargs = (;),
+        axis_kwargs = (;),
+        kwargs...
+    )
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
     handles = Fimbul.plot_phase_diagram_contours!(ax, tables; kwargs...)
     return fig, handles
 end
 
-function Fimbul.plot_reservoir_state_ph!(ax, pressure::AbstractVector, enthalpy::AbstractVector;
-    type = :line,
-    plot_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_reservoir_state_ph!(
+        ax, pressure::AbstractVector, enthalpy::AbstractVector;
+        type = :line,
+        plot_kwargs = (;),
+        kwargs...
+    )
     if type == :scatter
         defaults = (; color = :blue, markersize = 8)
-        h = scatter!(ax, enthalpy ./ 1e3, pressure ./ 1e6; defaults..., plot_kwargs..., kwargs...)
+        h = scatter!(ax, enthalpy ./ 1.0e3, pressure ./ 1.0e6; defaults..., plot_kwargs..., kwargs...)
     elseif type == :line
         defaults = (; color = :blue, linewidth = 2)
-        h = lines!(ax, enthalpy ./ 1e3, pressure ./ 1e6; defaults..., plot_kwargs..., kwargs...)
+        h = lines!(ax, enthalpy ./ 1.0e3, pressure ./ 1.0e6; defaults..., plot_kwargs..., kwargs...)
     else
         error("Unknown plot type: $(repr(type)). Supported types are :line and :scatter.")
     end
@@ -257,54 +264,66 @@ function Fimbul.plot_reservoir_state_ph!(ax, pressure::AbstractVector, enthalpy:
     return (axis = ax, plot = h)
 end
 
-function Fimbul.plot_reservoir_state_ph!(ax, state;
-    timestep = nothing,
-    time = nothing,
-    kwargs...)
+function Fimbul.plot_reservoir_state_ph!(
+        ax, state;
+        timestep = nothing,
+        time = nothing,
+        kwargs...
+    )
     pressure, enthalpy = reservoir_state_ph(state)
     return Fimbul.plot_reservoir_state_ph!(ax, pressure, enthalpy; kwargs...)
 end
 
-function Fimbul.plot_reservoir_state_ph!(ax, model, state;
-    timestep = nothing,
-    time = nothing,
-    kwargs...)
+function Fimbul.plot_reservoir_state_ph!(
+        ax, model, state;
+        timestep = nothing,
+        time = nothing,
+        kwargs...
+    )
     return Fimbul.plot_reservoir_state_ph!(ax, state; kwargs...)
 end
 
-function Fimbul.plot_reservoir_state_ph(pressure::AbstractVector, enthalpy::AbstractVector;
-    figure_kwargs = (;),
-    axis_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_reservoir_state_ph(
+        pressure::AbstractVector, enthalpy::AbstractVector;
+        figure_kwargs = (;),
+        axis_kwargs = (;),
+        kwargs...
+    )
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
     handles = Fimbul.plot_reservoir_state_ph!(ax, pressure, enthalpy; kwargs...)
     return fig, handles
 end
 
-function Fimbul.plot_reservoir_state_ph(state;
-    figure_kwargs = (;),
-    axis_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_reservoir_state_ph(
+        state;
+        figure_kwargs = (;),
+        axis_kwargs = (;),
+        kwargs...
+    )
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
     handles = Fimbul.plot_reservoir_state_ph!(ax, state; kwargs...)
     return fig, handles
 end
 
-function Fimbul.plot_reservoir_state_ph(model, state;
-    figure_kwargs = (;),
-    axis_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_reservoir_state_ph(
+        model, state;
+        figure_kwargs = (;),
+        axis_kwargs = (;),
+        kwargs...
+    )
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
     handles = Fimbul.plot_reservoir_state_ph!(ax, model, state; kwargs...)
     return fig, handles
 end
 
-function Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state;
-    pressure_limits = nothing,
-    enthalpy_limits = nothing,
-    contour_kwargs = (;),
-    state_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_reservoir_state_phase_diagram!(
+        ax, model, state;
+        pressure_limits = nothing,
+        enthalpy_limits = nothing,
+        contour_kwargs = (;),
+        state_kwargs = (;),
+        kwargs...
+    )
     tables = phase_diagram_tables(model)
     pressure, enthalpy = reservoir_state_ph(state)
     if isnothing(pressure_limits)
@@ -314,7 +333,8 @@ function Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state;
         enthalpy_limits = padded_limits(enthalpy)
     end
 
-    contour_handles = Fimbul.plot_phase_diagram_contours!(ax, tables;
+    contour_handles = Fimbul.plot_phase_diagram_contours!(
+        ax, tables;
         pressure_limits = pressure_limits,
         enthalpy_limits = enthalpy_limits,
         contour_kwargs...,
@@ -328,10 +348,12 @@ function Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state;
     )
 end
 
-function Fimbul.plot_reservoir_state_phase_diagram(model, state;
-    figure_kwargs = (;),
-    axis_kwargs = (;),
-    kwargs...)
+function Fimbul.plot_reservoir_state_phase_diagram(
+        model, state;
+        figure_kwargs = (;),
+        axis_kwargs = (;),
+        kwargs...
+    )
     fig, ax = phase_diagram_figure(; figure_kwargs = figure_kwargs, axis_kwargs = axis_kwargs)
     handles = Fimbul.plot_reservoir_state_phase_diagram!(ax, model, state; kwargs...)
     return fig, handles

@@ -18,7 +18,8 @@ function JutulDarcy.add_thermal_to_model!(model::GeothermalModel; kwargs...)
 
     pvt = model.system.pvt_tables
 
-    set_secondary_variables!(model,
+    set_secondary_variables!(
+        model,
         Temperature = TemperatureFromEnthalpy(pvt[:temperature]),
         FluidEnthalpy = PhaseEnthalpyH2O(pvt[:enthalpy_liquid_ph], pvt[:enthalpy_vapor_ph]),
         FluidInternalEnergy = FluidInternalEnergyFromEnthalpy(),
@@ -49,9 +50,11 @@ function steam_tables_h2o(; kwargs...)
         if !isempty(methods(build_steam_tables_h2o))
             return build_steam_tables_h2o(; kwargs...)
         end
-        throw(ErrorException(
-            "Could not load the SteamTablesH2O artifact and CoolProp is not available to rebuild the steam tables."
-        ))
+        throw(
+            ErrorException(
+                "Could not load the SteamTablesH2O artifact and CoolProp is not available to rebuild the steam tables."
+            )
+        )
     end
 end
 

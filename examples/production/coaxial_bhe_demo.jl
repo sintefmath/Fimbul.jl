@@ -27,7 +27,8 @@ using GLMakie
 
 # Useful SI units
 meter, hour, watt, Kelvin, joule, kilogram, year = si_units(
-    :meter, :hour, :watt, :Kelvin, :joule, :kilogram, :year);
+    :meter, :hour, :watt, :Kelvin, :joule, :kilogram, :year
+);
 
 # ## Common parameters
 # All scenarios share the same well trajectory, operational parameters,
@@ -46,17 +47,17 @@ meter, hour, watt, Kelvin, joule, kilogram, year = si_units(
 base_args = (
     well_trajectory = [0.0 0.0 0.0; 0.0 0.0 2500.0],
     inject_into = :outer,
-    rate = 25meter^3/hour,
+    rate = 25meter^3 / hour,
     temperature_inj = convert_to_si(10.0, :Celsius),
     num_years = 5,
-    report_interval = year/12,
+    report_interval = year / 12,
     hz = [25.0, 25.0, 25.0, 100.0],
     hxy_min = 5.0,
     mesh_args = (offset = 250.0, offset_rel = missing),
-    permeability = 1e-3*si_unit(:darcy),
+    permeability = 1.0e-3 * si_unit(:darcy),
     porosity = 0.01,
-    rock_heat_capacity = 900*joule/(kilogram*Kelvin),
-    rock_density = 2600*kilogram/meter^3,
+    rock_heat_capacity = 900 * joule / (kilogram * Kelvin),
+    rock_density = 2600 * kilogram / meter^3,
 );
 
 # ## Simulator helper
@@ -67,15 +68,19 @@ base_args = (
 # gradients computed during the calibration require the states of all time
 # steps, so these are stored during the calibration.
 function setup_simulator(case; output_substates = false)
-    sim, cfg = setup_reservoir_simulator(case;
+    sim, cfg = setup_reservoir_simulator(
+        case;
         output_substates = output_substates,
         info_level = -1,
         initial_dt = 120.0,
         presolve_wells = true,
-        relaxation = true)
+        relaxation = true
+    )
     for model in (:Reservoir, :CoaxialWell)
-        sel = VariableChangeTimestepSelector(:Temperature, 5.0;
-            relative = false, model = model)
+        sel = VariableChangeTimestepSelector(
+            :Temperature, 5.0;
+            relative = false, model = model
+        )
         push!(cfg[:timestep_selectors], sel)
     end
     return sim, cfg
@@ -95,27 +100,33 @@ end
 #
 # The lower layer is split in two at the bottom of the well, to allow for a
 # coarser vertical resolution below the well.
-λ_unit = watt/(meter*Kelvin)
+λ_unit = watt / (meter * Kelvin)
 depths_layers = [0.0, 800.0, 1700.0, 3000.0]
-λ_layers = [3.0, 1.5, 3.5]*λ_unit
-depths = [0.0, 800.0, 1700.0, 2500.0 + 1e-3, 3000.0]
-case_ref = coaxial_bhe(; base_args...,
-    depths = depths, rock_thermal_conductivity = [λ_layers; λ_layers[end]]);
+λ_layers = [3.0, 1.5, 3.5] * λ_unit
+depths = [0.0, 800.0, 1700.0, 2500.0 + 1.0e-3, 3000.0]
+case_ref = coaxial_bhe(;
+    base_args...,
+    depths = depths, rock_thermal_conductivity = [λ_layers; λ_layers[end]]
+);
 
 # ### Thermal conductivity and well
 # The layers are shown with a quarter of the domain cut away, so that the well
 # in the center is visible. The well is plotted using its trajectory.
 function plot_trajectory!(ax, trajectory; color = :black, linewidth = 4, kwarg...)
-    return lines!(ax, trajectory[:, 1], trajectory[:, 2], trajectory[:, 3];
-        color = color, linewidth = linewidth, kwarg...)
+    return lines!(
+        ax, trajectory[:, 1], trajectory[:, 2], trajectory[:, 3];
+        color = color, linewidth = linewidth, kwarg...
+    )
 end
 
 rdomain_ref = reservoir_model(case_ref.model).data_domain
 msh = physical_representation(rdomain_ref)
 x = rdomain_ref[:cell_centroids]
 fig = Figure(size = (700, 800))
-ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.75,
-    aspect = (1, 1, 3))
+ax = Axis3(
+    fig[1, 1]; zreversed = true, perspectiveness = 0.75,
+    aspect = (1, 1, 3)
+)
 colormap = cgrad(:BrBG_5, 3, categorical = true)
 cutout = .!(x[1, :] .< 10.0 .&& x[2, :] .< 10.0)
 for i in 1:3
@@ -123,10 +134,14 @@ for i in 1:3
     Jutul.plot_mesh!(ax, msh; cells = cells, color = colormap[i])
 end
 plot_trajectory!(ax, base_args.well_trajectory)
-elements = [PolyElement(color = colormap[i], strokecolor = :black, strokewidth = 1)
-    for i in 1:3]
-labels = ["$name: $(λ_layers[i]/λ_unit) W/(m·K)"
-    for (i, name) in enumerate(("Upper layer", "Middle layer", "Lower layer"))]
+elements = [
+    PolyElement(color = colormap[i], strokecolor = :black, strokewidth = 1)
+        for i in 1:3
+]
+labels = [
+    "$name: $(λ_layers[i] / λ_unit) W/(m·K)"
+        for (i, name) in enumerate(("Upper layer", "Middle layer", "Lower layer"))
+]
 Legend(fig[1, 2], elements, labels, "Thermal conductivity", valign = :center)
 fig
 
@@ -144,10 +159,14 @@ results_ref = run_case(case_ref);
 cutout = .!(x[1, :] .< 0.0 .&& x[2, :] .< 0.0)
 ΔT = results_ref.states[end][:Temperature] .- case_ref.state0[:Reservoir][:Temperature]
 fig = Figure(size = (700, 800))
-ax = Axis3(fig[1, 1]; zreversed = true, perspectiveness = 0.75,
-    aspect = (1, 1, 3), title = "Temperature change after 5 years")
-plt = Jutul.plot_cell_data!(ax, msh, ΔT; cells = cutout,
-    colormap = :vik, colorrange = (-10.0, 10.0), shading = NoShading)
+ax = Axis3(
+    fig[1, 1]; zreversed = true, perspectiveness = 0.75,
+    aspect = (1, 1, 3), title = "Temperature change after 5 years"
+)
+plt = Jutul.plot_cell_data!(
+    ax, msh, ΔT; cells = cutout,
+    colormap = :vik, colorrange = (-10.0, 10.0), shading = NoShading
+)
 Colorbar(fig[1, 2], plt; label = "ΔT (K)")
 fig
 
@@ -174,19 +193,24 @@ function plot_well_profiles!(ax, case, results)
     for (j, tag) in enumerate(unique(well[:tag]))
         name = titlecase(replace(string(tag), "_" => " "))
         cells = findall(well[:tag] .== tag)
-        lines!(ax, T_well[cells], well[:cell_centroids][3, cells];
-            color = colors_well[j], linewidth = 4, label = name)
+        lines!(
+            ax, T_well[cells], well[:cell_centroids][3, cells];
+            color = colors_well[j], linewidth = 4, label = name
+        )
     end
     res_cells = well.representation.perforations.reservoir
     T_res = convert_from_si.(
-        results.result.states[end][:Reservoir][:Temperature], :Celsius)
+        results.result.states[end][:Reservoir][:Temperature], :Celsius
+    )
     z_res = reservoir_model(case.model).data_domain[:cell_centroids][3, res_cells]
-    lines!(ax, T_res[res_cells], z_res; color = :black, linewidth = 2, label = "Reservoir")
+    return lines!(ax, T_res[res_cells], z_res; color = :black, linewidth = 2, label = "Reservoir")
 end
 
 fig = Figure(size = (600, 600))
-ax = Axis(fig[1, 1]; title = "Well temperature after 5 years",
-    xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true)
+ax = Axis(
+    fig[1, 1]; title = "Well temperature after 5 years",
+    xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true
+)
 plot_well_profiles!(ax, case_ref, results_ref)
 axislegend(ax; position = :rt)
 fig
@@ -198,19 +222,21 @@ fig
 # the supply and return pipes, causing more thermal short-circuiting and a
 # lower production temperature.
 λ_pipe_default = 0.38  # default inner pipe wall thermal conductivity [W/(m·K)]
-λ_pipe = [0.0, 1.0, 4.0]*λ_pipe_default
+λ_pipe = [0.0, 1.0, 4.0] * λ_pipe_default
 labels_pipe = ["λ = 0.00", "λ = 0.38 (default)", "λ = 1.52"]
 
 cases_pipe = []
 results_pipe = []
 for λ in λ_pipe
-    case_i = coaxial_bhe(; base_args...,
+    case_i = coaxial_bhe(;
+        base_args...,
         depths = depths, rock_thermal_conductivity = [λ_layers; λ_layers[end]],
         well_args = (
             pipe_thermal_conductivity_inner = λ,
             ## Keep the outer pipe conductivity constant
             pipe_thermal_conductivity_outer = λ_pipe_default,
-        ))
+        )
+    )
     push!(cases_pipe, case_i)
     push!(results_pipe, run_case(case_i))
 end
@@ -222,8 +248,10 @@ end
 # annulus, reducing the net temperature gain at the surface.
 fig = Figure(size = (600, 800))
 for (i, (case, results, label)) in enumerate(zip(cases_pipe, results_pipe, labels_pipe))
-    ax = Axis(fig[i, 1]; title = label,
-        xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true)
+    ax = Axis(
+        fig[i, 1]; title = label,
+        xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true
+    )
     plot_well_profiles!(ax, case, results)
     i < length(λ_pipe) && hidexdecorations!(ax, grid = false)
     i == 1 && axislegend(ax; position = :rt)
@@ -236,18 +264,22 @@ fig
 # computed as mass flow rate × heat capacity × (production temperature −
 # injection temperature). The power output drops considerably with increasing
 # inner pipe conductivity.
-function thermal_power(results; c_p = 4184.0joule/(kilogram*Kelvin))
+function thermal_power(results; c_p = 4184.0joule / (kilogram * Kelvin))
     w = results.wells[:CoaxialWell_inner]
     return abs.(w[:mass_rate]) .* c_p .* (w[:temperature] .- base_args.temperature_inj)
 end
 
 fig = Figure(size = (800, 500))
-ax = Axis(fig[1, 1]; title = "Effect of inner pipe thermal conductivity",
-    xlabel = "Time (years)", ylabel = "Power (MW)")
+ax = Axis(
+    fig[1, 1]; title = "Effect of inner pipe thermal conductivity",
+    xlabel = "Time (years)", ylabel = "Power (MW)"
+)
 colors_pipe = Makie.wong_colors()
 for (i, (results, label)) in enumerate(zip(results_pipe, labels_pipe))
-    lines!(ax, results.time./year, thermal_power(results)./1e6;
-        color = colors_pipe[i], linewidth = 4, label = label)
+    lines!(
+        ax, results.time ./ year, thermal_power(results) ./ 1.0e6;
+        color = colors_pipe[i], linewidth = 4, label = label
+    )
 end
 axislegend(ax; position = :rt)
 fig
@@ -260,8 +292,10 @@ fig
 # but homogeneous geology. As a prior guess for the thermal conductivity, we
 # use 3.5 W/(m·K), which is a typical value for sedimentary rocks.
 λ_prior = 3.5λ_unit
-case_prior = coaxial_bhe(; base_args...,
-    depths = depths, rock_thermal_conductivity = λ_prior);
+case_prior = coaxial_bhe(;
+    base_args...,
+    depths = depths, rock_thermal_conductivity = λ_prior
+);
 results_prior = run_case(case_prior);
 
 # ### Utilities for comparison
@@ -271,7 +305,8 @@ results_prior = run_case(case_prior);
 # distributed temperature sensing (DTS) installed behind the casing. We sort
 # them by depth.
 production_temperature(results) = convert_from_si.(
-    results.wells[:CoaxialWell_inner][:temperature], :Celsius)
+    results.wells[:CoaxialWell_inner][:temperature], :Celsius
+)
 
 function downhole_temperature(case, results)
     well = coaxial_well(case)
@@ -286,22 +321,31 @@ end
 # on top of the DT results, which are shown as solid lines with a fixed color
 # for each DT.
 reference_style = (color = :black, linewidth = 6, linestyle = :dash)
-dt_colors = Dict(zip(
-    ["DT (prior)", "DT (producer data)", "DT (downhole temperatures)"],
-    Makie.wong_colors()))
+dt_colors = Dict(
+    zip(
+        ["DT (prior)", "DT (producer data)", "DT (downhole temperatures)"],
+        Makie.wong_colors()
+    )
+)
 line_style(label) = label == "Reference" ? reference_style :
     (color = dt_colors[label], linewidth = 3, linestyle = :solid)
 
 function plot_comparison(cases, results, labels; title = "")
     fig = Figure(size = (1200, 500))
-    ax_t = Axis(fig[1, 1]; title = "Production temperature",
-        xlabel = "Time (years)", ylabel = "Temperature (°C)")
-    ax_z = Axis(fig[1, 2]; title = "Downhole temperature after 5 years",
-        xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true)
+    ax_t = Axis(
+        fig[1, 1]; title = "Production temperature",
+        xlabel = "Time (years)", ylabel = "Temperature (°C)"
+    )
+    ax_z = Axis(
+        fig[1, 2]; title = "Downhole temperature after 5 years",
+        xlabel = "Temperature (°C)", ylabel = "Depth (m)", yreversed = true
+    )
     for (c, r, l) in zip(cases, results, labels)
         z_order = l == "Reference" ? 1.0 : 0.0
-        plt = lines!(ax_t, r.time./year, production_temperature(r);
-            line_style(l)..., label = l)
+        plt = lines!(
+            ax_t, r.time ./ year, production_temperature(r);
+            line_style(l)..., label = l
+        )
         translate!(plt, 0, 0, z_order)
         prof = downhole_temperature(c, r)
         plt = lines!(ax_z, prof.T, prof.z; line_style(l)..., label = l)
@@ -317,8 +361,10 @@ end
 # of the reference. The downhole temperatures also show that the DT cannot
 # represent the effect of the layers, which gives distinct steps in the
 # reference temperature profile at the layer interfaces.
-plot_comparison([case_ref, case_prior], [results_ref, results_prior],
-    ["Reference", "DT (prior)"]; title = "Reference vs. DT before calibration")
+plot_comparison(
+    [case_ref, case_prior], [results_ref, results_prior],
+    ["Reference", "DT (prior)"]; title = "Reference vs. DT before calibration"
+)
 
 # ### Calibration 1: Producer data
 # The first calibration uses only the production temperature. This is the
@@ -336,20 +382,26 @@ plot_comparison([case_ref, case_prior], [results_ref, results_prior],
 states_ref = results_ref.result.states
 time_scale = sum(case_prior.dt)
 objective_producer = (model, state, dt, step_info, forces) ->
-    well_mismatch_thermal(model, [:CoaxialWell_inner],
-        states_ref, state, dt, step_info, forces;
-        w_bhp = 0.0, w_energy = 0.0, w_temp = 1.0/Kelvin, scale = time_scale)
+well_mismatch_thermal(
+    model, [:CoaxialWell_inner],
+    states_ref, state, dt, step_info, forces;
+    w_bhp = 0.0, w_energy = 0.0, w_temp = 1.0 / Kelvin, scale = time_scale
+)
 
 num_cells = number_of_cells(rdomain_ref)
 dprm_producer = setup_reservoir_dict_optimization(case_prior)
-free_optimization_parameter!(dprm_producer, [:model, :rock_thermal_conductivity];
-    abs_min = 0.5λ_unit, abs_max = 6.0λ_unit, lumping = ones(Int, num_cells))
+free_optimization_parameter!(
+    dprm_producer, [:model, :rock_thermal_conductivity];
+    abs_min = 0.5λ_unit, abs_max = 6.0λ_unit, lumping = ones(Int, num_cells)
+)
 sim, cfg = setup_simulator(case_prior; output_substates = true);
-prm_producer = optimize_reservoir(dprm_producer, objective_producer;
-    simulator = sim, config = cfg, max_it = 25)
+prm_producer = optimize_reservoir(
+    dprm_producer, objective_producer;
+    simulator = sim, config = cfg, max_it = 25
+)
 case_producer = dprm_producer.setup_function(prm_producer)
 λ_producer = first(prm_producer[:model][:rock_thermal_conductivity])
-println("Calibrated effective conductivity: $(round(λ_producer/λ_unit, digits = 2)) W/(m·K)")
+println("Calibrated effective conductivity: $(round(λ_producer / λ_unit, digits = 2)) W/(m·K)")
 results_producer = run_case(case_producer);
 
 # #### Compare reference and DT after calibration to producer data
@@ -364,7 +416,8 @@ plot_comparison(
     [case_ref, case_prior, case_producer],
     [results_ref, results_prior, results_producer],
     ["Reference", "DT (prior)", "DT (producer data)"];
-    title = "Calibration to producer data")
+    title = "Calibration to producer data"
+)
 
 # ### Calibration 2: Downhole temperatures
 # Distributed temperature sensing gives temperature measurements along the
@@ -396,17 +449,21 @@ function objective_dts(model, state, dt, step_info, forces)
     T = state[:CoaxialWell][:Temperature]
     mismatch = 0.0
     for (i, c) in enumerate(grout)
-        mismatch += ((T[c] - T_dts[i])/Kelvin)^2
+        mismatch += ((T[c] - T_dts[i]) / Kelvin)^2
     end
-    return (is_final ? 1.0 : 0.0)*mismatch/length(grout)
+    return (is_final ? 1.0 : 0.0) * mismatch / length(grout)
 end
 
 dprm_dts = setup_reservoir_dict_optimization(case_prior)
-free_optimization_parameter!(dprm_dts, [:model, :rock_thermal_conductivity];
-    abs_min = 0.5λ_unit, abs_max = 6.0λ_unit, lumping = layers)
+free_optimization_parameter!(
+    dprm_dts, [:model, :rock_thermal_conductivity];
+    abs_min = 0.5λ_unit, abs_max = 6.0λ_unit, lumping = layers
+)
 sim, cfg = setup_simulator(case_prior; output_substates = true);
-prm_dts = optimize_reservoir(dprm_dts, objective_dts;
-    simulator = sim, config = cfg, max_it = 50)
+prm_dts = optimize_reservoir(
+    dprm_dts, objective_dts;
+    simulator = sim, config = cfg, max_it = 50
+)
 case_dts = dprm_dts.setup_function(prm_dts)
 results_dts = run_case(case_dts);
 
@@ -418,7 +475,8 @@ plot_comparison(
     [case_ref, case_prior, case_dts],
     [results_ref, results_prior, results_dts],
     ["Reference", "DT (prior)", "DT (downhole temperatures)"];
-    title = "Calibration to downhole temperatures")
+    title = "Calibration to downhole temperatures"
+)
 
 # ### Calibrated thermal conductivities
 # Finally, we compare the calibrated thermal conductivities with the layered
@@ -426,29 +484,35 @@ plot_comparison(
 # gives a single effective conductivity, whereas calibration to the downhole
 # temperatures recovers the conductivity of each layer. The dotted line marks
 # the bottom of the well.
-λ_dts = [prm_dts[:model][:rock_thermal_conductivity][findfirst(==(layer), layers)]
-    for layer in 1:num_layers]
-println("Calibrated layer conductivities: $(round.(λ_dts./λ_unit, digits = 2)) W/(m·K)")
+λ_dts = [
+    prm_dts[:model][:rock_thermal_conductivity][findfirst(==(layer), layers)]
+        for layer in 1:num_layers
+]
+println("Calibrated layer conductivities: $(round.(λ_dts ./ λ_unit, digits = 2)) W/(m·K)")
 
 function stairs_depth(depths, values)
-    z = vcat([[depths[i], depths[i+1]] for i in eachindex(values)]...)
+    z = vcat([[depths[i], depths[i + 1]] for i in eachindex(values)]...)
     v = vcat([[v, v] for v in values]...)
     return v, z
 end
 
 fig = Figure(size = (600, 700))
-ax = Axis(fig[1, 1]; title = "Thermal conductivity",
+ax = Axis(
+    fig[1, 1]; title = "Thermal conductivity",
     xlabel = "Thermal conductivity (W/(m·K))", ylabel = "Depth (m)",
-    yreversed = true)
-v, zv = stairs_depth(depths_layers, λ_layers./λ_unit)
+    yreversed = true
+)
+v, zv = stairs_depth(depths_layers, λ_layers ./ λ_unit)
 plt = lines!(ax, v, zv; reference_style..., label = "Reference")
 translate!(plt, 0, 0, 1)
 for (label, λ) in (("DT (prior)", λ_prior), ("DT (producer data)", λ_producer))
-    lines!(ax, [λ, λ]./λ_unit, [0.0, 3000.0]; line_style(label)..., label = label)
+    lines!(ax, [λ, λ] ./ λ_unit, [0.0, 3000.0]; line_style(label)..., label = label)
 end
-v, zv = stairs_depth(depths_layers, λ_dts./λ_unit)
-lines!(ax, v, zv; line_style("DT (downhole temperatures)")...,
-    label = "DT (downhole temperatures)")
+v, zv = stairs_depth(depths_layers, λ_dts ./ λ_unit)
+lines!(
+    ax, v, zv; line_style("DT (downhole temperatures)")...,
+    label = "DT (downhole temperatures)"
+)
 hlines!(ax, [2500.0]; color = :black, linestyle = :dot)
 axislegend(ax; position = :lt)
 fig

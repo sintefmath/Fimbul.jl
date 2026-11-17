@@ -39,7 +39,7 @@ function load_hydrotherm_1d_phase_path(case_symbol; root = HYDROTHERM_1D_ROOT)
     return (pressure_mpa = table["pressure_mpa"], enthalpy_kj_per_kg = table["enthalpy_kj_per_kg"])
 end
 
-function replace_case_timesteps(case, timesteps; check_sum = false, rtol = 1e-3)
+function replace_case_timesteps(case, timesteps; check_sum = false, rtol = 1.0e-3)
     timesteps === nothing && return case
     if check_sum
         isapprox(sum(timesteps), sum(case.dt); rtol = rtol) ||
@@ -75,8 +75,8 @@ function load_hydrotherm_2d_reference(case; root = HYDROTHERM_2D_ROOT)
 
     x0 = x_m[cld(length(x_m), 2)]
     return (
-        x_km = (x_m .- x0) ./ 1e3,
-        depth_km = z_m ./ 1e3,
+        x_km = (x_m .- x0) ./ 1.0e3,
+        depth_km = z_m ./ 1.0e3,
         pressure = pressure_mpa,
         temperature = temperature_c,
         vapor_saturation = vapor_saturation,
@@ -143,13 +143,13 @@ numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 347–371. https://doi.org/10.1111/gfl.12080
 """
 function benchmark_ht_1d(;
-    benchmark_case  :: Symbol  = :a,
-    vertical        :: Bool    = false,
-    nx              :: Int     = 200,
-    domain_length   :: Float64 = 2000.0*meter,
-    cell_size       :: Float64 = 10.0*meter,
-    dt_target       :: Float64 = 5.0*year,
-)
+        benchmark_case::Symbol = :a,
+        vertical::Bool = false,
+        nx::Int = 200,
+        domain_length::Float64 = 2000.0 * meter,
+        cell_size::Float64 = 10.0 * meter,
+        dt_target::Float64 = 5.0 * year,
+    )
 
     benchmark_case in (:a, :b, :c, :d, :e, :test) ||
         throw(ArgumentError("benchmark_case must be one of :a, :b, :c, :d, :e"))
@@ -160,28 +160,28 @@ function benchmark_ht_1d(;
     K0 = 273.15  # 0 °C in Kelvin
 
     if benchmark_case == :a
-        p_inj  = 50e6;  p_prod = 25e6
-        T_inj  = K0 + 350;  T_prod = K0 + 150
+        p_inj = 50.0e6;  p_prod = 25.0e6
+        T_inj = K0 + 350;  T_prod = K0 + 150
     elseif benchmark_case == :b
-        p_inj  = 40e6;  p_prod = 20e6
-        T_inj  = K0 + 450;  T_prod = K0 + 300
+        p_inj = 40.0e6;  p_prod = 20.0e6
+        T_inj = K0 + 450;  T_prod = K0 + 300
     elseif benchmark_case == :c
-        p_inj  = 15e6;  p_prod = 1e6
-        T_inj  = K0 + 500;  T_prod = K0 + 350
+        p_inj = 15.0e6;  p_prod = 1.0e6
+        T_inj = K0 + 500;  T_prod = K0 + 350
     elseif benchmark_case == :d
-        p_inj  = 20e6;  p_prod = 1e6
-        T_inj  = K0 + 400;  T_prod = K0 + 150
+        p_inj = 20.0e6;  p_prod = 1.0e6
+        T_inj = K0 + 400;  T_prod = K0 + 150
     elseif benchmark_case == :e
-        p_inj  = 4e6;   p_prod = 1e6
-        T_inj  = K0 + 300;  T_prod = K0 + 150
-     else
+        p_inj = 4.0e6;   p_prod = 1.0e6
+        T_inj = K0 + 300;  T_prod = K0 + 150
+    else
         error("Invalid benchmark_case: $benchmark_case")
     end
 
-    sys    = H2OSystem()
+    sys = H2OSystem()
     tables = sys.pvt_tables
 
-    H_inj  = tables[:enthalpy](p_inj, T_inj)
+    H_inj = tables[:enthalpy](p_inj, T_inj)
     H_prod = tables[:enthalpy](p_prod, T_prod)
 
     # ── Grid ──────────────────────────────────────────────────────────────
@@ -195,23 +195,24 @@ function benchmark_ht_1d(;
     #   cell nx = bottom (deep    / high p, high T)  ← injector
     #
     if vertical
-        g         = CartesianMesh((1, 1, nx), (cell_size, cell_size, domain_length))
-        cell_inj  = nx   # bottom cell = deep = high pressure
+        g = CartesianMesh((1, 1, nx), (cell_size, cell_size, domain_length))
+        cell_inj = nx   # bottom cell = deep = high pressure
         cell_prod = 1    # top    cell = shallow = low pressure
         p0 = collect(range(p_prod, p_inj; length = nx))
     else
-        g         = CartesianMesh((nx, 1, 1), (domain_length, cell_size, cell_size))
-        cell_inj  = 1    # left  cell = inlet
+        g = CartesianMesh((nx, 1, 1), (domain_length, cell_size, cell_size))
+        cell_inj = 1    # left  cell = inlet
         cell_prod = nx   # right cell = outlet
         p0 = collect(range(p_inj, p_prod; length = nx))
     end
     h0 = tables[:enthalpy].(p0, T_prod)
 
-    domain = reservoir_domain(g;
-        permeability              = 1e-15,   # m²  (≈ 10 μD)
-        porosity                  = 0.1,
-        rock_density              = 2700.0,  # kg/m³
-        rock_heat_capacity        = 880.0,   # J/(kg·K)
+    domain = reservoir_domain(
+        g;
+        permeability = 1.0e-15,   # m²  (≈ 10 μD)
+        porosity = 0.1,
+        rock_density = 2700.0,  # kg/m³
+        rock_heat_capacity = 880.0,   # J/(kg·K)
         rock_thermal_conductivity = 2.0,     # W/(m·K)
     )
 
@@ -223,7 +224,8 @@ function benchmark_ht_1d(;
     # ── Initial state ──────────────────────────────────────────────────────
     # Initialize with a linear pressure profile between the boundary pressures
     # and a uniform producer-side temperature.
-    state0 = setup_reservoir_state(model,
+    state0 = setup_reservoir_state(
+        model,
         Pressure = p0,
         Enthalpy = h0,
         Temperature = T_prod,
@@ -237,30 +239,30 @@ function benchmark_ht_1d(;
 
     # ── Timesteps ──────────────────────────────────────────────────────────
     if benchmark_case == :a
-        total_time = ifelse(!vertical, 250.0*year, 750.0*year)
+        total_time = ifelse(!vertical, 250.0 * year, 750.0 * year)
     elseif benchmark_case == :b
-        total_time = ifelse(!vertical, 120.0*year, 350.0*year)
+        total_time = ifelse(!vertical, 120.0 * year, 350.0 * year)
     elseif benchmark_case == :c
-        total_time = 1500.0*year
+        total_time = 1500.0 * year
     elseif benchmark_case == :d
-        total_time = ifelse(!vertical, 200.0*year, 1000.0*year)
+        total_time = ifelse(!vertical, 200.0 * year, 1000.0 * year)
     else  # :e
-        total_time = 2000.0*year
+        total_time = 2000.0 * year
     end
     dt_vec = _benchmark_rampup_timesteps(total_time, dt_target)
 
     # ── Assemble case ──────────────────────────────────────────────────────
     info = Dict{Symbol, Any}(
-        :description    => "1D high-temperature geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
+        :description => "1D high-temperature geothermal benchmark case $(benchmark_case) (Weis et al. 2014)",
         :benchmark_case => benchmark_case,
-        :total_time     => total_time,
-        :vertical       => vertical,
-        :p_inj          => p_inj,
-        :p_prod         => p_prod,
-        :T_inj          => T_inj,
-        :T_prod         => T_prod,
+        :total_time => total_time,
+        :vertical => vertical,
+        :p_inj => p_inj,
+        :p_prod => p_prod,
+        :T_inj => T_inj,
+        :T_prod => T_prod,
     )
-    return JutulCase(model, dt_vec, forces; state0 = state0, parameters=parameters, input_data = info)
+    return JutulCase(model, dt_vec, forces; state0 = state0, parameters = parameters, input_data = info)
 end
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -321,26 +323,26 @@ numerical scheme and benchmarks for code comparison. *Geofluids*, 14(3),
 347–371. https://doi.org/10.1111/gfl.12080
 """
 function benchmark_ht_2d(;
-    benchmark_case :: Symbol = :fluid_source,
-    nx :: Int = 90,
-    nz :: Int = 60,
-    domain_width :: Float64 = 9000.0*meter,
-    domain_depth :: Float64 = 3000.0*meter,
-    domain_thickness :: Float64 = 1.0*meter,
-    top_pressure :: Float64 = 1.0*atm,
-    top_temperature :: Float64 = convert_to_si(10.0, :Celsius),
-    source_mass_rate :: Float64 = 0.04*kilogram/second,
-    source_enthalpy :: Union{Nothing, Float64} = nothing,
-    source_i :: Int = cld(nx, 2),
-    source_k :: Int = nz,
-    permeability :: Float64 = 1e-15,
-    porosity :: Float64 = 0.1,
-    rock_density :: Float64 = 2700.0,
-    rock_heat_capacity :: Float64 = 880.0,
-    rock_thermal_conductivity :: Float64 = 2.0,
-    total_time :: Float64 = 5000.0*year,
-    dt_target :: Float64 = 10.0*year,
-)
+        benchmark_case::Symbol = :fluid_source,
+        nx::Int = 90,
+        nz::Int = 60,
+        domain_width::Float64 = 9000.0 * meter,
+        domain_depth::Float64 = 3000.0 * meter,
+        domain_thickness::Float64 = 1.0 * meter,
+        top_pressure::Float64 = 1.0 * atm,
+        top_temperature::Float64 = convert_to_si(10.0, :Celsius),
+        source_mass_rate::Float64 = 0.04 * kilogram / second,
+        source_enthalpy::Union{Nothing, Float64} = nothing,
+        source_i::Int = cld(nx, 2),
+        source_k::Int = nz,
+        permeability::Float64 = 1.0e-15,
+        porosity::Float64 = 0.1,
+        rock_density::Float64 = 2700.0,
+        rock_heat_capacity::Float64 = 880.0,
+        rock_thermal_conductivity::Float64 = 2.0,
+        total_time::Float64 = 5000.0 * year,
+        dt_target::Float64 = 10.0 * year,
+    )
     benchmark_case == :fluid_source && (benchmark_case = :single_phase_source)
     benchmark_case in (:single_phase_source, :two_phase_source) ||
         throw(ArgumentError("benchmark_case must be :fluid_source, :single_phase_source, or :two_phase_source"))
@@ -348,13 +350,14 @@ function benchmark_ht_2d(;
     1 <= source_k <= nz || throw(ArgumentError("source_k must satisfy 1 <= source_k <= nz"))
 
     if source_enthalpy === nothing
-        source_enthalpy = ifelse(benchmark_case == :two_phase_source, 1.5e6*joule/kilogram, 0.5e6*joule/kilogram)
+        source_enthalpy = ifelse(benchmark_case == :two_phase_source, 1.5e6 * joule / kilogram, 0.5e6 * joule / kilogram)
     end
 
     source_regime = benchmark_case == :two_phase_source ? :two_phase : :single_phase
 
     g = CartesianMesh((nx, 1, nz), (domain_width, domain_thickness, domain_depth))
-    domain = reservoir_domain(g;
+    domain = reservoir_domain(
+        g;
         permeability = permeability,
         porosity = porosity,
         rock_density = rock_density,
@@ -371,7 +374,7 @@ function benchmark_ht_2d(;
         WIth = 0.0
     )
 
-    sys    = H2OSystem()
+    sys = H2OSystem()
     tables = sys.pvt_tables
 
     model, parameters = setup_reservoir_model(
@@ -392,11 +395,12 @@ function benchmark_ht_2d(;
     depth_cells = z_cells .- z0
 
     rho_ref = rmodel.system.rho_ref[1]
-    dp_dz = rho_ref*gravity_constant
-    pressure0 = top_pressure .+ dp_dz.*depth_cells
+    dp_dz = rho_ref * gravity_constant
+    pressure0 = top_pressure .+ dp_dz .* depth_cells
     enthalpy0 = tables[:enthalpy].(pressure0, top_temperature)
 
-    state0 = setup_reservoir_state(model,
+    state0 = setup_reservoir_state(
+        model,
         Pressure = pressure0,
         Enthalpy = enthalpy0,
         Temperature = top_temperature,
@@ -426,9 +430,9 @@ function benchmark_ht_2d(;
     source_saturation_vapor = tables[:saturation_vapor_ph](source_pressure, source_enthalpy)
     source_density_liquid = tables[:density_liquid_ph](source_pressure, source_enthalpy)
     source_density_vapor = tables[:density_vapor_ph](source_pressure, source_enthalpy)
-    source_density = (1.0 - source_saturation_vapor)*source_density_liquid +
-        source_saturation_vapor*source_density_vapor
-    source_rate = source_mass_rate/source_density
+    source_density = (1.0 - source_saturation_vapor) * source_density_liquid +
+        source_saturation_vapor * source_density_vapor
+    source_rate = source_mass_rate / source_density
 
     control = Dict(
         :MagmaticSource => InjectorControl(
@@ -455,11 +459,12 @@ function benchmark_ht_2d(;
         :x_coordinate_origin => source_x,
         :source_mass_rate => source_mass_rate,
         :source_enthalpy => source_enthalpy,
-        :source_energy_rate => source_mass_rate*source_enthalpy,
+        :source_energy_rate => source_mass_rate * source_enthalpy,
         :total_time => total_time,
     )
 
-    return JutulCase(model, dt, forces;
+    return JutulCase(
+        model, dt, forces;
         state0 = state0,
         parameters = parameters,
         input_data = info,
@@ -472,12 +477,12 @@ end
 # to dt_target, followed by uniform steps to fill the remaining time.
 
 function _benchmark_rampup_timesteps(
-        total_time :: Float64,
-        dt_target  :: Float64;
-        factor     :: Float64 = 2.0,
-        n_ramp     :: Int     = 8,
+        total_time::Float64,
+        dt_target::Float64;
+        factor::Float64 = 2.0,
+        n_ramp::Int = 8,
     )
-    dt0  = dt_target / factor^n_ramp
+    dt0 = dt_target / factor^n_ramp
     ramp = [dt0 * factor^i for i in 0:(n_ramp - 1)]
     ramp = min.(ramp, dt_target)
 
@@ -492,7 +497,7 @@ function _benchmark_rampup_timesteps(
     end
 
     remaining = total_time - t_ramp
-    n_steady  = max(1, round(Int, remaining / dt_target))
+    n_steady = max(1, round(Int, remaining / dt_target))
     dt_steady = remaining / n_steady
     return [ramp; fill(dt_steady, n_steady)]
 end

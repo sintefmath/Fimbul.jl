@@ -15,24 +15,24 @@ outermost point. A single point is placed at the origin.
 function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
     N = num_points
     N >= 1 || error("num_points must be at least 1, got $N")
-    Δθ = 2π/Base.MathConstants.golden^2
+    Δθ = 2π / Base.MathConstants.golden^2
     points = Matrix{Float64}(undef, 2, N)
-    for n = 1:N
-        r_n = N == 1 ? 0.0 : sqrt((n - 0.5)/(N - 0.5))
-        θ_n = n*Δθ
-        points[1, n] = r_n*cos(θ_n)
-        points[2, n] = r_n*sin(θ_n)
+    for n in 1:N
+        r_n = N == 1 ? 0.0 : sqrt((n - 0.5) / (N - 0.5))
+        θ_n = n * Δθ
+        points[1, n] = r_n * cos(θ_n)
+        points[2, n] = r_n * sin(θ_n)
     end
     if !ismissing(spacing)
         ismissing(radius) || error("Please provide either radius or spacing")
         N == 1 && return points
-        scale = spacing/median(nearest_neighbor_distances(points))
+        scale = spacing / median(nearest_neighbor_distances(points))
     elseif !ismissing(radius)
         scale = radius
     else
         scale = 1.0
     end
-    return points.*scale
+    return points .* scale
 end
 
 # Distance from each column of x to its nearest neighbor among the others
@@ -47,11 +47,11 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
 
     # Helper function to compute the cross product of vectors (p1 -> p2) and (p1 -> p3)
     function cross_product(p1, p2, p3)
-        (p2[1] - p1[1]) * (p3[2] - p1[2]) - (p2[2] - p1[2]) * (p3[1] - p1[1])
+        return (p2[1] - p1[1]) * (p3[2] - p1[2]) - (p2[2] - p1[2]) * (p3[1] - p1[1])
     end
 
     n_points = size(points, 2)
-    
+
     # Start with the leftmost point
     start = argmin(points[1, :])  # Index of the leftmost point
     current = start
@@ -59,7 +59,7 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
     hull_indices = Int[]
     while true
         push!(hull_indices, current)  # Add the current point to the hull
-        next_point = mod1(current+1, n_points)  # Next candidate point
+        next_point = mod1(current + 1, n_points)  # Next candidate point
 
         for i in 1:n_points
             if cross_product(points[:, current], points[:, next_point], points[:, i]) < 0
@@ -72,7 +72,7 @@ function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
             break  # Stop when we return to the starting point
         end
     end
-    
+
     # Extract hull points as matrix
     hull_points = points[:, hull_indices]
 
@@ -86,20 +86,20 @@ function point_to_line_distance_2d(point::AbstractVector, line_start::AbstractVe
     x0, y0 = point[1], point[2]
     x1, y1 = line_start[1], line_start[2]
     x2, y2 = line_end[1], line_end[2]
-    
+
     # Line vector
     dx = x2 - x1
     dy = y2 - y1
-    
+
     # If line segment has zero length, return distance to start point
     if dx == 0 && dy == 0
         return norm(point - line_start)
     end
-    
+
     # Calculate perpendicular distance using cross product formula
     numerator = abs(dy * x0 - dx * y0 + x2 * y1 - y2 * x1)
     denominator = sqrt(dx^2 + dy^2)
-    
+
     return numerator / denominator
 end
 
@@ -109,15 +109,15 @@ function point_to_line_distance_3d(point::AbstractVector, line_start::AbstractVe
     v = point - line_start
     # Line direction vector
     u = line_end - line_start
-    
+
     # If line segment has zero length, return distance to start point
     if norm(u) ≈ 0
         return norm(v)
     end
-    
+
     # Cross product to get perpendicular component
     cross_prod = cross(v, u)
-    
+
     # Distance is magnitude of cross product divided by line length
     return norm(cross_prod) / norm(u)
 end
@@ -125,54 +125,54 @@ end
 function ramer_douglas_peucker(points::AbstractMatrix, tolerance::Float64)
     """
     Simplify a curve using the Ramer-Douglas-Peucker algorithm.
-    
+
     Parameters:
     - points: Matrix (2×N or 3×N) representing 2D (x,y) or 3D (x,y,z) points
     - tolerance: Maximum allowed deviation from original curve
-    
+
     Returns:
     - simplified_points: Matrix of simplified points
     - indices: Vector of indices into original points array
     """
-    
+
     n_dims, n_points = size(points)
-    
+
     # Need at least 2 points
     if n_points <= 2
         return copy(points), collect(1:n_points)
     end
-    
+
     # Recursive helper function
     function rdp_recursive(start_idx::Int, end_idx::Int)
         # Find the point with maximum distance from line segment
         max_dist = 0.0
         max_idx = 0
-        
+
         start_point = points[:, start_idx]
         end_point = points[:, end_idx]
-        
+
         for i in (start_idx + 1):(end_idx - 1)
             point = points[:, i]
-            
+
             # Calculate distance based on dimensionality
             if n_dims == 2
                 dist = point_to_line_distance_2d(point, start_point, end_point)
             else  # 3D
                 dist = point_to_line_distance_3d(point, start_point, end_point)
             end
-            
+
             if dist > max_dist
                 max_dist = dist
                 max_idx = i
             end
         end
-        
+
         # If max distance is greater than tolerance, recursively simplify
         if max_dist > tolerance && max_idx > 0
             # Recursively simplify the two segments
             left_indices = rdp_recursive(start_idx, max_idx)
             right_indices = rdp_recursive(max_idx, end_idx)
-            
+
             # Combine results (remove duplicate point at junction)
             return vcat(left_indices, right_indices[2:end])
         else
@@ -180,13 +180,13 @@ function ramer_douglas_peucker(points::AbstractMatrix, tolerance::Float64)
             return [start_idx, end_idx]
         end
     end
-    
+
     # Get indices of simplified points
     indices = rdp_recursive(1, n_points)
-    
+
     # Extract simplified points
     simplified_points = points[:, indices]
-    
+
     return simplified_points, indices
 end
 
@@ -201,16 +201,16 @@ function offset_boundary(x::AbstractMatrix, offset; h = missing, n = 6)
 
     # Number of points to sample around each point
     if !ismissing(h)
-        n = max(Int(ceil(2π*offset/h)) + 1, n)
+        n = max(Int(ceil(2π * offset / h)) + 1, n)
     else
-        h = 2π*offset/n
+        h = 2π * offset / n
     end
 
     function sample_circle(x0::AbstractVector, r)
-        θ = LinRange(0, 2π, n+1)
+        θ = LinRange(0, 2π, n + 1)
         # Create matrix for circle points (2×n)
         circle_points = Matrix{Float64}(undef, 2, n)
-        for i = 1:n
+        for i in 1:n
             circle_points[1, i] = x0[1] + r * cos(θ[i])
             circle_points[2, i] = x0[2] + r * sin(θ[i])
         end
@@ -221,16 +221,16 @@ function offset_boundary(x::AbstractMatrix, offset; h = missing, n = 6)
     n_points = size(x, 2)
     total_circle_points = n * n_points
     xb = Matrix{Float64}(undef, 2, total_circle_points)
-    
+
     idx = 1
-    for i = 1:n_points
+    for i in 1:n_points
         circle = sample_circle(x[:, i], offset)
-        xb[:, idx:idx+n-1] = circle
+        xb[:, idx:(idx + n - 1)] = circle
         idx += n
     end
 
     # Get convex hull
-    hull = get_convex_hull(xb, h*0.1)
+    hull = get_convex_hull(xb, h * 0.1)
 
     return hull
 end
@@ -238,8 +238,8 @@ end
 function curve_measure(x::AbstractMatrix)
     n_points = size(x, 2)
     total_length = 0.0
-    for i = 1:n_points-1
-        total_length += norm(x[:, i+1] - x[:, i])
+    for i in 1:(n_points - 1)
+        total_length += norm(x[:, i + 1] - x[:, i])
     end
     return total_length
 end
@@ -247,7 +247,7 @@ end
 function min_max_distance(x::AbstractMatrix)
     n_points = size(x, 2)
     d_min, d_max = Inf, -Inf
-    
+
     for i in 1:n_points
         for j in 1:n_points
             i == j && continue
@@ -267,14 +267,16 @@ function max_distance(x::AbstractMatrix)
     return min_max_distance(x)[2]
 end
 
-function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector;
-    sector_dims = missing)
+function field_from_points(
+        sector_division::Symbol, xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector;
+        sector_dims = missing
+    )
 
     num_wells = size(xy, 2)
     well_coords = Vector{Matrix{Float64}}(undef, num_wells)
     for i in 1:num_wells
-        x_top, y_top, z_top = xy[1, i], xy[2, i], 0.0 + 1e-3
-        x_bottom, y_bottom, z_bottom = xy[1, i], xy[2, i], depths[end] - 1e-3
+        x_top, y_top, z_top = xy[1, i], xy[2, i], 0.0 + 1.0e-3
+        x_bottom, y_bottom, z_bottom = xy[1, i], xy[2, i], depths[end] - 1.0e-3
         well_coords[i] = permutedims([x_top y_top z_top; x_bottom y_bottom z_bottom])
     end
     if sector_division == :angular
@@ -315,12 +317,12 @@ function group_into_sectors_spiral(num_wells::Int, num_sectors::Int)
     N = num_wells
     num_sectors <= N || error("Cannot divide $N wells into $num_sectors sectors.")
     num_sectors == 1 && return [collect(1:N)]
-    Δθ = 2π/Base.MathConstants.golden^2
+    Δθ = 2π / Base.MathConstants.golden^2
     unit_points = fibonacci_pattern_2d(N; spacing = missing, radius = 1.0)
     # Candidate spine families
     fib = [1, 2]
     while fib[end] < N
-        push!(fib, fib[end] + fib[end-1])
+        push!(fib, fib[end] + fib[end - 1])
     end
     candidates = filter(F -> num_sectors <= F <= max(num_sectors, N ÷ 2), unique(fib))
     isempty(candidates) && (candidates = [num_sectors])
@@ -330,19 +332,19 @@ function group_into_sectors_spiral(num_wells::Int, num_sectors::Int)
         spines = [collect(j:F:N) for j in 1:F]
         # Counter-clockwise order of the spines, compared at a common position
         # along the spiral: spine j turns by δ for every step of F points
-        δ = mod(F*Δθ + π, 2π) - π
-        φ = [mod(j*Δθ - δ*j/F, 2π) for j in 1:F]
+        δ = mod(F * Δθ + π, 2π) - π
+        φ = [mod(j * Δθ - δ * j / F, 2π) for j in 1:F]
         order = sortperm(φ)
         counts = length.(spines[order])
         # Split the spines into contiguous bundles, trying every starting spine
-        for start in 0:F-1
+        for start in 0:(F - 1)
             c = circshift(counts, -start)
             cuts = spine_bundle_cuts(c, num_sectors)
             isnothing(cuts) && continue
             sizes = [sum(c[a:b]) for (a, b) in cuts]
             imbalance = maximum(sizes) - minimum(sizes)
             # Mean distance between consecutive points on a spine
-            step = sum(norm(unit_points[:, n + F] - unit_points[:, n]) for n in 1:N-F; init = 0.0)/max(N - F, 1)
+            step = sum(norm(unit_points[:, n + F] - unit_points[:, n]) for n in 1:(N - F); init = 0.0) / max(N - F, 1)
             score = (imbalance, step, start)
             if isnothing(best) || score < best[1]
                 best = (score, spines, circshift(order, -start), cuts)
@@ -352,9 +354,13 @@ function group_into_sectors_spiral(num_wells::Int, num_sectors::Int)
     _, spines, order, cuts = best
     # Each well has a level (its position along its spine, from the center)
     # and a rank (the counter-clockwise position of its spine)
-    sectors = [[(level, rank, spines[order[rank]][level])
-        for rank in a:b for level in eachindex(spines[order[rank]])]
-        for (a, b) in cuts]
+    sectors = [
+        [
+            (level, rank, spines[order[rank]][level])
+                for rank in a:b for level in eachindex(spines[order[rank]])
+        ]
+            for (a, b) in cuts
+    ]
     rebalance_spiral_sectors!(sectors, length(order))
     return [last.(sort(sector)) for sector in sectors]
 end
@@ -402,9 +408,9 @@ end
 function spine_bundle_cuts(counts, num_groups)
     n = length(counts)
     n >= num_groups || return nothing
-    target = sum(counts)/num_groups
+    target = sum(counts) / num_groups
     cum = [0; cumsum(counts)]
-    cost(i, j) = (cum[j+1] - cum[i] - target)^2  # group of items i..j
+    cost(i, j) = (cum[j + 1] - cum[i] - target)^2  # group of items i..j
     # best[k, j]: minimal cost of splitting items 1..j into k groups
     best = fill(Inf, num_groups, n)
     prev = zeros(Int, num_groups, n)
@@ -412,7 +418,7 @@ function spine_bundle_cuts(counts, num_groups)
         best[1, j] = cost(1, j)
     end
     for k in 2:num_groups, j in k:n, i in k:j
-        c = best[k-1, i-1] + cost(i, j)
+        c = best[k - 1, i - 1] + cost(i, j)
         if c < best[k, j]
             best[k, j] = c
             prev[k, j] = i
@@ -432,11 +438,11 @@ function group_into_sectors_angular(xy::AbstractMatrix, num_sectors::Int)
     # Divide the well field into roughly equal angle sectors
 
     n = size(xy, 2)
-    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
-    θ = atan.(xy[2,:], xy[1,:]) .+ π
+    r = sqrt.(xy[1, :] .^ 2 .+ xy[2, :] .^ 2)
+    θ = atan.(xy[2, :], xy[1, :]) .+ π
     order_θ = sortperm(θ)
     wells_per_sector = div(n, num_sectors)
-    rem = n - wells_per_sector*num_sectors
+    rem = n - wells_per_sector * num_sectors
     wells_per_sector = fill(wells_per_sector, num_sectors)
     wells_per_sector[1:rem] .+= 1
 
@@ -455,14 +461,14 @@ end
 function equal_index_ranges(total::Int, n_groups::Int)
     # Split `total` items into n_groups contiguous, as-equal-as-possible chunks
     base = div(total, n_groups)
-    rem = total - base*n_groups
+    rem = total - base * n_groups
     sizes = fill(base, n_groups)
     sizes[1:rem] .+= 1
 
-    ranges = Vector{Tuple{Int,Int}}()
+    ranges = Vector{Tuple{Int, Int}}()
     s = 0
     for sz in sizes
-        push!(ranges, (s+1, s+sz))
+        push!(ranges, (s + 1, s + sz))
         s += sz
     end
     return ranges
@@ -486,8 +492,8 @@ end
 # blocks wide, chosen so that the field is close to square
 function rectangular_grid_width(num_wells::Int, num_sectors::Int, sector_dims)
     bx, by = sector_dims
-    kx = clamp(round(Int, sqrt(num_sectors*by/bx)), 1, max(num_sectors, 1))
-    return clamp(kx*bx, 1, num_wells)
+    kx = clamp(round(Int, sqrt(num_sectors * by / bx)), 1, max(num_sectors, 1))
+    return clamp(kx * bx, 1, num_wells)
 end
 
 """
@@ -501,8 +507,10 @@ right, if the field is not a whole number of blocks wide), are divided into the
 remaining sectors in column order. Within each sector, the wells are ordered
 column by column, alternating upwards and downwards.
 """
-function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
-    sector_dims = missing)
+function group_into_sectors_cartesian(
+        xy::AbstractMatrix, num_sectors::Int;
+        sector_dims = missing
+    )
 
     n = size(xy, 2)
     cols = sort(unique(xy[1, :]))
@@ -517,12 +525,12 @@ function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
     kx = length(cols) ÷ bx
     # Blocks in a block row must be full; stop at the first block row that is
     # not, or when the blocks would use up all the sectors
-    in_block(i, br, bc) = (br - 1)*by < ri[i] <= br*by && (bc - 1)*bx < ci[i] <= bc*bx
+    in_block(i, br, bc) = (br - 1) * by < ri[i] <= br * by && (bc - 1) * bx < ci[i] <= bc * bx
     blocks = Vector{Vector{Int}}()
     br = 1
     while length(blocks) + kx <= num_sectors
         row_blocks = [[i for i in 1:n if in_block(i, br, bc)] for bc in 1:kx]
-        all(b -> length(b) == bx*by, row_blocks) || break
+        all(b -> length(b) == bx * by, row_blocks) || break
         append!(blocks, row_blocks)
         br += 1
     end
@@ -586,7 +594,7 @@ end
 function add_geometry_0d(points::AbstractMatrix, h, tag = 0, embed = false)
     n_points = size(points, 1)  # For N×2 matrix (transposed from 2×N)
     tags = Vector{Int}(undef, n_points)
-    for i = 1:n_points
+    for i in 1:n_points
         x, y = points[i, 1], points[i, 2]
         tags[i] = gmsh.model.geo.addPoint(x, y, 0.0, h, tag + i)
     end
@@ -599,14 +607,14 @@ end
 
 function add_geometry_1d(points::AbstractMatrix, h, tag_1d = 0, tag_0d = 0, embed = false)
     n_points = size(points, 1)  # For N×2 matrix (transposed from 2×N)
-    tags = Vector{Int}(undef, n_points-1)
-    
+    tags = Vector{Int}(undef, n_points - 1)
+
     # Check if curve is closed (first and last points are the same)
-    is_closed = norm(points[1, :] - points[end, :]) < 1e-12
-    n = is_closed ? n_points-1 : n_points
+    is_closed = norm(points[1, :] - points[end, :]) < 1.0e-12
+    n = is_closed ? n_points - 1 : n_points
 
     tags_0d = add_geometry_0d(points[1:n, :], h, tag_0d)
-    for i = 1:n_points-1
+    for i in 1:(n_points - 1)
         start = i
         stop = (i + 1 - 1) % n + 1
         tags[i] = gmsh.model.geo.addLine(tags_0d[start], tags_0d[stop], tag_1d + i)

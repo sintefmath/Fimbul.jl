@@ -1,8 +1,9 @@
-function layered_reservoir_domain(constraints_2d, depths, layer_properties::NamedTuple=NamedTuple();
-    mesh_args = NamedTuple(),
-    reservoir_domain_args...
+function layered_reservoir_domain(
+        constraints_2d, depths, layer_properties::NamedTuple = NamedTuple();
+        mesh_args = NamedTuple(),
+        reservoir_domain_args...
     )
-    
+
     # Process layer properties
     num_layers = length(depths) - 1
     processed_layer_properties = process_properties(layer_properties, num_layers)
@@ -21,8 +22,10 @@ function layered_reservoir_domain(constraints_2d, depths, layer_properties::Name
 
 end
 
-function layered_reservoir_domain(mesh::JutulMesh, layers, layer_properties::NamedTuple=NamedTuple();
-    reservoir_domain_args...)
+function layered_reservoir_domain(
+        mesh::JutulMesh, layers, layer_properties::NamedTuple = NamedTuple();
+        reservoir_domain_args...
+    )
 
     processed_layer_properties = process_properties(layer_properties, maximum(layers))
     # Expand layer properties to cells

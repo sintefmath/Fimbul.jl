@@ -20,7 +20,7 @@ the loop has a single connection to the surface.
 See also JutulDarcy's `DisabledControl`, `InjectorControl` and
 `ProducerControl`.
 """
-struct ClosedLoopRestControl{T<:JutulDarcy.WellTarget} <: JutulDarcy.WellControlForce
+struct ClosedLoopRestControl{T <: JutulDarcy.WellTarget} <: JutulDarcy.WellControlForce
     target::T
 end
 
@@ -43,5 +43,5 @@ JutulDarcy.replace_target(::ClosedLoopRestControl, target::JutulDarcy.WellTarget
 JutulDarcy.effective_surface_rate(qts, ::ClosedLoopRestControl) = qts
 
 function Base.show(io::IO, c::ClosedLoopRestControl)
-    print(io, "ClosedLoopRestControl($(c.target))")
+    return print(io, "ClosedLoopRestControl($(c.target))")
 end

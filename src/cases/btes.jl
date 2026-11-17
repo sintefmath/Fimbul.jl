@@ -138,80 +138,84 @@ form takes an explicit well field, and does not accept the pattern arguments
 - `mesh_args = NamedTuple()`: Additional arguments for the mesh generation.
 """
 function btes(
-    pattern::Symbol = :sunflower;
-    num_wells = missing,
-    well_spacing = missing,
-    radius = missing,
-    extent = missing,
-    sector_grouping = missing,
-    sector_dims = missing,
-    num_sectors = 6,
-    depths = [0.0, 0.5, 50, 65],
-    well_layers = [2],
-    density = [30, 2580, 2580]*kilogram/meter^3,
-    thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
-    heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
-    permeability = 1e-6darcy,
-    geothermal_gradient = 0.03Kelvin/meter,
-    temperature_charge = convert_to_si(90.0, :Celsius),
-    temperature_discharge = convert_to_si(10.0, :Celsius),
-    rate_charge = 0.5litre/second,
-    rate_discharge = rate_charge,
-    reversed_discharge = false,
-    topology = :sectors_parallel,
-    well_grouping = :sector,
-    temperature_surface = convert_to_si(10.0, :Celsius),
-    num_years = 4,
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"],
-    report_interval = 14day,
-    utes_schedule_args = NamedTuple(),
-    n_z = [3, 8, 3],
-    n_xy = 3,
-    mesh_args = NamedTuple(),
+        pattern::Symbol = :sunflower;
+        num_wells = missing,
+        well_spacing = missing,
+        radius = missing,
+        extent = missing,
+        sector_grouping = missing,
+        sector_dims = missing,
+        num_sectors = 6,
+        depths = [0.0, 0.5, 50, 65],
+        well_layers = [2],
+        density = [30, 2580, 2580] * kilogram / meter^3,
+        thermal_conductivity = [0.034, 3.7, 3.7] * watt / meter / Kelvin,
+        heat_capacity = [1500, 900, 900] * joule / kilogram / Kelvin,
+        permeability = 1.0e-6darcy,
+        geothermal_gradient = 0.03Kelvin / meter,
+        temperature_charge = convert_to_si(90.0, :Celsius),
+        temperature_discharge = convert_to_si(10.0, :Celsius),
+        rate_charge = 0.5litre / second,
+        rate_discharge = rate_charge,
+        reversed_discharge = false,
+        topology = :sectors_parallel,
+        well_grouping = :sector,
+        temperature_surface = convert_to_si(10.0, :Celsius),
+        num_years = 4,
+        charge_period = ["June", "September"],
+        discharge_period = ["December", "March"],
+        report_interval = 14day,
+        utes_schedule_args = NamedTuple(),
+        n_z = [3, 8, 3],
+        n_xy = 3,
+        mesh_args = NamedTuple(),
     )
 
-    field, well_spacing = btes_well_field(pattern;
+    field, well_spacing = btes_well_field(
+        pattern;
         num_wells = num_wells, well_spacing = well_spacing,
         radius = radius, extent = extent, sector_grouping = sector_grouping,
-        sector_dims = sector_dims, num_sectors = num_sectors, depths = depths)
+        sector_dims = sector_dims, num_sectors = num_sectors, depths = depths
+    )
 
-    case = btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,well_grouping = well_grouping,
-    density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,permeability = permeability,
-    geothermal_gradient = geothermal_gradient,temperature_charge = temperature_charge,temperature_discharge = temperature_discharge,
-    rate_charge = rate_charge,rate_discharge = rate_discharge,reversed_discharge = reversed_discharge,temperature_surface = temperature_surface,num_years = num_years,charge_period = charge_period,
-    discharge_period = discharge_period,report_interval = report_interval,utes_schedule_args = utes_schedule_args,n_z = n_z,n_xy = n_xy,mesh_args = mesh_args)
+    case = btes(
+        field; well_spacing = well_spacing, depths = depths, well_layers = well_layers, topology = topology, well_grouping = well_grouping,
+        density = density, thermal_conductivity = thermal_conductivity, heat_capacity = heat_capacity, permeability = permeability,
+        geothermal_gradient = geothermal_gradient, temperature_charge = temperature_charge, temperature_discharge = temperature_discharge,
+        rate_charge = rate_charge, rate_discharge = rate_discharge, reversed_discharge = reversed_discharge, temperature_surface = temperature_surface, num_years = num_years, charge_period = charge_period,
+        discharge_period = discharge_period, report_interval = report_interval, utes_schedule_args = utes_schedule_args, n_z = n_z, n_xy = n_xy, mesh_args = mesh_args
+    )
     case.input_data[:pattern] = pattern
     return case
 
 end
 
 function btes(
-    field::Vector{Vector{Matrix{Float64}}};
-    well_spacing = 5.0,
-    depths = [0.0, 0.5, 50, 65],
-    well_layers = [2],
-    density = [30, 2580, 2580]*kilogram/meter^3,
-    thermal_conductivity = [0.034, 3.7, 3.7]*watt/meter/Kelvin,
-    heat_capacity = [1500, 900, 900]*joule/kilogram/Kelvin,
-    permeability = 1e-6darcy,
-    geothermal_gradient = 0.03Kelvin/meter,
-    temperature_charge = convert_to_si(90.0, :Celsius),
-    temperature_discharge = convert_to_si(10.0, :Celsius),
-    rate_charge = 0.5litre/second,
-    rate_discharge = rate_charge,
-    reversed_discharge = false,
-    topology = :sectors_parallel,
-    well_grouping = :sector,
-    temperature_surface = convert_to_si(10.0, :Celsius),
-    num_years = 4,
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"],
-    report_interval = 14day,
-    utes_schedule_args = NamedTuple(),
-    n_z = [3, 8, 3],
-    n_xy = 3,
-    mesh_args = NamedTuple(),
+        field::Vector{Vector{Matrix{Float64}}};
+        well_spacing = 5.0,
+        depths = [0.0, 0.5, 50, 65],
+        well_layers = [2],
+        density = [30, 2580, 2580] * kilogram / meter^3,
+        thermal_conductivity = [0.034, 3.7, 3.7] * watt / meter / Kelvin,
+        heat_capacity = [1500, 900, 900] * joule / kilogram / Kelvin,
+        permeability = 1.0e-6darcy,
+        geothermal_gradient = 0.03Kelvin / meter,
+        temperature_charge = convert_to_si(90.0, :Celsius),
+        temperature_discharge = convert_to_si(10.0, :Celsius),
+        rate_charge = 0.5litre / second,
+        rate_discharge = rate_charge,
+        reversed_discharge = false,
+        topology = :sectors_parallel,
+        well_grouping = :sector,
+        temperature_surface = convert_to_si(10.0, :Celsius),
+        num_years = 4,
+        charge_period = ["June", "September"],
+        discharge_period = ["December", "March"],
+        report_interval = 14day,
+        utes_schedule_args = NamedTuple(),
+        n_z = [3, 8, 3],
+        n_xy = 3,
+        mesh_args = NamedTuple(),
     )
 
     topology in (:sectors_parallel, :sectors_series) ||
@@ -235,22 +239,23 @@ function btes(
     # constraint: a curve of zero length would give a zero distance between
     # constraints, and with it no refinement around the wells.
     well_coordinates = [unique_consecutive_columns(wc[1:2, :]) for wc in well_coords_3d]
-    hz = diff(depths)./n_z
-    hxy = well_spacing/n_xy
+    hz = diff(depths) ./ n_z
+    hxy = well_spacing / n_xy
 
     # ## Set up model
     # Set up reservoir domain with rock properties similar to that of granite,
-    # with a styrofoam layer on top                
-    domain, layers, metrics = layered_reservoir_domain(well_coordinates, depths,
+    # with a styrofoam layer on top
+    domain, layers, metrics = layered_reservoir_domain(
+        well_coordinates, depths,
         (
             rock_density = density,
             rock_thermal_conductivity = thermal_conductivity,
-            rock_heat_capacity = heat_capacity
+            rock_heat_capacity = heat_capacity,
         );
         mesh_args = (; hxy_min = hxy, hz = hz, mesh_args...),
         permeability = permeability,
         porosity = 0.01,
-        component_heat_capacity = 4.278e3joule/kilogram/Kelvin,
+        component_heat_capacity = 4.278e3joule / kilogram / Kelvin,
     )
     mesh = physical_representation(domain)
     # Set up BTES wells
@@ -267,9 +272,9 @@ function btes(
     function trajectory_cells(wc)
         xy = wc[1:2, 1]
         d = norm(xy)
-        v = d > 0 ? xy./d : [1.0, 0.0]
+        v = d > 0 ? xy ./ d : [1.0, 0.0]
         wc = copy(wc)
-        wc[1:2, :] .+= (hxy_min/2).*v
+        wc[1:2, :] .+= (hxy_min / 2) .* v
         cells = Jutul.find_enclosing_cells(mesh, permutedims(wc), geometry = geo)
         filter!(c -> layers[c] ∈ well_layers, cells)
         return cells
@@ -300,17 +305,19 @@ function btes(
                 disc = discretize_closed_loop_u1_manifold(cells, geo.cell_centroids)
                 surface_segments = disc.manifold_segments
             end
-            well = setup_btes_well(domain, disc.reservoir_cells;
-                name                  = name,
-                closed_loop_type      = :u1,
-                neighborship          = disc.neighborship,
-                pipe_cells            = disc.pipe_cells,
-                grout_cells           = disc.grout_cells,
-                well_cell_centers     = disc.well_cell_centers,
-                end_nodes             = disc.end_nodes,
+            well = setup_btes_well(
+                domain, disc.reservoir_cells;
+                name = name,
+                closed_loop_type = :u1,
+                neighborship = disc.neighborship,
+                pipe_cells = disc.pipe_cells,
+                grout_cells = disc.grout_cells,
+                well_cell_centers = disc.well_cell_centers,
+                end_nodes = disc.end_nodes,
                 return_reservoir_cell = disc.return_reservoir_cell,
-                tag                   = disc.tag,
-                borehole              = disc.borehole)
+                tag = disc.tag,
+                borehole = disc.borehole
+            )
             push!(well_models, well)
             push!(well_names, name)
             push!(surface_segments_per_well, surface_segments)
@@ -326,7 +333,7 @@ function btes(
         domain, :geothermal,
         wells = well_models,
         can_shut_wells = false,
-    );
+    )
 
     # ## Set up initial state and boundary conditions
     geo = tpfv_geometry(mesh)
@@ -334,22 +341,23 @@ function btes(
     bottom = map(v -> isapprox(v, maximum(z_bc)), z_bc)
     # Define pressure and temperature profiles
     rho = reservoir_model(model).system.rho_ref[1]
-    dpdz = rho*gravity_constant
+    dpdz = rho * gravity_constant
     dTdz = geothermal_gradient
-    T = z -> temperature_surface .+ dTdz*z
-    p = z -> 5atm .+ dpdz.*z
+    T = z -> temperature_surface .+ dTdz * z
+    p = z -> 5atm .+ dpdz .* z
     # Set initial conditions
     z_cells = geo.cell_centroids[3, :]
     z_hat = z_cells .- minimum(z_cells)
-    state0 = setup_reservoir_state(model,
+    state0 = setup_reservoir_state(
+        model,
         Pressure = p(z_hat),
         Temperature = T(z_hat)
-    );
+    )
     # Set boundary conditions
     z_bc = z_bc[.!bottom]
     z_hat = z_bc .- minimum(z_bc)
     bc_cells = geo.boundary_neighbors[.!bottom]
-    bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
+    bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat))
 
     if topology == :sectors_parallel && well_grouping == :borehole
         # Group closed-loop wells by sector, preserving the order given in `field`
@@ -370,16 +378,19 @@ function btes(
         model, wells_per_sector,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge;
         reversed_discharge = reversed_discharge,
-        reverse_single_wells = topology == :sectors_parallel && well_grouping == :sector);
+        reverse_single_wells = topology == :sectors_parallel && well_grouping == :sector
+    )
     if topology == :sectors_series || well_grouping == :sector
         # One entry per sector, each holding the closed-loop well of the sector
-        sectors = Dict(Symbol("S$sno") => [name]
-            for (sno, name) in enumerate(well_names))
+        sectors = Dict(
+            Symbol("S$sno") => [name]
+                for (sno, name) in enumerate(well_names)
+        )
     end
-    
-    forces_charge = setup_reservoir_forces(model, control=control_charge, bc=bc)
-    forces_discharge = setup_reservoir_forces(model, control=control_discharge, bc=bc);
-    forces_rest = setup_reservoir_forces(model, control=control_rest, bc=bc)
+
+    forces_charge = setup_reservoir_forces(model, control = control_charge, bc = bc)
+    forces_discharge = setup_reservoir_forces(model, control = control_discharge, bc = bc)
+    forces_rest = setup_reservoir_forces(model, control = control_rest, bc = bc)
     # Make schedule
     dt, forces, timestamps = make_utes_schedule(
         forces_charge, forces_discharge, forces_rest;
@@ -413,8 +424,10 @@ function btes(
     end
 
     # ## Assemble and return model
-    case = JutulCase(model, dt, forces,
-        state0 = state0, parameters = parameters, input_data = info)
+    case = JutulCase(
+        model, dt, forces,
+        state0 = state0, parameters = parameters, input_data = info
+    )
     return case
 
 end
@@ -426,7 +439,7 @@ function btes(field::AbstractMatrix; kwargs...)
 end
 
 # Columns of x without consecutive repetitions
-function unique_consecutive_columns(x::AbstractMatrix; tol = 1e-10)
+function unique_consecutive_columns(x::AbstractMatrix; tol = 1.0e-10)
     keep = [1]
     for i in 2:size(x, 2)
         norm(x[:, i] - x[:, keep[end]]) > tol && push!(keep, i)
@@ -449,15 +462,16 @@ Well field for [`btes`](@ref) with a built-in pattern, returned as
 `(field, well_spacing)`. See [`btes`](@ref) for the patterns and how the number
 of wells, the spacing and the field size are set.
 """
-function btes_well_field(pattern::Symbol = :sunflower;
-    num_wells = missing,
-    well_spacing = missing,
-    radius = missing,
-    extent = missing,
-    sector_grouping = missing,
-    sector_dims = missing,
-    num_sectors = 6,
-    depths = [0.0, 0.5, 50, 65],
+function btes_well_field(
+        pattern::Symbol = :sunflower;
+        num_wells = missing,
+        well_spacing = missing,
+        radius = missing,
+        extent = missing,
+        sector_grouping = missing,
+        sector_dims = missing,
+        num_sectors = 6,
+        depths = [0.0, 0.5, 50, 65],
     )
     ismissing(num_wells) || ismissing(well_spacing) ||
         error("Give either num_wells or well_spacing, not both. The other \
@@ -485,8 +499,10 @@ function btes_well_field(pattern::Symbol = :sunflower;
     ismissing(well_spacing) || well_spacing > 0 ||
         error("well_spacing must be positive, got $well_spacing.")
 
-    allowed = Dict(:sunflower => (:spiral, :sequential),
-        :circular => (:angular, :sequential), :rectangular => (:cartesian,))[pattern]
+    allowed = Dict(
+        :sunflower => (:spiral, :sequential),
+        :circular => (:angular, :sequential), :rectangular => (:cartesian,)
+    )[pattern]
     if ismissing(sector_grouping)
         sector_grouping = first(allowed)
     end
@@ -502,16 +518,20 @@ function btes_well_field(pattern::Symbol = :sunflower;
     elseif pattern == :circular
         xy, well_spacing = circular_pattern(num_wells, well_spacing, field_size)
     else
-        xy, well_spacing = rectangular_pattern(num_wells, well_spacing, field_size;
-            num_sectors = num_sectors, sector_dims = sector_dims)
+        xy, well_spacing = rectangular_pattern(
+            num_wells, well_spacing, field_size;
+            num_sectors = num_sectors, sector_dims = sector_dims
+        )
     end
     division = sector_grouping
     ismissing(sector_dims) || pattern == :rectangular ||
         error("sector_dims is only used with the :rectangular pattern.")
     size(xy, 2) >= 1 || error("No wells fit in a :$pattern field of size \
         $field_size with spacing $well_spacing.")
-    field = field_from_points(division, xy, min(num_sectors, size(xy, 2)), depths;
-        sector_dims = sector_dims)
+    field = field_from_points(
+        division, xy, min(num_sectors, size(xy, 2)), depths;
+        sector_dims = sector_dims
+    )
     return (field, Float64(well_spacing))
 end
 
@@ -521,15 +541,15 @@ end
 function sunflower_radius(N, s)
     N == 1 && return 0.0
     xy = fibonacci_pattern_2d(N; spacing = s)
-    return maximum(sqrt.(xy[1, :].^2 .+ xy[2, :].^2))
+    return maximum(sqrt.(xy[1, :] .^ 2 .+ xy[2, :] .^ 2))
 end
 
 function sunflower_pattern(N, s, R)
     if ismissing(N)
         # Largest number of wells that fits within R. The radius grows about
         # as sqrt(N), which gives a first guess to correct from.
-        fits(n) = sunflower_radius(n, s) <= R*(1 + 1e-10)
-        N = max(1, floor(Int, (R/sunflower_radius(2, s))^2*2))
+        fits(n) = sunflower_radius(n, s) <= R * (1 + 1.0e-10)
+        N = max(1, floor(Int, (R / sunflower_radius(2, s))^2 * 2))
         while N > 1 && !fits(N)
             N -= 1
         end
@@ -538,7 +558,7 @@ function sunflower_pattern(N, s, R)
         end
     elseif ismissing(s)
         N == 1 && return (zeros(2, 1), Float64(R))
-        s = R/sunflower_radius(N, 1.0)
+        s = R / sunflower_radius(N, 1.0)
     end
     N == 1 && return (zeros(2, 1), Float64(s))
     return (fibonacci_pattern_2d(N; spacing = s), Float64(s))
@@ -546,11 +566,11 @@ end
 
 # Number of wells on ring k of the circular pattern, where the ring radius is k
 # spacings. The count does not depend on the spacing itself.
-circular_ring_size(k) = max(1, round(Int, 2π*k))
+circular_ring_size(k) = max(1, round(Int, 2π * k))
 
 function circular_pattern(N, s, R)
     if ismissing(N)
-        K = floor(Int, R/s*(1 + 1e-10))
+        K = floor(Int, R / s * (1 + 1.0e-10))
         N = 1 + sum(circular_ring_size, 1:K; init = 0)
     elseif ismissing(s)
         # The number of rings is fixed by N, so the outer ring sets the spacing
@@ -559,16 +579,16 @@ function circular_pattern(N, s, R)
             K += 1
             n += circular_ring_size(K)
         end
-        s = K == 0 ? Float64(R) : R/K
+        s = K == 0 ? Float64(R) : R / K
     end
     points = [[0.0, 0.0]]
     ring = 1
     while length(points) < N
-        r = ring*s
+        r = ring * s
         n_ring = min(circular_ring_size(ring), N - length(points))
-        for k in 0:n_ring-1
-            θ = 2π*k/n_ring
-            push!(points, [r*cos(θ), r*sin(θ)])
+        for k in 0:(n_ring - 1)
+            θ = 2π * k / n_ring
+            push!(points, [r * cos(θ), r * sin(θ)])
         end
         ring += 1
     end
@@ -580,15 +600,15 @@ function rectangular_pattern(N, s, extent; num_sectors = 1, sector_dims = missin
         length(extent) == 2 && all(>=(0), extent) ||
             error("extent must be (Lx, Ly) with Lx, Ly ≥ 0, got $extent.")
         Lx, Ly = extent
-        counts(s) = (floor(Int, Lx/s*(1 + 1e-10)) + 1, floor(Int, Ly/s*(1 + 1e-10)) + 1)
+        counts(s) = (floor(Int, Lx / s * (1 + 1.0e-10)) + 1, floor(Int, Ly / s * (1 + 1.0e-10)) + 1)
         if ismissing(N)
             nx, ny = counts(s)
-            N = nx*ny
+            N = nx * ny
         else
             # Largest spacing that fits N wells. The count only changes where
             # a whole number of spacings fits Lx or Ly, so those are the
             # candidates.
-            candidates = filter(>(0), vcat(Lx./(1:N), Ly./(1:N)))
+            candidates = filter(>(0), vcat(Lx ./ (1:N), Ly ./ (1:N)))
             candidates = filter(c -> prod(counts(c)) >= N, candidates)
             if isempty(candidates)
                 N == 1 || error("extent $extent has no room for $N wells.")
@@ -604,11 +624,11 @@ function rectangular_pattern(N, s, extent; num_sectors = 1, sector_dims = missin
         num_sectors = clamp(num_sectors, 1, N)
         dims = rectangular_sector_dims(N ÷ num_sectors, sector_dims)
         nx = rectangular_grid_width(N, num_sectors, dims)
-        ny = ceil(Int, N/nx)
+        ny = ceil(Int, N / nx)
     end
-    xs = ((0:nx-1) .- (nx-1)/2).*s
-    ys = ((0:ny-1) .- (ny-1)/2).*s
-    xy = Matrix{Float64}(undef, 2, nx*ny)
+    xs = ((0:(nx - 1)) .- (nx - 1) / 2) .* s
+    ys = ((0:(ny - 1)) .- (ny - 1) / 2) .* s
+    xy = Matrix{Float64}(undef, 2, nx * ny)
     k = 0
     for y in ys, x in xs
         k += 1
@@ -619,21 +639,27 @@ end
 
 # Controls for the closed-loop wells in `wells_per_sector`, where the wells of
 # each sector are coupled in series in the given order
-function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
-    rate_charge, rate_discharge, temperature_charge, temperature_discharge;
-    reversed_discharge::Bool = false,
-    reverse_single_wells::Bool = false)
+function setup_controls(
+        model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
+        rate_charge, rate_discharge, temperature_charge, temperature_discharge;
+        reversed_discharge::Bool = false,
+        reverse_single_wells::Bool = false
+    )
 
     rho = reservoir_model(model).system.rho_ref[1]
     rate_target = TotalRateTarget(rate_charge)
-    ctrl_charge = InjectorControl(rate_target, [1.0],
-        density=rho, temperature=temperature_charge)
+    ctrl_charge = InjectorControl(
+        rate_target, [1.0],
+        density = rho, temperature = temperature_charge
+    )
     rate_target = TotalRateTarget(rate_discharge)
-    ctrl_discharge = InjectorControl(rate_target, [1.0],
-        density=rho, temperature=temperature_discharge);
+    ctrl_discharge = InjectorControl(
+        rate_target, [1.0],
+        density = rho, temperature = temperature_discharge
+    )
     # BHP control for return side
     bhp_target = BottomHolePressureTarget(1.0si_unit(:atm))
-    ctrl_ret = ProducerControl(bhp_target);
+    ctrl_ret = ProducerControl(bhp_target)
     # Rest: the loops are not circulating. Holding the wellhead pressure lets the
     # fluid in each loop expand and contract freely with temperature, as an
     # expansion vessel would. Disabling every well instead seals the loops, and
@@ -674,10 +700,12 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
                 if k == 1
                     control_charge[well_sup] = ctrl_charge
                 else
-                    well_prev = get_return(sw[k-1])
+                    well_prev = get_return(sw[k - 1])
                     target = JutulDarcy.ReinjectionTarget([well_prev])
-                    control_charge[well_sup] = InjectorControl(target, [1.0],
-                        density=rho, temperature=NaN; check=false)
+                    control_charge[well_sup] = InjectorControl(
+                        target, [1.0],
+                        density = rho, temperature = NaN; check = false
+                    )
                 end
                 # Discharging runs from first to last (reversed_discharge = false)
                 # or from last to first (reversed_discharge = true)
@@ -685,10 +713,12 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
                 if k == discharge_first
                     control_discharge[well_sup] = ctrl_discharge
                 else
-                    well_prev = get_return(sw[reversed_discharge ? k+1 : k-1])
+                    well_prev = get_return(sw[reversed_discharge ? k + 1 : k - 1])
                     target = JutulDarcy.ReinjectionTarget([well_prev])
-                    control_discharge[well_sup] = InjectorControl(target, [1.0],
-                        density=rho, temperature=NaN; check=false)
+                    control_discharge[well_sup] = InjectorControl(
+                        target, [1.0],
+                        density = rho, temperature = NaN; check = false
+                    )
                 end
             end
             control_rest[well_sup] = ctrl_rest

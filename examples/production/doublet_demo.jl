@@ -5,7 +5,7 @@
 # producer well that extracts hot water from the reservoir, and an injector well
 # that reinjects produced water at a lower temperature.
 
-# Add required modules to namespace 
+# Add required modules to namespace
 using Jutul, JutulDarcy, Fimbul
 using HYPRE
 using GLMakie
@@ -33,11 +33,13 @@ fig
 
 # ### Plot reservoir properties
 # Next, we visualize the reservoir interactively.
-plot_reservoir(case.model;
+plot_reservoir(
+    case.model;
     resolution = (1000, 800),
     key = :permeability,
     axis_args = axis_args,
-    fancy = false)
+    fancy = false
+)
 
 # ## Simulate geothermal energy production
 # We simulate the geothermal doublet for 200 years. The producer is set to
@@ -52,11 +54,13 @@ results = simulate_reservoir(case; info_level = 2)
 # ## Visualize results
 # We first plot the reservoir state interactively. You can notice how the
 # cold front propagates from the injector well by filtering out high values.
-plot_reservoir(case.model, results.states;
+plot_reservoir(
+    case.model, results.states;
     colormap = :seaborn_icefire_gradient,
     key = :Temperature,
     axis_args = axis_args,
-    fancy = false)
+    fancy = false
+)
 
 # ### Plot well output
 # Next, we plot the well output to examine the production rates and temperatures.
@@ -77,15 +81,19 @@ colors = cgrad(:seaborn_icefire_gradient, length(states), categorical = true);
 # Plot temperature profiles for all timesteps with transparency
 for (n, state) in enumerate(states)
     T = convert_from_si.(state[:Producer][:Temperature], :Celsius)
-    plot_mswell_values!(ax, case.model, :Producer, T;
-    geo = geo, linewidth = 4, color = colors[n], alpha = 0.25)
+    plot_mswell_values!(
+        ax, case.model, :Producer, T;
+        geo = geo, linewidth = 4, color = colors[n], alpha = 0.25
+    )
 end
 # Highlight selected timesteps with solid lines and labels
 timesteps = [12, 25, 50, 100]
 for n in timesteps
     T = convert_from_si.(states[n][:Producer][:Temperature], :Celsius)
-    plot_mswell_values!(ax, case.model, :Producer, T;
-    geo = geo, linewidth = 4, color = colors[n], label = "$(times[n]) years")
+    plot_mswell_values!(
+        ax, case.model, :Producer, T;
+        geo = geo, linewidth = 4, color = colors[n], label = "$(times[n]) years"
+    )
 end
 axislegend(ax; position = :lt, fontsize = 20)
 fig
@@ -99,11 +107,13 @@ fig
 # results interactively. The change in temperature is particularly interesting
 # as it shows the evolution of the cold front in the aquifer
 Δstates = JutulDarcy.delta_state(results.states, case.state0[:Reservoir])
-plot_reservoir(case.model, Δstates;
+plot_reservoir(
+    case.model, Δstates;
     colormap = :seaborn_icefire_gradient,
     key = :Temperature,
     axis_args = axis_args,
-    fancy = false)
+    fancy = false
+)
 
 # ### 3D visualization of temperature changes
 # Finally, we plot the change in temperature at the same timesteps highlighted in
@@ -112,26 +122,36 @@ plot_reservoir(case.model, Δstates;
 # Define the temperature range and create a mask to cut away parts of the model
 T_min = minimum(Δstates[end][:Temperature])
 T_max = maximum(Δstates[1][:Temperature])
-cells = geo.cell_centroids[1, :] .> -1000.0/2
+cells = geo.cell_centroids[1, :] .> -1000.0 / 2
 cells = cells .&& geo.cell_centroids[2, :] .> 50.0
 cells = cells .|| geo.cell_centroids[3, :] .> 2475.0;
 # Create subplots for each highlighted timestep
 fig = Figure(size = (800, 800))
 for (i, n) in enumerate(timesteps)
-    ax_i = Axis3(fig[(i-1)÷2+1, (i-1)%2+1]; title = "$(times[n]) years",
-    elevation = pi/8, axis_args...)
+    ax_i = Axis3(
+        fig[(i - 1) ÷ 2 + 1, (i - 1) % 2 + 1]; title = "$(times[n]) years",
+        elevation = pi / 8, axis_args...
+    )
 
     ΔT = Δstates[n][:Temperature]
 
-    plot_cell_data!(ax_i, msh, ΔT; 
-        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max))
-    plot_well!(ax_i, msh, wells[:Injector]; 
-    color = :black, linewidth = 4, top_factor = 0.4, markersize = 0.0)
-    plot_well!(ax_i, msh, wells[:Producer]; 
-    color = :black, linewidth = 4, markersize = 0.0)
+    plot_cell_data!(
+        ax_i, msh, ΔT;
+        cells = cells, colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max)
+    )
+    plot_well!(
+        ax_i, msh, wells[:Injector];
+        color = :black, linewidth = 4, top_factor = 0.4, markersize = 0.0
+    )
+    plot_well!(
+        ax_i, msh, wells[:Producer];
+        color = :black, linewidth = 4, markersize = 0.0
+    )
     hidedecorations!(ax_i)
 end
-Colorbar(fig[3, 1:2]; 
-    colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max), 
-    label = "ΔT (°C)", vertical = false)
+Colorbar(
+    fig[3, 1:2];
+    colormap = :seaborn_icefire_gradient, colorrange = (T_min, T_max),
+    label = "ΔT (°C)", vertical = false
+)
 fig

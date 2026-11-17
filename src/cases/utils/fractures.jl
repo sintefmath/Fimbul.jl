@@ -1,18 +1,20 @@
-function add_fractures(mesh::UnstructuredMesh, centers::Vector, normals::Vector;
-    tags=collect(1:length(centers)))
+function add_fractures(
+        mesh::UnstructuredMesh, centers::Vector, normals::Vector;
+        tags = collect(1:length(centers))
+    )
 
     length(centers) == length(normals) || error("Number of fracture centers and normals must match. Got $(length(centers)) centers and $(length(normals)) normals.")
     length(tags) == length(centers) || error("Not enough fracture tags provided. Expected $(length(centers)), got $(length(tags)).")
-    
+
     fracture_faces = Int[]
     fracture_tag = []
     for (i, (normal, center)) in enumerate(zip(normals, centers))
         is_frac = falses(number_of_faces(mesh))
         is_frac[fracture_faces] .= true
         plane = PlaneCut(center, normal)
-        mesh, info = cut_mesh(mesh, plane; min_cut_fraction = 0.0, extra_out=true)
+        mesh, info = cut_mesh(mesh, plane; min_cut_fraction = 0.0, extra_out = true)
         # Update fracture face vector
-        face_index = filter(x->x>0, info["face_index"])
+        face_index = filter(x -> x > 0, info["face_index"])
         is_frac = is_frac[face_index]
         new_faces = findall(info["face_index"] .== 0)
         # Utils for mapping old to new faces and cells

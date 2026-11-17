@@ -29,10 +29,11 @@ within each period and supports repeating the schedule for multiple cycles.
 NOTE: Either `num_reports` or `report_interval` must be specified, but not both.
 If none are provided, the function defaults to 5 reports per period.
 """
-function make_schedule(forces, durations::Vector{Float64};
-    num_reports = missing,
-    report_interval = missing,
-    num_cycles = 1
+function make_schedule(
+        forces, durations::Vector{Float64};
+        num_reports = missing,
+        report_interval = missing,
+        num_cycles = 1
     )
 
     num_periods = length(durations)
@@ -68,11 +69,11 @@ function make_schedule(forces, durations::Vector{Float64};
             # Number of reports specified
         elseif !ismissing(r)
             # Report interval specified
-            n = max(Int(ceil(d/r)), 1)
+            n = max(Int(ceil(d / r)), 1)
         else
             error("Either num_reports or report_interval must be specified")
         end
-        push!(dt, fill(d/n, n)...)
+        push!(dt, fill(d / n, n)...)
         push!(forces, fill(f, n)...)
     end
 
@@ -126,17 +127,18 @@ dt, forces, times = make_schedule(forces, periods;
     num_years=3, report_interval=7si_unit(:day))
 ```
 """
-function make_schedule(forces, periods;
-    start_year = missing,
-    num_years = 1,
-    report_interval = missing,
-    num_reports = missing
+function make_schedule(
+        forces, periods;
+        start_year = missing,
+        num_years = 1,
+        report_interval = missing,
+        num_reports = missing
     )
 
     start_year = ismissing(start_year) ? Dates.year(now()) : start_year
-    years = (0:num_years-1) .+ start_year
+    years = (0:(num_years - 1)) .+ start_year
 
-    num_periods = length(periods)-1
+    num_periods = length(periods) - 1
     @assert num_periods > 0 "At least one period is required"
     @assert length(forces) == num_periods "Number of forces must match number of periods"
 
@@ -155,12 +157,14 @@ function make_schedule(forces, periods;
         if num_years > 1
             @assert periods_year[end] == periods_year[1] + Year(1) "The periods must make up a full year if num_years > 1"
         end
-        for k in eachindex(periods_year)[1:end-1]
-            start_time, end_time = periods_year[k], periods_year[k+1]
-            Δt = Dates.value(end_time - start_time)*1e-3
-            dt_k, forces_k, ts = make_schedule([forces[k]], [Δt]; 
-                num_reports = num_reports[k], report_interval = report_interval[k], num_cycles = 1)
-            ts = start_time .+ Millisecond.(round.(ts[1:end-1]*1e3))
+        for k in eachindex(periods_year)[1:(end - 1)]
+            start_time, end_time = periods_year[k], periods_year[k + 1]
+            Δt = Dates.value(end_time - start_time) * 1.0e-3
+            dt_k, forces_k, ts = make_schedule(
+                [forces[k]], [Δt];
+                num_reports = num_reports[k], report_interval = report_interval[k], num_cycles = 1
+            )
+            ts = start_time .+ Millisecond.(round.(ts[1:(end - 1)] * 1.0e3))
             push!(dt, dt_k...)
             push!(force_vec, forces_k...)
             push!(timestamps, ts...)
@@ -231,16 +235,17 @@ dt, forces, times = make_utes_schedule(
 - The function handles year transitions and ensures chronological ordering
 - Periods with zero duration are automatically filtered out
 """
-function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
-    charge_period = ["June", "September"],
-    discharge_period = ["December", "March"],
-    start_year = missing,
-    num_years = 5,
-    kwargs...
+function make_utes_schedule(
+        forces_charge, forces_discharge, forces_rest;
+        charge_period = ["June", "September"],
+        discharge_period = ["December", "March"],
+        start_year = missing,
+        num_years = 5,
+        kwargs...
     )
 
     start_year = ismissing(start_year) ? Dates.year(now()) : start_year
-    
+
     ch_start = process_time(start_year, charge_period[1])
     ch_end = process_time(start_year, charge_period[2], true)
     ch_end < ch_start ? ch_end += Dates.Year(1) : nothing
@@ -258,13 +263,15 @@ function make_utes_schedule(forces_charge, forces_discharge, forces_rest;
         p0 = p
     end
     deleteat!(periods, remove)
-    deleteat!(forces, remove.-1)
+    deleteat!(forces, remove .- 1)
     periods = process_periods(start_year, periods)
 
     periods = [(Dates.month(p), Dates.day(p), Dates.hour(p)) for p in periods]
 
-    dt, forces, timestamps = make_schedule(forces, periods;
-        start_year = start_year, num_years = num_years, kwargs...)
+    dt, forces, timestamps = make_schedule(
+        forces, periods;
+        start_year = start_year, num_years = num_years, kwargs...
+    )
 
     return dt, forces, timestamps
 
@@ -276,7 +283,7 @@ function process_periods(year, periods)
     for (pno, period) in enumerate(periods)
         time = process_time(year, period)
         if pno > 1
-            time <= periods_proc[pno-1] ? time += Dates.Year(1) : nothing
+            time <= periods_proc[pno - 1] ? time += Dates.Year(1) : nothing
         end
         periods_proc[pno] = time
     end
@@ -285,7 +292,7 @@ function process_periods(year, periods)
 
 end
 
-function process_time(year, time, is_end=false)
+function process_time(year, time, is_end = false)
 
     if time isa DateTime
         return time
@@ -294,11 +301,11 @@ function process_time(year, time, is_end=false)
     end
     n = length(time)
 
-    @assert time isa Int || time isa Tuple{Int,Int} || time isa Tuple{Int,Int,Int} "Time must be an Int (month), Tuple{Int,Int} (month, day) or Tuple{Int,Int,Int} (month, day, hour)"
+    @assert time isa Int || time isa Tuple{Int, Int} || time isa Tuple{Int, Int, Int} "Time must be an Int (month), Tuple{Int,Int} (month, day) or Tuple{Int,Int,Int} (month, day, hour)"
 
     time = DateTime(year, time...)
 
-    !is_end ? (return time) : nothing;
+    !is_end ? (return time) : nothing
 
     if n == 1
         time += Dates.Month(1)
@@ -312,11 +319,12 @@ function process_time(year, time, is_end=false)
 
 end
 
-function set_dirichlet_bcs(model, subset = :all;
-        pressure_surface = 1atm, 
+function set_dirichlet_bcs(
+        model, subset = :all;
+        pressure_surface = 1atm,
         temperature_surface = convert_to_si(10.0, :Celsius),
-        geothermal_gradient = 0.03Kelvin/meter,
-        output_state=true,
+        geothermal_gradient = 0.03Kelvin / meter,
+        output_state = true,
     )
 
     if subset == :all
@@ -330,13 +338,13 @@ function set_dirichlet_bcs(model, subset = :all;
     geo = tpfv_geometry(mesh)
 
     rho = reservoir_model(model).system.rho_ref[1]
-    dpdz = rho*gravity_constant
+    dpdz = rho * gravity_constant
     dTdz = geothermal_gradient
 
     z_bdr = geo.boundary_centroids[3, :]
     z0 = minimum(z_bdr)
-    p = z -> pressure_surface .+ dpdz.*(z .- z0)
-    T = z -> temperature_surface .+ dTdz.*(z .- z0)
+    p = z -> pressure_surface .+ dpdz .* (z .- z0)
+    T = z -> temperature_surface .+ dTdz .* (z .- z0)
 
     # Set boundary conditions
     cells_bdr = geo.boundary_neighbors
@@ -360,16 +368,17 @@ function set_dirichlet_bcs(model, subset = :all;
         push!(z_bc, z_bdr[ix]...)
     end
     z_hat = z_bc .- z0
-    bc = flow_boundary_condition(cells_bc, rmodel.data_domain, p(z_hat), T(z_hat));
+    bc = flow_boundary_condition(cells_bc, rmodel.data_domain, p(z_hat), T(z_hat))
 
     if output_state
         # Set initial conditions
         z_cells = geo.cell_centroids[3, :]
         z_hat = z_cells .- z0
-        state0 = setup_reservoir_state(model,
+        state0 = setup_reservoir_state(
+            model,
             Pressure = p(z_hat),
             Temperature = T(z_hat)
-        );
+        )
         out = (bc, state0, p, T)
     else
         out = (bc, p, T)
@@ -386,7 +395,7 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
 
     sorted_cells = Int[]
     order_orig = collect(1:length(cells))
-    
+
     top_ix = last(findmin(z[cells]))
     push!(sorted_cells, popat!(cells, top_ix))
 
@@ -395,9 +404,9 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
 
     current_cell = sorted_cells[end]
     while !isempty(cells)
-        for r = 1:2
-            face_ix = N[r,:] .== current_cell
-            neighbor_cells = N[mod(r,2)+1, face_ix]
+        for r in 1:2
+            face_ix = N[r, :] .== current_cell
+            neighbor_cells = N[mod(r, 2) + 1, face_ix]
             is_neighbor = [n ∈ cells for n in neighbor_cells]
             wn = neighbor_cells[is_neighbor]
             isempty(wn) ? continue : nothing
@@ -415,7 +424,7 @@ function topo_sort_well(cells, msh, N = missing, z = missing)
 
 end
 
-function scaled_rate(domain, wells, duration::Float64, radius=missing; mean_well_coordinate=false)
+function scaled_rate(domain, wells, duration::Float64, radius = missing; mean_well_coordinate = false)
 
     # Get all well coordinates
     xw = hcat([w[:cell_centroids] for w in wells]...)
@@ -424,26 +433,26 @@ function scaled_rate(domain, wells, duration::Float64, radius=missing; mean_well
     geo = tpfv_geometry(mesh)
     xr = geo.cell_centroids
     # Get radius if not provided
-    radius = ismissing(radius) ? Fimbul.max_distance(xw)/2 : radius
+    radius = ismissing(radius) ? Fimbul.max_distance(xw) / 2 : radius
     if mean_well_coordinate
-        xw = mean(xw, dims=2)
+        xw = mean(xw, dims = 2)
     end
     # Determine region of interest around wells
     roi = falses(size(xr, 2))
     for x in eachcol(xw)
-        roi = vec(sum((x .- xr).^2, dims=1) .< radius^2) .| roi
+        roi = vec(sum((x .- xr) .^ 2, dims = 1) .< radius^2) .| roi
     end
     pv_tot = sum(pore_volume(domain)[roi])
 
-    return pv_tot/duration
-    
+    return pv_tot / duration
+
 end
 
-function scaled_rate(domain, wells, duration, radius=missing, year=missing; kwargs...)
+function scaled_rate(domain, wells, duration, radius = missing, year = missing; kwargs...)
 
     year = ismissing(year) ? Dates.year(now()) : year
     duration = diff(Fimbul.process_periods(year, duration))[1]
-    duration = duration.value*1e-3
+    duration = duration.value * 1.0e-3
     return scaled_rate(domain, wells, duration, radius; kwargs...)
 
 end

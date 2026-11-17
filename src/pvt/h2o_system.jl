@@ -1,6 +1,6 @@
 const WATER_CRITICAL_PRESSURE = 22.064e6
 const WATER_CRITICAL_TEMPERATURE = 647.096
-const WATER_CRITICAL_ENTHALPY = 2085e3
+const WATER_CRITICAL_ENTHALPY = 2085.0e3
 
 """
     H2OSystem
@@ -21,8 +21,8 @@ Use `H2OSystem` together with `setup_reservoir_model` to obtain a fully
 configured model.
 """
 struct H2OSystem{T <: Tuple, F <: NTuple} <: JutulDarcy.CompositionalSystemLV
-    phases  :: T
-    rho_ref :: F
+    phases::T
+    rho_ref::F
     reference_phase_index::Int
     pvt_tables::Dict
 end
@@ -33,10 +33,11 @@ end
 Construct a `H2OSystem` for a `(AqueousPhase, VaporPhase)` pair.
 `reference_densities` should be `(ρ_liquid_ref, ρ_vapour_ref)` in kg/m³.
 """
-function H2OSystem(pvt_tables::Dict;
-        reference_densities :: NTuple{2, <:Real} = (1000.0, 1.0),
+function H2OSystem(
+        pvt_tables::Dict;
+        reference_densities::NTuple{2, <:Real} = (1000.0, 1.0),
     )
-    phases  = (AqueousPhase(), VaporPhase())
+    phases = (AqueousPhase(), VaporPhase())
     rho_ref = tuple(Float64.(reference_densities)...)
     reference_phase_index = 1
     return H2OSystem(phases, rho_ref, reference_phase_index, pvt_tables)
@@ -51,13 +52,13 @@ Base.show(io::IO, ::H2OSystem) =
     print(io, "H2OSystem (AqueousPhase + VaporPhase, 1 component)")
 
 # Core functionality
-JutulDarcy.get_phases(sys::H2OSystem)           = sys.phases
-JutulDarcy.eachphase(sys::H2OSystem)            = (1, 2)
-JutulDarcy.number_of_phases(sys::H2OSystem)     = 2
+JutulDarcy.get_phases(sys::H2OSystem) = sys.phases
+JutulDarcy.eachphase(sys::H2OSystem) = (1, 2)
+JutulDarcy.number_of_phases(sys::H2OSystem) = 2
 JutulDarcy.number_of_components(sys::H2OSystem) = 1
-JutulDarcy.reference_densities(sys::H2OSystem)  = sys.rho_ref
-JutulDarcy.phase_indices(sys::H2OSystem)        = (1, 2)
-JutulDarcy.component_names(sys::H2OSystem)      = (:H₂O,)
+JutulDarcy.reference_densities(sys::H2OSystem) = sys.rho_ref
+JutulDarcy.phase_indices(sys::H2OSystem) = (1, 2)
+JutulDarcy.component_names(sys::H2OSystem) = (:H₂O,)
 
 # Convenience const for easy dispatching on models with this H2OSystem.
 const GeothermalModel = SimulationModel{<:Any, <:H2OSystem, <:Any, <:Any}
@@ -65,14 +66,15 @@ Jutul.default_value(model::GeothermalModel, ::JutulDarcy.PhaseMassFractions) = 1
 
 # Only Pressure is selected here. The Enthalpy primary variable is added by add_thermal_to_model!.
 function JutulDarcy.select_primary_variables!(S, ::H2OSystem, model::SimulationModel)
-    S[:Pressure] = Pressure()
+    return S[:Pressure] = Pressure()
 end
 
 # Secondary variables, including the enthalpy from pressure/temperature
 function Jutul.select_secondary_variables!(S, system::H2OSystem, model)
     JutulDarcy.select_default_darcy_secondary_variables!(S, model.domain, system, model.formulation)
     tab = system.pvt_tables
-    set_secondary_variables!(model,
+    return set_secondary_variables!(
+        model,
         PhaseViscosities = PHDependentPhaseVariableH2O(tab[:viscosity_liquid_ph], tab[:viscosity_vapor_ph]),
         PhaseMassDensities = PHDependentPhaseVariableH2O(tab[:density_liquid_ph], tab[:density_vapor_ph]),
         FluidEnthalpy = PHDependentPhaseVariableH2O(tab[:enthalpy_liquid_ph], tab[:enthalpy_vapor_ph]),
@@ -82,12 +84,12 @@ function Jutul.select_secondary_variables!(S, system::H2OSystem, model)
 end
 
 # Liquid and vapor mass fractions are included to leverage the JutulDarcy
-# functionality for compositional systems. 
+# functionality for compositional systems.
 function JutulDarcy.select_parameters!(prm, system::H2OSystem, model)
     JutulDarcy.select_default_darcy_parameters!(prm, model.domain, system, model.formulation)
     prm[:LiquidMassFractions] = JutulDarcy.PhaseMassFractions(:liquid)
     prm[:VaporMassFractions] = JutulDarcy.PhaseMassFractions(:vapor)
-    prm[:Temperature] = JutulDarcy.Temperature()
+    return prm[:Temperature] = JutulDarcy.Temperature()
 end
 
 # TODO: This overload is necessary to avoid replacing temperature and
@@ -99,23 +101,24 @@ end
 # can be limited by `dh_max_abs` [J/kg] (not limited by default). A reasonable
 # but large value is 2e5 J/kg, corresponding to a temperature change of about
 # 50 K for liquid water.
-function JutulDarcy.set_reservoir_variable_defaults!(model::GeothermalModel;
-    p_min,
-    p_max,
-    dp_max_abs,
-    dp_max_rel,
-    ds_max,
-    dz_max,
-    dr_max,
-    dT_max_rel = nothing,
-    dT_max_abs = nothing,
-    dh_max_abs = nothing,
-    T_min = convert_to_si(0.0, :Celsius),
-    flash_reuse_guess = false,
-    flash_stability_bypass = flash_reuse_guess,
-    # Other (e.g. flash-specific) defaults from JutulDarcy do not apply here
-    kwarg...
-)
+function JutulDarcy.set_reservoir_variable_defaults!(
+        model::GeothermalModel;
+        p_min,
+        p_max,
+        dp_max_abs,
+        dp_max_rel,
+        ds_max,
+        dz_max,
+        dr_max,
+        dT_max_rel = nothing,
+        dT_max_abs = nothing,
+        dh_max_abs = nothing,
+        T_min = convert_to_si(0.0, :Celsius),
+        flash_reuse_guess = false,
+        flash_stability_bypass = flash_reuse_guess,
+        # Other (e.g. flash-specific) defaults from JutulDarcy do not apply here
+        kwarg...
+    )
     p_def = Pressure(
         max_abs = dp_max_abs,
         max_rel = dp_max_rel,
@@ -156,7 +159,7 @@ end
 end
 
 function JutulDarcy.degrees_of_freedom_per_entity(
-    model::GeothermalModel, ::TotalMasses
+        model::GeothermalModel, ::TotalMasses
     )
     return 1
 end
@@ -184,8 +187,8 @@ absent from one of the cells, but varies continuously in between.
     @inbounds s_r = s[phase, r]
     # Small regularization to fall back to the arithmetic average when the
     # phase is absent from both cells
-    δ = 1e-8
-    return (s_l*ρ_l + s_r*ρ_r + δ*0.5*(ρ_l + ρ_r))/(s_l + s_r + δ)
+    δ = 1.0e-8
+    return (s_l * ρ_l + s_r * ρ_r + δ * 0.5 * (ρ_l + ρ_r)) / (s_l + s_r + δ)
 end
 
 # The compositional flux in JutulDarcy takes the number of components from the
@@ -214,12 +217,12 @@ end
 function JutulDarcy.flash_wellstream_at_surface(
         var,
         well_model,
-        system ::H2OSystem,
+        system::H2OSystem,
         well_state,
         rhoS,
-        cond    = JutulDarcy.default_surface_cond(),
+        cond = JutulDarcy.default_surface_cond(),
     )
-    wc  = JutulDarcy.well_top_node()
+    wc = JutulDarcy.well_top_node()
     rho = well_state.PhaseMassDensities[:, wc]   # SVector-like, length 2
     sat = well_state.Saturations[:, wc]           # volume fractions, length 2
     # Guard against all-zero saturation (e.g. during AD sparsity detection)
@@ -235,16 +238,19 @@ end
 Extend the default convergence-tolerance dictionary for an `H2OSystem` model
 with enthalpy-increment tolerances for the thermal energy equation.
 """
-function JutulDarcy.set_default_cnv_mb_inner!(tol, model::GeothermalModel;
-    inc_tol_dh_rel = Inf, inc_tol_dh_abs = Inf, kwargs...
+function JutulDarcy.set_default_cnv_mb_inner!(
+        tol, model::GeothermalModel;
+        inc_tol_dh_rel = Inf, inc_tol_dh_abs = Inf, kwargs...
     )
     invoke(JutulDarcy.set_default_cnv_mb_inner!, Tuple{Dict, SimulationModel}, tol, model; kwargs...)
-    if haskey(model.equations, :energy_conservation)
+    return if haskey(model.equations, :energy_conservation)
         etol = tol[:energy_conservation]
-        tol[:energy_conservation] = merge(etol, (
-            increment_dh_abs = inc_tol_dh_abs,
-            increment_dh_rel = inc_tol_dh_rel,
-        ))
+        tol[:energy_conservation] = merge(
+            etol, (
+                increment_dh_abs = inc_tol_dh_abs,
+                increment_dh_rel = inc_tol_dh_rel,
+            )
+        )
     end
 end
 
@@ -258,25 +264,25 @@ Compute mass-balance convergence metrics for an `H2OSystem` model.
 The residual is normalized using the mixture density `ρ_l S_l + ρ_v S_v`
 """
 function Jutul.convergence_criterion(
-    model::SimulationModel{D, S}, storage,
-    eq::ConservationLaw{:TotalMasses}, eq_s, r;
-    dt = 1.0, update_report = missing,
+        model::SimulationModel{D, S}, storage,
+        eq::ConservationLaw{:TotalMasses}, eq_s, r;
+        dt = 1.0, update_report = missing,
     ) where {D, S <: H2OSystem}
     M = global_map(model.domain)
     v = x -> as_value(Jutul.active_view(x, M, for_variables = false))
-    Φ    = v(storage.state.FluidVolume)
+    Φ = v(storage.state.FluidVolume)
     ρ_ph = v(storage.state.PhaseMassDensities)
     S_ph = v(storage.state.Saturations)
-    nc   = length(Φ)
-    ρ_mix = reshape([ρ_ph[1,c]*S_ph[1,c] + ρ_ph[2,c]*S_ph[2,c] for c in 1:nc], 1, nc)
+    nc = length(Φ)
+    ρ_mix = reshape([ρ_ph[1, c] * S_ph[1, c] + ρ_ph[2, c] * S_ph[2, c] for c in 1:nc], 1, nc)
     cnv, mb = JutulDarcy.cnv_mb_errors(r, Φ, ρ_mix, dt, Val(1))
     dp_abs, dp_rel = JutulDarcy.pressure_increments(model, storage.state, update_report)
     names = JutulDarcy.component_names(model.system)
     return (
         CNV = (errors = cnv, names = names),
-        MB  = (errors = mb,  names = names),
-        increment_dp_abs = (errors = (dp_abs/1e6,), names = (raw"Δp (abs, MPa)",)),
-        increment_dp_rel = (errors = (dp_rel,),     names = (raw"Δp (rel)",)),
+        MB = (errors = mb, names = names),
+        increment_dp_abs = (errors = (dp_abs / 1.0e6,), names = (raw"Δp (abs, MPa)",)),
+        increment_dp_rel = (errors = (dp_rel,), names = (raw"Δp (rel)",)),
     )
 end
 
@@ -289,9 +295,9 @@ Compute convergence metrics for the thermal energy equation in an `H2OSystem`
 model, including absolute and relative enthalpy increments.
 """
 function Jutul.convergence_criterion(
-    model::GeothermalModel, storage,
-    eq::ConservationLaw{:TotalThermalEnergy}, eq_s, r;
-    dt = 1.0, update_report = missing
+        model::GeothermalModel, storage,
+        eq::ConservationLaw{:TotalThermalEnergy}, eq_s, r;
+        dt = 1.0, update_report = missing
     )
     a = active_entities(model.domain, Cells())
     E0 = storage.state0.TotalThermalEnergy
@@ -299,17 +305,17 @@ function Jutul.convergence_criterion(
     Δh_abs, Δh_rel = enthalpy_increment(model, storage.state, update_report)
     for (i, c) in enumerate(a)
         eb += r[i]
-        cnv = max(cnv, abs(r[i])*dt/value(E0[c]))
+        cnv = max(cnv, abs(r[i]) * dt / value(E0[c]))
         Etot += value(E0[c])
     end
-    eb = abs(eb)*dt/Etot
+    eb = abs(eb) * dt / Etot
 
     return (
-        CNV = (errors = (cnv, ), names = ("Max", )),
-        EB = (errors = (eb, ), names = ("Energy balance", )), 
-        increment_dh_abs = (errors = (Δh_abs, ), names = ("Δh", )),
-        increment_dh_rel = (errors = (Δh_rel, ), names = ("Δh (rel)", )),
-        )
+        CNV = (errors = (cnv,), names = ("Max",)),
+        EB = (errors = (eb,), names = ("Energy balance",)),
+        increment_dh_abs = (errors = (Δh_abs,), names = ("Δh",)),
+        increment_dh_rel = (errors = (Δh_rel,), names = ("Δh (rel)",)),
+    )
 end
 
 # Enthalpy increment calculation for convergence criterion
@@ -318,7 +324,7 @@ function enthalpy_increment(model, state, update_report)
     h_report = update_report[:Enthalpy]
     if haskey(h_report, :max)
         dh_abs = h_report.max
-        dh_rel = dh_abs/max_h
+        dh_rel = dh_abs / max_h
     else
         dh_abs = 1.0
         dh_rel = 1.0
