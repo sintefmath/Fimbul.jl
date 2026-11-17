@@ -140,11 +140,13 @@ function design_case(θ, L; margin = 100.0)
     ## on the depth of the trajectory in each well cell
     z_traj = [c[3] for c in extra[:centroids]]
     grout = ifelse.(z_traj .< kickoff, λ_grout_insulated, λ_grout)
-    wells = Fimbul.setup_closed_loop_well(domain, cells; name = :BHE,
+    ## The closed-loop well is a single merged well, :BHE, controlled as
+    ## :BHE_inner and :BHE_outer (see `closed_loop_well_names`)
+    well = setup_closed_loop_well(domain, cells; name = :BHE,
         closed_loop_type = :coaxial,
         dir = Vector.(extra[:direction] .* extra[:lengths]),
-        grouting_thermal_conductivity = grout)
-    model = setup_reservoir_model(domain, :geothermal; wells = wells,
+        fill_thermal_conductivity = grout)
+    model = setup_reservoir_model(domain, :geothermal; wells = [well],
         energy_formulation = :total, can_shut_wells = false)
     ## Fixed pressure and temperature at the top, bottom and outer sides, with
     ## the same surface conditions and gradients as in the coaxial BHE case
@@ -162,13 +164,13 @@ function design_case(θ, L; margin = 100.0)
     end
     bc = flow_boundary_condition(bc_cells, domain, p.(bc_z), T.(bc_z))
     state0 = setup_reservoir_state(model, Pressure = p.(zc), Temperature = T.(zc))
-    zw = model.models[:BHE_supply].data_domain[:cell_centroids][3, :]
-    state0[:BHE_supply][:Pressure] .= p.(zw)
-    state0[:BHE_supply][:Temperature] .= T.(zw)
+    zw = model.models[:BHE].data_domain[:cell_centroids][3, :]
+    state0[:BHE][:Pressure] .= p.(zw)
+    state0[:BHE][:Temperature] .= T.(zw)
     ## Injection into the outer annulus, production from the inner pipe
     control = Dict(
-        :BHE_supply => ProducerControl(BottomHolePressureTarget(5atm)),
-        :BHE_return => InjectorControl(TotalRateTarget(rate), [1.0],
+        :BHE_inner => ProducerControl(BottomHolePressureTarget(5atm)),
+        :BHE_outer => InjectorControl(TotalRateTarget(rate), [1.0],
             density = ρ, temperature = temperature_inj))
     forces = setup_reservoir_forces(model, control = control, bc = bc)
     dt, forces = make_schedule([forces], [(1, 1), (1, 1)];
@@ -183,7 +185,7 @@ function run_case(case)
         initial_dt = 120.0,
         presolve_wells = true,
         relaxation = true)
-    for model in (:Reservoir, :BHE_supply)
+    for model in (:Reservoir, :BHE)
         sel = VariableChangeTimestepSelector(:Temperature, 5.0;
             relative = false, model = model)
         push!(cfg[:timestep_selectors], sel)
@@ -197,7 +199,7 @@ end
 # difference between production and injection. We compute the average power
 # over the first `N` years of operation.
 function system_power(results; c_p = 4184.0joule/(kilogram*Kelvin))
-    w = results.wells[:BHE_supply]
+    w = results.wells[:BHE_inner]
     return 4 .* abs.(w[:mass_rate]) .* c_p .* (w[:temperature] .- temperature_inj)
 end
 

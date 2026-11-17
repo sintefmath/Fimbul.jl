@@ -14,7 +14,10 @@ function well_mismatch_thermal(
 
     step_no = step_info[:step]
     state_f = states_f[step_no]
-    get_property = (state, well, prop) -> state[well][prop][1]
+    get_property = (state, well, prop) -> begin
+        key, node = well_state_top_node(model, well)
+        state[key][prop][node]
+    end
     mismatch = 0.0
 
     for well in wells
@@ -87,4 +90,16 @@ function reservoir_mismatch_thermal(
 
     return mismatch
 
+end
+
+# Model key and top node of a well. A well that is part of a merged well (e.g.,
+# the supply or return part of a closed-loop well) is controlled under its own
+# name, but its state is stored in the merged well, where its nodes form a
+# contiguous range starting with its top node.
+function well_state_top_node(model, well)
+    key = JutulDarcy.WellMerging.merged_well_key(model, well)
+    key == well && return (key, 1)
+    w = physical_representation(model.models[key].data_domain)
+    ix = JutulDarcy.WellMerging.well_local_index(w, well)
+    return (key, first(Jutul.indirection_range(w.multiwell.nodes, ix)))
 end
