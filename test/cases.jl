@@ -188,8 +188,26 @@ end
         @test z_well ≈ z_reservoir
     end
     simulate_reservoir(case[1:1])
-    # A sector modelled as a single well cannot be fed from its last borehole
-    @test_throws ErrorException btes(:sunflower; reversed_discharge = true, kw...)
+    # Reversed discharge: the sector well is fed at its return part, and
+    # produced from its supply part
+    case = btes(:sunflower; reversed_discharge = true, kw...)
+    T_dch = convert_to_si(10.0, :Celsius)
+    is_dch(c) = c isa InjectorControl && c.temperature == T_dch
+    dch = findfirst(i -> any(is_dch, values(case.forces[i][:Facility].control)),
+        eachindex(case.forces))
+    control = case.forces[dch][:Facility].control
+    for sno in 1:kw.num_sectors
+        sup, ret = part_names(case, Symbol("S$sno"))
+        @test is_dch(control[ret])
+        @test control[sup] isa ProducerControl
+        @test case.forces[1][:Facility].control[sup].target isa TotalRateTarget
+    end
+    res = simulate_reservoir(case[1:dch]; error_on_incomplete = true, info_level = -1)
+    q = res.result.states[end][:Facility][:TotalSurfaceMassRate]
+    ws = case.model.models[:Facility].domain.well_symbols
+    sup, ret = part_names(case, :S1)
+    @test q[findfirst(==(ret), ws)] > 0
+    @test q[findfirst(==(sup), ws)] < 0
     @test_throws ErrorException btes(:sunflower; well_grouping = :nonsense, kw...)
     @test_throws ErrorException btes(:sunflower; topology = :sectors_series,
         well_grouping = :borehole, kw...)

@@ -85,9 +85,10 @@ grouping are given by `field` itself.
 - `reversed_discharge = false`: During charging, flow runs from the first to the
   last well in each sector, or from the first to the last sector when
   `topology = :sectors_series`. If `reversed_discharge = false`, discharge uses
-  the same direction as charge. If `true`, discharge flow is reversed, which
-  requires separate wells per borehole within a sector
-  (`well_grouping = :borehole`) or `topology = :sectors_series`.
+  the same direction as charge. If `true`, discharge flow is reversed. A sector
+  modelled as a single well (`well_grouping = :sector`) is then fed at its
+  return part, so that the fluid passes the boreholes, and each U-tube, in
+  reverse.
 - `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
 - `num_years = 4`: Number of years to run the simulation.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
@@ -184,13 +185,6 @@ function btes(
         error("well_grouping = :borehole is only supported with topology = \
             :sectors_parallel. With :sectors_series, the boreholes of a sector \
             share a single well.")
-    end
-    # A single well per sector is fed at its first borehole
-    single_series_well = topology == :sectors_parallel && well_grouping == :sector
-    if single_series_well && reversed_discharge && any(sector -> length(sector) > 1, field)
-        error("reversed_discharge = true requires well_grouping = :borehole \
-            when topology = :sectors_parallel, since a sector modelled as a \
-            single well is always fed at its first borehole.")
     end
 
     well_coords_3d = vcat(field...)
@@ -326,7 +320,8 @@ function btes(
     control_charge, control_discharge, control_rest, sectors = setup_controls(
         model, wells_per_sector,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge;
-        reversed_discharge = reversed_discharge);
+        reversed_discharge = reversed_discharge,
+        reverse_single_wells = topology == :sectors_parallel && well_grouping == :sector);
     if topology == :sectors_series || well_grouping == :sector
         # One entry per sector, each holding the closed-loop well of the sector
         sectors = Dict(Symbol("S$sno") => [name]
@@ -538,7 +533,8 @@ end
 # each sector are coupled in series in the given order
 function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
     rate_charge, rate_discharge, temperature_charge, temperature_discharge;
-    reversed_discharge::Bool = false)
+    reversed_discharge::Bool = false,
+    reverse_single_wells::Bool = false)
 
     rho = reservoir_model(model).system.rho_ref[1]
     rate_target = TotalRateTarget(rate_charge)
@@ -572,10 +568,19 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
             well_ret = get_return(well)
             @assert well_sup ∉ assigned
             @assert well_ret ∉ assigned
+            control_charge[well_ret] = ctrl_ret
+            control_discharge[well_ret] = ctrl_ret
             if length(sw) == 1
                 # Single well in sector: charge and discharge it directly
                 control_charge[well_sup] = ctrl_charge
-                control_discharge[well_sup] = ctrl_discharge
+                if reversed_discharge && reverse_single_wells
+                    # Reverse the flow through the well: inject into the return
+                    # part and produce from the supply part
+                    control_discharge[well_ret] = ctrl_discharge
+                    control_discharge[well_sup] = ctrl_ret
+                else
+                    control_discharge[well_sup] = ctrl_discharge
+                end
             else
                 # Charging always runs from the first to the last well in the sector
                 if k == 1
@@ -598,8 +603,6 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
                         density=rho, temperature=NaN; check=false)
                 end
             end
-            control_charge[well_ret] = ctrl_ret
-            control_discharge[well_ret] = ctrl_ret
             control_rest[well_sup] = ctrl_rest
             control_rest[well_ret] = DisabledControl()
             push!(assigned, well_sup, well_ret)
