@@ -3,18 +3,20 @@
 
 Supply part of a single U-tube (1U) closed-loop well. By default, the U-tube
 goes down through `reservoir_cells` and back up again, with two pipes embedded
-in grout. Nodes are tagged `:pipe_left`, `:pipe_right`, `:grout_left` and
-`:grout_right`.
+in a borehole filled with grout (or another fill material). Nodes are tagged
+`:pipe_left`, `:pipe_right`, `:grout_left` and `:grout_right`.
 
 # Keyword arguments
-- `radius_grout = 65e-3`: Borehole (grout) radius [m].
+- `radius_borehole = 65e-3`: Borehole radius [m].
 - `radius_pipe = 15e-3`: Outer pipe radius [m].
 - `wall_thickness_pipe = 3e-3`: Pipe wall thickness [m].
 - `pipe_spacing = 60e-3`: Distance between the pipe centers [m].
 - `pipe_thermal_conductivity = 0.38`: Pipe wall thermal conductivity [W/(m K)].
-- `grouting_thermal_conductivity = 2.3`: Grout thermal conductivity [W/(m K)].
-- `grouting_heat_capacity = 1500`: Grout heat capacity [J/(kg K)].
-- `grouting_density = 2000`: Grout density [kg/m³].
+- `fill_material = :grout`: Borehole fill material, see
+  [`Fimbul.borehole_fill_properties`](@ref).
+- `fill_thermal_conductivity`, `fill_density`, `fill_heat_capacity`: Override
+  the thermal conductivity [W/(m K)], density [kg/m³] and heat capacity
+  [J/(kg K)] of `fill_material`.
 - `dir = :z`: Direction of the well in each reservoir cell.
 - `neighborship`, `pipe_cells`, `grout_cells`, `well_cell_centers`,
   `end_nodes`: General well topology. Must be given together.
@@ -31,15 +33,29 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
     dir = :z,
     segment_models = missing,
     end_nodes = missing,
-    radius_grout = 65e-3,
+    radius_borehole = 65e-3,
     radius_pipe = 15e-3,
     wall_thickness_pipe = 3e-3,
     pipe_spacing = 60e-3,
-    grouting_thermal_conductivity = 2.3,
     pipe_thermal_conductivity = 0.38,
-    grouting_heat_capacity = 1500,
-    grouting_density = 2000.0,
+    fill_material = :grout,
+    fill_thermal_conductivity = missing,
+    fill_density = missing,
+    fill_heat_capacity = missing,
+    # Removed keyword arguments, give an error
+    radius_grout = missing,
+    grouting_thermal_conductivity = missing,
+    grouting_heat_capacity = missing,
+    grouting_density = missing,
     kwarg...)
+
+    check_removed_kwargs(; radius_grout, grouting_thermal_conductivity,
+        grouting_heat_capacity, grouting_density)
+    fill_props = borehole_fill_properties(fill_material;
+        thermal_conductivity = fill_thermal_conductivity,
+        density = fill_density,
+        heat_capacity = fill_heat_capacity)
+    grouting_thermal_conductivity = fill_props.thermal_conductivity
 
     if ismissing(neighborship)
         check_closed_loop_topology_args(pipe_cells, grout_cells,
@@ -142,10 +158,10 @@ function setup_closed_loop_supply(type::ClosedLoop1UWell, D::DataDomain, reservo
         args..., kwarg...)
     # Augment supply well with closed_loop-specific properties
     augment_closed_loop_domain_u1!(supply_well,
-        radius_grout,
+        radius_borehole,
         pipe_spacing,
-        grouting_heat_capacity,
-        grouting_density;
+        fill_props.heat_capacity,
+        fill_props.density;
         tag = tag
     )
     # Set default thermal indices
@@ -238,6 +254,13 @@ function set_default_closed_loop_thermal_indices_u1!(well::DataDomain, pipe_cell
         λgr = L/Rgr
         λgg = L/Rgg
 
+        # The thermal well index only accounts for the resistance inside the
+        # borehole (grout to borehole wall), and contains no term for
+        # conduction from the borehole wall to the center of the reservoir
+        # cell. The cell temperature is thus assumed to approximate the
+        # borehole wall temperature, as in the thermal resistance and
+        # capacity model of Diersch et al. (2011), which requires a reservoir
+        # grid that is refined around the well.
         if isnan(well[:thermal_well_index, perf][pno])
             well[:thermal_well_index, perf][pno] = λgr
         end

@@ -57,7 +57,7 @@ end
     L = 100.0*meter # BTES length
     geo_u1 = ( # U1 geometry
         closed_loop_type = :u1,
-        radius_grout = 65e-3*meter, # Grout radius
+        radius_borehole = 65e-3*meter, # Borehole radius
         radius_pipe = 16e-3*meter, # Pipe outer radius
         wall_thickness_pipe = 2.9e-3*meter, # Pipe wall thickness
         pipe_spacing = 60e-3*meter, # Pipe spacing
@@ -65,7 +65,7 @@ end
     )
     geo_coax = ( # Coaxial geometry
         closed_loop_type = :coaxial,
-        radius_grout = 50e-3*meter, # Grout radius
+        grouting_thickness = 25e-3*meter, # Grout thickness outside outer pipe
         radius_pipe_inner = 12e-3*meter, # Inner pipe outer radius
         wall_thickness_pipe_inner = 3e-3*meter, # Inner pipe wall thickness
         radius_pipe_outer = 25e-3*meter, # Outer pipe outer radius
@@ -106,9 +106,10 @@ end
         well = Fimbul.setup_vertical_btes_well(reservoir, 1, 1;
             name = :BTES,
             well_args...,
-            grouting_density = 2000.0,
-            grouting_heat_capacity = 1500.0,
-            grouting_thermal_conductivity = 2.3
+            fill_material = :grout,
+            fill_density = 2000.0,
+            fill_heat_capacity = 1500.0,
+            fill_thermal_conductivity = 2.3
         )
         ## Set up reservoir model
         sys = SinglePhaseSystem(AqueousPhase(), reference_density = 1000.0)
@@ -141,7 +142,8 @@ end
         state0 = setup_reservoir_state( # Initialize with uniform pressure and temperature
             model; Pressure = 5*atm, Temperature = T_rock)
         ## Set time large enough to ensure steady-state
-        rg = well_args.radius_grout
+        rg = type == :u1 ? well_args.radius_borehole :
+            well_args.radius_pipe_outer + well_args.grouting_thickness
         time = 5/4*2*rg*(ϕ*ρf*Cpf + (1 - ϕ)*ρr*Cpr)/(ϕ*λf + (1 - ϕ)*λr)*10
         dt = fill(time/n_step, n_step)
         ## Create Jutul case

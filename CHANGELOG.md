@@ -10,11 +10,15 @@
 - Consistent keyword arguments for the closed-loop setup: `wall_thickness` (generic) is renamed to `wall_thickness_pipe`, and `inner_pipe_thermal_conductivity`/`outer_pipe_thermal_conductivity` (coaxial) to `pipe_thermal_conductivity_inner`/`pipe_thermal_conductivity_outer`. Topology arguments (cell groups, `well_cell_centers`, `end_nodes`) without `neighborship` now give an error for all types instead of being ignored.
 - `setup_btes_well` and `setup_vertical_btes_well` default to 1U wells (`closed_loop_type = :u1`).
 - `btes`: the sectors in `input_data[:sectors]` list the closed-loop wells instead of the supply and return names.
+- Borehole geometry and fill of closed-loop wells: 1U wells take the borehole radius `radius_borehole` (formerly `radius_grout`), and coaxial wells take the fill thickness outside the outer pipe `grouting_thickness` (formerly `radius_grout`), as generic wells. The fill properties are set with `fill_material`, `fill_thermal_conductivity`, `fill_density` and `fill_heat_capacity` (formerly `grouting_thermal_conductivity`, `grouting_density` and `grouting_heat_capacity`). The old keyword arguments are removed and give an error.
+- Coaxial wells: the default fill is `:grout` (density 2000 kg/m³ and heat capacity 1500 J/(kg K), as for 1U wells, instead of 1500 kg/m³ and 1460 J/(kg K)), and the default fill thickness is 30 mm (borehole radius ≈ 100.7 mm instead of 100 mm).
 
 ### New features
 
 - New abstract type `AbstractClosedLoopWell` with the concrete types `ClosedLoopGenericWell`, `ClosedLoop1UWell` and `ClosedLoopCoaxialWell`. The type is stored as the `type` of the `MultiSegmentWell`, and `closed_loop_type` accepts either a type or `:generic`, `:u1` and `:coaxial`. New closed-loop types implement `setup_closed_loop_supply`.
 - `ags` uses `ClosedLoopGenericWell` with a general well topology.
+- Borehole fill materials for closed-loop wells (`fill_material = :grout` by default, or a named tuple of properties), see `Fimbul.borehole_fill_properties`.
+- Coaxial wells without grout (`grouting_thickness = 0`): the outer pipe exchanges heat directly with the reservoir through its wall.
 - All closed-loop types accept `dir` (also per reservoir cell), generic wells tag their nodes `:pipe`, and `setup_vertical_closed_loop_well` is exported. The setup for each type is documented in `setup_closed_loop_supply`.
 
 ### Improvements
@@ -23,7 +27,7 @@
 
 ### Documentation
 
-- New API page for closed-loop wells (setup functions and closed-loop well types).
+- New API page for closed-loop wells (setup functions, closed-loop well types and borehole fill).
 
 ### Compatibility
 

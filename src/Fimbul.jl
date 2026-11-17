@@ -57,6 +57,7 @@ module Fimbul
     include("pvt/h2o_setup.jl")
     # Wells
     include("wells/closed_loop.jl")
+    include("wells/borehole_fill.jl")
     include("wells/closed_loop_u1.jl")
     include("wells/closed_loop_coaxial.jl")
     include("wells/closed_loop_analytical.jl")
