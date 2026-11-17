@@ -10,9 +10,9 @@ using HYPRE
 using GLMakie
 
 # ## Set up simulation cases
-# We create BTES systems with 30 wells that extend to 100 m depth, divided into
-# 5 sectors of 6 wells each. The wells are placed in a sunflower, a circular
-# and a rectangular (5 x 6) pattern, all with 5 m between neighboring wells.
+# We create BTES systems with 36 wells that extend to 100 m depth, divided into
+# 6 sectors of 6 wells each. The wells are placed in a sunflower, a circular
+# and a rectangular (6 x 6) pattern, all with 5 m between neighboring wells.
 # The systems operate on a seasonal cycle: wells are charged during summer
 # months (April to September) with hot water at 90°C, and discharged during
 # winter months (October to March) with cold water at 10°C. This seasonal
@@ -23,13 +23,15 @@ using GLMakie
 # spines (`sector_grouping = :spiral`, the default). For the circular pattern,
 # the wells are grouped into sectors from the center outwards
 # (`sector_grouping = :sequential`), instead of into circle sectors, which is
-# the default.
+# the default. For the rectangular pattern, the sectors are blocks of 3 x 2
+# wells (`block_size = (3, 2)`).
 patterns = [:sunflower, :circular, :rectangular]
 pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
     :rectangular => "Rectangular")
-sector_grouping = Dict(:sunflower => :spiral, :circular => :sequential,
-    :rectangular => :cartesian)
-num_wells, num_sectors = 30, 5
+num_wells, num_sectors = 36, 6
+pattern_args = Dict(:sunflower => (sector_grouping = :spiral,),
+    :circular => (sector_grouping = :sequential,),
+    :rectangular => (sector_grouping = :cartesian, block_size = (3, 2)))
 case_args = (
     num_wells = num_wells,
     num_sectors = num_sectors,
@@ -39,8 +41,7 @@ case_args = (
     num_years = 4,
     reversed_discharge = true,
 )
-cases = Dict(p => btes(p; sector_grouping = sector_grouping[p], case_args...)
-    for p in patterns);
+cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 
 # ### Visualize the BTES layouts
 # During charging, water is injected at 0.5 l/s into the first well of each
@@ -51,13 +52,14 @@ cases = Dict(p => btes(p; sector_grouping = sector_grouping[p], case_args...)
 # faster to simulate than one well per borehole (`well_grouping = :borehole`).
 #
 # For the sunflower pattern, the sectors are bundles of adjacent spiral spines
-# (see below), with the flow running from the center outwards along the spines.
-# With 30 wells in 5 sectors, each sector is a single spine. For the circular
-# pattern,
+# (see below), with the flow running from the center outwards, alternating
+# between the spines of the sector. Where the spines do not divide evenly into
+# sectors, the outermost wells are moved to neighboring sectors. For the
+# circular pattern,
 # the wells are numbered from the center outwards, counter-clockwise on each
 # ring, and the sectors are consecutive groups in this order. For the
-# rectangular pattern, the sectors are blocks of the grid, which the flow runs
-# through column by column.
+# rectangular pattern, the sectors are blocks of 3 x 2 wells, which the flow
+# runs through column by column.
 #
 # The structure underlying each pattern is shown in light gray:
 # - Sunflower: well ``n`` sits at radius ``R\sqrt{(n - 1/2)/(N - 1/2)}`` and
@@ -71,9 +73,10 @@ structure_color = (:gray, 0.4)
 
 function plot_sunflower_spines!(ax, N, R; num_points = 200)
     Δθ = 2π/Base.MathConstants.golden^2
-    ## Two consecutive Fibonacci numbers, so that each spine holds a few wells
+    ## The two largest spine families with at least two wells per spine, which
+    ## include the family that the sectors are made of
     fib = [1, 2]
-    while fib[end] + fib[end-1] <= N/3
+    while fib[end] + fib[end-1] <= N/2
         push!(fib, fib[end] + fib[end-1])
     end
     for F in fib[end-1:end]
@@ -112,8 +115,8 @@ colors = Makie.wong_colors()
 fig = Figure(size = (1200, 450))
 for (pno, p) in enumerate(patterns)
     field, spacing = Fimbul.btes_well_field(p;
-        num_wells = num_wells, num_sectors = num_sectors,
-        sector_grouping = sector_grouping[p], depths = case_args.depths)
+        num_wells = num_wells, num_sectors = num_sectors, pattern_args[p]...,
+        depths = case_args.depths)
     xy_all = hcat([wc[1:2, 1] for sector in field for wc in sector]...)
     R = maximum(sqrt.(sum(xy_all.^2, dims = 1)))
     ax = Axis(fig[1, pno]; title = pattern_names[p], aspect = DataAspect(),

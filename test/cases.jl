@@ -382,11 +382,25 @@ end
     # With one spine per sector, the wells of a sector are F apart
     @test all(length(unique(diff(sector))) == 1 for sector in sectors)
     @test all(issorted(r.(sector)) for sector in field)
-    for (N, ns) in ((12, 3), (48, 6), (100, 8))
-        sizes = length.(Fimbul.group_into_sectors_spiral(N, ns))
-        @test sum(sizes) == N
-        @test maximum(sizes) - minimum(sizes) <= 2
+    for (N, ns) in ((12, 3), (36, 6), (48, 6), (100, 8))
+        sectors = Fimbul.group_into_sectors_spiral(N, ns)
+        @test sort(vcat(sectors...)) == 1:N
+        sizes = length.(sectors)
+        @test maximum(sizes) - minimum(sizes) <= 1
     end
+    # Rectangular sectors as blocks of a given size
+    field, s = Fimbul.btes_well_field(:rectangular; num_wells = 36,
+        num_sectors = 6, block_size = (3, 2))
+    @test all(length.(field) .== 6)
+    for sector in field
+        xy = hcat([w[1:2, 1] for w in sector]...)
+        @test length(unique(xy[1, :])) == 3
+        @test length(unique(xy[2, :])) == 2
+    end
+    @test_throws ErrorException Fimbul.btes_well_field(:rectangular;
+        num_wells = 36, num_sectors = 5, block_size = (3, 2))
+    @test_throws ErrorException Fimbul.btes_well_field(:sunflower;
+        num_wells = 36, num_sectors = 6, block_size = (3, 2))
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower;
         sector_grouping = :angular)
     # The sunflower pattern has no gap at the center: the largest empty circle

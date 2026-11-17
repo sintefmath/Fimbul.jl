@@ -267,7 +267,8 @@ function max_distance(x::AbstractMatrix)
     return min_max_distance(x)[2]
 end
 
-function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector)
+function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_sectors::Int, depths::AbstractVector;
+    block_size = missing)
 
     num_wells = size(xy, 2)
     well_coords = Vector{Matrix{Float64}}(undef, num_wells)
@@ -279,7 +280,7 @@ function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_secto
     if sector_division == :angular
         sector_indices = group_into_sectors_angular(xy, num_sectors)
     elseif sector_division == :cartesian
-        sector_indices = group_into_sectors_cartesian(xy, num_sectors)
+        sector_indices = group_into_sectors_cartesian(xy, num_sectors; block_size = block_size)
     elseif sector_division == :sequential
         # Consecutive groups of wells, in the order given
         sector_indices = [collect(a:b) for (a, b) in equal_index_ranges(num_wells, num_sectors)]
@@ -349,18 +350,49 @@ function group_into_sectors_spiral(num_wells::Int, num_sectors::Int)
         end
     end
     _, spines, order, cuts = best
-    sector_indices = Vector{Vector{Int}}()
-    for (a, b) in cuts
-        bundle = spines[order[a:b]]
-        idx = Int[]
-        for level in 1:maximum(length, bundle)
-            for spine in bundle
-                level <= length(spine) && push!(idx, spine[level])
+    # Each well has a level (its position along its spine, from the center)
+    # and a rank (the counter-clockwise position of its spine)
+    sectors = [[(level, rank, spines[order[rank]][level])
+        for rank in a:b for level in eachindex(spines[order[rank]])]
+        for (a, b) in cuts]
+    rebalance_spiral_sectors!(sectors, length(order))
+    return [last.(sort(sector)) for sector in sectors]
+end
+
+# Even out the number of wells in the sectors, to within one, by passing the
+# outermost well on the boundary spine of a sector to its neighbor, hop by hop
+# around the field from the largest to the smallest sector. Wells passed across
+# the start of the counter-clockwise spine order get their rank shifted by the
+# number of spines, so that the ranks within a sector stay contiguous.
+function rebalance_spiral_sectors!(sectors, num_spines)
+    K = length(sectors)
+    for _ in 1:sum(length, sectors)
+        sizes = length.(sectors)
+        i, j = argmax(sizes), argmin(sizes)
+        sizes[i] - sizes[j] <= 1 && break
+        # Shortest way around the ring of sectors from i to j
+        forward = mod(j - i, K) <= mod(i - j, K)
+        step = forward ? 1 : -1
+        k = i
+        while k != j
+            next = mod1(k + step, K)
+            sector = sectors[k]
+            # Boundary spine towards the neighbor, and its outermost well
+            boundary = forward ? maximum(w[2] for w in sector) : minimum(w[2] for w in sector)
+            on_boundary = findall(w -> w[2] == boundary, sector)
+            pick = on_boundary[argmax([sector[m][1] for m in on_boundary])]
+            level, rank, well = sector[pick]
+            deleteat!(sector, pick)
+            if forward && next < k
+                rank -= num_spines
+            elseif !forward && next > k
+                rank += num_spines
             end
+            push!(sectors[next], (level, rank, well))
+            k = next
         end
-        push!(sector_indices, idx)
     end
-    return sector_indices
+    return sectors
 end
 
 # Split items with the given counts into num_groups contiguous, non-empty
@@ -436,7 +468,8 @@ function equal_index_ranges(total::Int, n_groups::Int)
     return ranges
 end
 
-function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int)
+function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
+    block_size = missing)
     # Divide the well field into a grid of roughly equal Cartesian blocks
     # The order of the wells within a sector is done in a zigzag order, 
     # where the first column is populated from the top, then the next column is populated 
@@ -459,11 +492,24 @@ function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int)
         aspect = abs(log((n_rows_total/n_row_bands)/(n_cols_total/n_col_bands)))
         return (maximum(counts) - minimum(counts), aspect), row_bands, col_bands
     end
-    splits = [band_split(d, num_sectors ÷ d) for d in 1:num_sectors
-        if num_sectors % d == 0 && d <= n_rows_total && num_sectors ÷ d <= n_cols_total]
-    isempty(splits) && error("Cannot divide a $n_cols_total x $n_rows_total \
-        grid of wells into $num_sectors sectors.")
-    _, row_bands, col_bands = splits[argmin(first.(splits))]
+    if ismissing(block_size)
+        splits = [band_split(d, num_sectors ÷ d) for d in 1:num_sectors
+            if num_sectors % d == 0 && d <= n_rows_total && num_sectors ÷ d <= n_cols_total]
+        isempty(splits) && error("Cannot divide a $n_cols_total x $n_rows_total \
+            grid of wells into $num_sectors sectors.")
+        _, row_bands, col_bands = splits[argmin(first.(splits))]
+    else
+        # Blocks of block_size[1] columns and block_size[2] rows
+        length(block_size) == 2 && all(>(0), block_size) ||
+            error("block_size must be (nx, ny) with nx, ny > 0, got $block_size.")
+        bx, by = block_size
+        col_bands = [(c, min(c + bx - 1, n_cols_total)) for c in 1:bx:n_cols_total]
+        row_bands = [(r, min(r + by - 1, n_rows_total)) for r in 1:by:n_rows_total]
+        num_blocks = length(col_bands)*length(row_bands)
+        num_blocks == num_sectors || error("Blocks of $bx x $by wells divide \
+            the $n_cols_total x $n_rows_total grid of wells into $num_blocks \
+            sectors, but num_sectors = $num_sectors.")
+    end
 
     sector_indices = Vector{Vector{Int}}()
     for (c0, c1) in col_bands
