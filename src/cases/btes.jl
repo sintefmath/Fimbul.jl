@@ -6,15 +6,17 @@ Setup function for borehole thermal energy storage (BTES) system.
 
 The first form places the wells using one of the built-in patterns. The second
 form takes an explicit well field, and does not accept the pattern arguments
-(`num_wells`, `radius`, `extent` and `num_sectors`), since the placement and
-grouping are given by `field` itself.
+(`num_wells`, `radius`, `extent`, `num_sectors` and `sector_grouping`), since
+the placement and grouping are given by `field` itself.
 
 # Arguments
 - `pattern = :sunflower`: Well placement pattern.
   - `:sunflower`: Fibonacci spiral, with the outermost well at distance
     `radius` from the center.
   - `:circular`: a center well surrounded by concentric rings, with the
-    outermost ring at distance `radius` from the center.
+    outermost ring at distance `radius` from the center. The wells are
+    numbered from the center outwards, counter-clockwise on each ring starting
+    from the positive x axis.
   - `:rectangular`: rows of wells, with the outermost wells spanning at most
     `extent = (Lx, Ly)`. The last row is partly filled if needed.
 - `field`: Explicit wells for the system, given using the following structure:
@@ -40,9 +42,17 @@ grouping are given by `field` itself.
   `pattern` form.
 - `extent`: Field size `(Lx, Ly)` for `:rectangular` [m]. Only used with the
   `pattern` form.
-- `num_sectors = 6`: Number of sectors in the BTES system. The field is divided
-  into equal circle sectors (`:sunflower`, `:circular`) or a grid of blocks
-  (`:rectangular`). Only used with the `pattern` form.
+- `num_sectors = 6`: Number of sectors in the BTES system. Only used with the
+  `pattern` form.
+- `sector_grouping`: How the wells are grouped into sectors. Only used with the
+  `pattern` form.
+  - `:angular` (default for `:sunflower` and `:circular`): circle sectors, with
+    the wells of each sector ordered from the center outwards.
+  - `:sequential` (`:sunflower` and `:circular`): consecutive groups of wells
+    in the order they are placed, from the center outwards, so that the first
+    sector holds the wells closest to the center.
+  - `:cartesian` (default and only option for `:rectangular`): a grid of
+    blocks, with the wells of each block ordered column by column.
 - `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [2]`: Layers in which the wells are perforated. Layer 1 is the
   insulation cover; the pipes pass through it but exchange nothing with it, so
@@ -108,6 +118,7 @@ function btes(
     well_spacing = missing,
     radius = missing,
     extent = missing,
+    sector_grouping = missing,
     num_sectors = 6,
     depths = [0.0, 0.5, 50, 65],
     well_layers = [2],
@@ -136,7 +147,7 @@ function btes(
 
     field, well_spacing = btes_well_field(pattern;
         num_wells = num_wells, well_spacing = well_spacing,
-        radius = radius, extent = extent,
+        radius = radius, extent = extent, sector_grouping = sector_grouping,
         num_sectors = num_sectors, depths = depths)
 
     return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,well_grouping = well_grouping,
@@ -401,7 +412,8 @@ end
 
 """
     btes_well_field(pattern = :sunflower; num_wells = missing, well_spacing = missing,
-        radius = missing, extent = missing, num_sectors = 6, depths = [0.0, 0.5, 50, 65])
+        radius = missing, extent = missing, sector_grouping = missing, num_sectors = 6,
+        depths = [0.0, 0.5, 50, 65])
 
 Well field for [`btes`](@ref) with a built-in pattern, returned as
 `(field, well_spacing)`. See [`btes`](@ref) for the patterns and how the number
@@ -412,6 +424,7 @@ function btes_well_field(pattern::Symbol = :sunflower;
     well_spacing = missing,
     radius = missing,
     extent = missing,
+    sector_grouping = missing,
     num_sectors = 6,
     depths = [0.0, 0.5, 50, 65],
     )
@@ -441,16 +454,25 @@ function btes_well_field(pattern::Symbol = :sunflower;
     ismissing(well_spacing) || well_spacing > 0 ||
         error("well_spacing must be positive, got $well_spacing.")
 
+    allowed = pattern == :rectangular ? (:cartesian,) : (:angular, :sequential)
+    if ismissing(sector_grouping)
+        sector_grouping = first(allowed)
+    end
+    sector_grouping in allowed || error("sector_grouping = :$sector_grouping \
+        is not supported for the :$pattern pattern. Supported values are \
+        $(join(":" .* string.(allowed), ", ")).")
+
+    # The wells of the sunflower and circular patterns are placed from the
+    # center outwards (counter-clockwise on each ring for :circular), which is
+    # the order :sequential groups them in
     if pattern == :sunflower
         xy, well_spacing = sunflower_pattern(num_wells, well_spacing, field_size)
-        division = :angular
     elseif pattern == :circular
         xy, well_spacing = circular_pattern(num_wells, well_spacing, field_size)
-        division = :angular
     else
         xy, well_spacing = rectangular_pattern(num_wells, well_spacing, field_size)
-        division = :cartesian
     end
+    division = sector_grouping
     size(xy, 2) >= 1 || error("No wells fit in a :$pattern field of size \
         $field_size with spacing $well_spacing.")
     field = field_from_points(division, xy, min(num_sectors, size(xy, 2)), depths)

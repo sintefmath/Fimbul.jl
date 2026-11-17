@@ -274,6 +274,11 @@ function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_secto
         sector_indices = group_into_sectors_angular(xy, num_sectors)
     elseif sector_division == :cartesian
         sector_indices = group_into_sectors_cartesian(xy, num_sectors)
+    elseif sector_division == :sequential
+        # Consecutive groups of wells, in the order given
+        sector_indices = [collect(a:b) for (a, b) in equal_index_ranges(num_wells, num_sectors)]
+    else
+        error("Unknown sector division: $sector_division")
     end
 
     return [well_coords[idx] for idx in sector_indices]
@@ -304,17 +309,6 @@ function group_into_sectors_angular(xy::AbstractMatrix, num_sectors::Int)
     return sector_indices
 end
 
-function factor_pair_closest_to_square(n::Int)
-    # Find the divisor pair of n closest to a square (smaller, larger)
-    best = (1, n)
-    for d in 1:floor(Int, sqrt(n))
-        if n % d == 0
-            best = (d, n ÷ d)
-        end
-    end
-    return best
-end
-
 function equal_index_ranges(total::Int, n_groups::Int)
     # Split `total` items into n_groups contiguous, as-equal-as-possible chunks
     base = div(total, n_groups)
@@ -342,13 +336,23 @@ function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int)
     rows = sort(unique(xy[2, :]))
     n_cols_total, n_rows_total = length(cols), length(rows)
 
-    n_row_bands, n_col_bands = factor_pair_closest_to_square(num_sectors)
-    if n_cols_total < n_rows_total
-        n_row_bands, n_col_bands = n_col_bands, n_row_bands
+    # Split the rows and columns into bands, n_row_bands*n_col_bands =
+    # num_sectors, choosing the split that gives the most even number of wells
+    # per sector, and among those the one closest to square blocks
+    function band_split(n_row_bands, n_col_bands)
+        col_bands = equal_index_ranges(n_cols_total, n_col_bands)
+        row_bands = equal_index_ranges(n_rows_total, n_row_bands)
+        counts = [count(i -> cols[c0] <= xy[1, i] <= cols[c1] &&
+            rows[r0] <= xy[2, i] <= rows[r1], 1:n)
+            for (c0, c1) in col_bands for (r0, r1) in row_bands]
+        aspect = abs(log((n_rows_total/n_row_bands)/(n_cols_total/n_col_bands)))
+        return (maximum(counts) - minimum(counts), aspect), row_bands, col_bands
     end
-
-    col_bands = equal_index_ranges(n_cols_total, n_col_bands)
-    row_bands = equal_index_ranges(n_rows_total, n_row_bands)
+    splits = [band_split(d, num_sectors ÷ d) for d in 1:num_sectors
+        if num_sectors % d == 0 && d <= n_rows_total && num_sectors ÷ d <= n_cols_total]
+    isempty(splits) && error("Cannot divide a $n_cols_total x $n_rows_total \
+        grid of wells into $num_sectors sectors.")
+    _, row_bands, col_bands = splits[argmin(first.(splits))]
 
     sector_indices = Vector{Vector{Int}}()
     for (c0, c1) in col_bands

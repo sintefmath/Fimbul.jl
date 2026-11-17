@@ -353,6 +353,26 @@ end
         @test_throws ErrorException Fimbul.btes_well_field(pattern;
             num_wells = 10, well_spacing = 5.0)
     end
+    # Circular sectors are consecutive groups of wells from the center
+    # outwards, counter-clockwise on each ring
+    field, s = Fimbul.btes_well_field(:circular; num_wells = 48, num_sectors = 6,
+        sector_grouping = :sequential)
+    @test all(length.(field) .== 8)
+    r(w) = sqrt(w[1, 1]^2 + w[2, 1]^2)
+    θ(w) = mod(atan(w[2, 1], w[1, 1]), 2π)
+    wells = vcat(field...)
+    rings = round.(Int, r.(wells)./s)
+    @test issorted(rings)
+    for k in unique(rings)
+        @test issorted(θ.(wells[rings .== k]))
+    end
+    @test maximum(r.(field[1])) <= minimum(r.(field[2])) + 1e-8
+    # By default, circular sectors are circle sectors, each spanning the rings
+    field, s = Fimbul.btes_well_field(:circular; num_wells = 48, num_sectors = 6)
+    @test all(length.(field) .== 8)
+    @test all(maximum(r.(sector)) > 2*s for sector in field)
+    @test_throws ErrorException Fimbul.btes_well_field(:rectangular;
+        sector_grouping = :angular)
     # The field size matches the pattern
     @test_throws ErrorException Fimbul.btes_well_field(:rectangular; radius = 10.0)
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower; extent = (10.0, 10.0))
