@@ -385,9 +385,10 @@ for (pno, p) in enumerate(patterns)
     x = (1:num_cycles) .+ (pno - (num_patterns + 1)/2)*width
     E_ch = E_charged[p][1:num_cycles]
     E_dch = E_discharged[p][1:num_cycles]
-    barplot!(ax, x, E_ch; width = width, color = (colors[pno], 0.35))
+    barplot!(ax, x, E_ch; width = width, color = (colors[pno], 0.35),
+        strokecolor = :black, strokewidth = 1)
     barplot!(ax, x, E_dch; width = width, color = colors[pno],
-        label = pattern_names[p])
+        strokecolor = :black, strokewidth = 1, label = pattern_names[p])
     text!(ax, x, E_ch .+ 0.01*E_max;
         text = ["$(round(Int, 100*r))%" for r in E_dch./E_ch],
         align = (:center, :bottom), fontsize = 14)
