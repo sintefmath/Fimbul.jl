@@ -49,13 +49,14 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
   - `:sectors_parallel`: the sectors are operated in parallel, and the
     boreholes within each sector are coupled in series. Each sector receives
     `rate_charge`, so the field circulates `num_sectors*rate_charge` in total.
-    Each borehole is its own pair of wells, `B<n>_supply` and `B<n>_return`.
+    Each borehole is its own closed-loop well `B<n>`, controlled as
+    `B<n>_supply` and `B<n>_return` (see [`closed_loop_well_names`](@ref)).
   - `:sectors_series`: the sectors are coupled in series, and the boreholes
     within each sector are coupled in parallel off a shared wellhead. The field
     circulates `rate_charge` in total, or `rate_charge/wells_per_sector` per
-    borehole on average. Each sector is a single pair of wells, `S<n>_supply`
-    and `S<n>_return`, holding all its boreholes between a shared inlet and a
-    shared outlet node. The split between the boreholes is resolved from
+    borehole on average. Each sector is a single closed-loop well `S<n>`,
+    controlled as `S<n>_supply` and `S<n>_return`, holding all its boreholes
+    between a shared inlet and a shared outlet node. The split between the boreholes is resolved from
     wellbore friction, while the manifold itself is treated as resistance-free.
     Per-borehole results are reached through the `borehole` field of the well
     domain, since a sector rather than a borehole is the unit of well output.
@@ -68,8 +69,8 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
 - `discharge_period = ["December", "March"]`: Period during which the system is discharged.
 - `report_interval = 14 day`: Reporting interval for the simulation.
-  During rest periods the supply wells are put under
-  [`ClosedLoopRestControl`](@ref) at the wellhead pressure, and the return wells
+  During rest periods the supply parts of the closed-loop wells are put under
+  [`ClosedLoopRestControl`](@ref) at the wellhead pressure, and the return parts
   are disabled.
 - `utes_schedule_args = NamedTuple()`: Additional arguments for the UTES schedule.
 - `n_z = [3, 8, 3]`: Number of layers in the vertical direction for each layer.
@@ -212,26 +213,27 @@ function btes(
     end
 
     if topology == :sectors_parallel
-        # One pair of wells per borehole
+        # One closed-loop well per borehole
         for (wno, wc) in enumerate(well_coords_3d)
             name = Symbol("B$wno")
             println("Adding well $name ($wno/$num_wells)")
             cells = trajectory_cells(wc)
-            w_sup, w_ret = setup_btes_well(domain, cells, name=name, closed_loop_type=:u1)
-            push!(well_models, w_sup, w_ret)
+            well = setup_btes_well(domain, cells, name = name, closed_loop_type = :u1)
+            push!(well_models, well)
             push!(well_names, name)
         end
     else
-        # One pair of wells per sector, with the boreholes of the sector hung in
-        # parallel between a shared inlet and a shared outlet node
+        # One closed-loop well per sector, with the boreholes of the sector hung
+        # in parallel between a shared inlet and a shared outlet node
         for (sno, sector) in enumerate(field)
             name = Symbol("S$sno")
             println("Adding sector $name ($sno/$(length(field))) with \
                 $(length(sector)) wells")
             cells = [trajectory_cells(wc) for wc in sector]
             disc = discretize_closed_loop_u1_manifold(cells, geo.cell_centroids)
-            w_sup, w_ret = setup_closed_loop_well_u1(domain, disc.reservoir_cells;
+            well = setup_btes_well(domain, disc.reservoir_cells;
                 name                  = name,
+                closed_loop_type      = :u1,
                 neighborship          = disc.neighborship,
                 pipe_cells            = disc.pipe_cells,
                 grout_cells           = disc.grout_cells,
@@ -240,16 +242,17 @@ function btes(
                 return_reservoir_cell = disc.return_reservoir_cell,
                 tag                   = disc.tag,
                 borehole              = disc.borehole)
-            push!(well_models, w_sup, w_ret)
+            push!(well_models, well)
             push!(well_names, name)
             push!(manifold_segments, disc.manifold_segments)
         end
     end
 
-    # Make the model. The facility must not shut wells on its own: a closed loop
-    # whose return is shut while its supply injects is sealed and infeasible,
-    # and the chained reinjection controls start every period from zero rate,
-    # which is exactly when the facility would shut them.
+    # Make the model. The facility must not shut wells on its own: the supply
+    # and return parts of a closed loop are hydraulically connected, so shutting
+    # one of them gives a dead end, and the chained reinjection controls start
+    # every period from zero rate, which is exactly when the facility would shut
+    # them.
     model = setup_reservoir_model(
         domain, :geothermal,
         wells = well_models,
@@ -280,17 +283,16 @@ function btes(
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
     if topology == :sectors_parallel
-        # Group supply well names by sector, preserving the order given in `field`
+        # Group closed-loop wells by sector, preserving the order given in `field`
         wells_per_sector = Vector{Vector{Symbol}}()
         wtot = 0
         for sector in field
-            sw = [Symbol(well_names[wtot + l], "_supply") for l in 1:length(sector)]
+            push!(wells_per_sector, well_names[wtot .+ (1:length(sector))])
             wtot += length(sector)
-            push!(wells_per_sector, sw)
         end
     else
         # A single chain running through the sectors, in the order given in `field`
-        wells_per_sector = [[Symbol(name, "_supply") for name in well_names]]
+        wells_per_sector = [copy(well_names)]
     end
     control_charge, control_discharge, control_rest, sectors = setup_controls(
         model, wells_per_sector,
@@ -298,9 +300,8 @@ function btes(
         reversed_discharge = reversed_discharge);
     if topology == :sectors_series
         # setup_controls saw one chain, and so returned a single group. Restore
-        # one entry per sector.
-        sectors = Dict(Symbol("S$sno") =>
-            [Symbol(name, "_supply"), Symbol(name, "_return")]
+        # one entry per sector, each holding the closed-loop well of the sector.
+        sectors = Dict(Symbol("S$sno") => [name]
             for (sno, name) in enumerate(well_names))
     end
     
@@ -332,7 +333,7 @@ function btes(
         # are set to zero so that node placement does not bias the flow split.
         parameters = setup_parameters(model)
         for (sno, segments) in enumerate(manifold_segments)
-            parameters[Symbol("S$sno", "_supply")][:SegmentLength][segments] .= 0.0
+            parameters[Symbol("S$sno")][:SegmentLength][segments] .= 0.0
         end
     end
 
@@ -419,6 +420,8 @@ function polygonal_pattern(num_wells, spacing, num_sides; num_sectors = 6, depth
     return field_from_points(:angular,xy, num_sectors, depths)
 end
 
+# Controls for the closed-loop wells in `wells_per_sector`, where the wells of
+# each sector are coupled in series in the given order
 function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector{Symbol}},
     rate_charge, rate_discharge, temperature_charge, temperature_discharge;
     reversed_discharge::Bool = false)
@@ -443,13 +446,16 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
     control_discharge = Dict()
     control_rest = Dict()
     assigned = []
-    get_return = (well) -> Symbol(replace(String(well), "_supply" => "_return"))
+    # Supply and return parts of a closed-loop well, controlled separately
+    get_supply = (well) -> first(closed_loop_well_names(model.models[well].data_domain))
+    get_return = (well) -> last(closed_loop_well_names(model.models[well].data_domain))
     sectors = Dict()
 
     for (sno, sw) in enumerate(wells_per_sector)
         sec_wells = Symbol[]
-        for (k, well_sup) in enumerate(sw)
-            well_ret = get_return(well_sup)
+        for (k, well) in enumerate(sw)
+            well_sup = get_supply(well)
+            well_ret = get_return(well)
             @assert well_sup ∉ assigned
             @assert well_ret ∉ assigned
             if length(sw) == 1
@@ -483,7 +489,7 @@ function setup_controls(model, wells_per_sector::AbstractVector{<:AbstractVector
             control_rest[well_sup] = ctrl_rest
             control_rest[well_ret] = DisabledControl()
             push!(assigned, well_sup, well_ret)
-            push!(sec_wells, well_sup, well_ret)
+            push!(sec_wells, well)
         end
         sectors[Symbol("S$sno")] = sec_wells
     end

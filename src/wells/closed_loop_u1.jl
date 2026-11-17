@@ -178,17 +178,18 @@ end
     discretize_closed_loop_u1_manifold(cells, cell_centers; <keyword arguments>)
 
 Discretize a group of U-tube boreholes coupled in parallel between a shared
-inlet and a shared outlet node, for use with [`setup_closed_loop_well_u1`](@ref).
+inlet and a shared outlet node, for use with [`setup_closed_loop_well`](@ref)
+(with `closed_loop_type = :u1`).
 
 `cells` holds one vector of reservoir cells per borehole, each ordered from top
 to bottom. Nodes 1 and 2 of the resulting well are the shared inlet and outlet:
 fluid enters node 1, which is the node the facility injects into, splits between
-the boreholes, and recombines at node 2, which is handed to the return well as
-the end node. Both manifold endpoints are pipe nodes, so the segments feeding the
+the boreholes, and recombines at node 2, the end node of the supply part,
+where the return part is connected. Both manifold endpoints are pipe nodes, so the segments feeding the
 boreholes carry flow, and the split between them is resolved by the segment flow
 models rather than prescribed.
 
-Returns a named tuple of the arguments needed by `setup_closed_loop_well_u1`,
+Returns a named tuple of the topology arguments needed by `setup_closed_loop_well`,
 along with `manifold_segments`, the column indices of the manifold segments in
 `neighborship`.
 

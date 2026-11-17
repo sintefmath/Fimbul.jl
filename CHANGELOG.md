@@ -10,6 +10,7 @@
 - Consistent keyword arguments for the closed-loop setup: `wall_thickness` (generic) is renamed to `wall_thickness_pipe`, and `inner_pipe_thermal_conductivity`/`outer_pipe_thermal_conductivity` (coaxial) to `pipe_thermal_conductivity_inner`/`pipe_thermal_conductivity_outer`. Topology arguments (cell groups, `well_cell_centers`, `end_nodes`) without `neighborship` now give an error for all types instead of being ignored.
 - `setup_btes_well` and `setup_vertical_btes_well` default to 1U wells (`closed_loop_type = :u1`).
 - `btes`: the sectors in `input_data[:sectors]` list the closed-loop wells instead of the supply and return names.
+- `btes`: the wells are perforated in layer 2 only by default (`well_layers = [2]`), so the boreholes start below the insulation layer. During rest periods, the supply parts of the closed-loop wells are put under `ClosedLoopRestControl` and the return parts are disabled, instead of disabling all wells. By default, discharging runs through each sector in the same direction as charging (`reversed_discharge = false`), whereas it previously ran from the outermost to the innermost well.
 - Borehole geometry and fill of closed-loop wells: 1U wells take the borehole radius `radius_borehole` (formerly `radius_grout`), and coaxial wells take the fill thickness outside the outer pipe `grouting_thickness` (formerly `radius_grout`), as generic wells. The fill properties are set with `fill_material`, `fill_thermal_conductivity`, `fill_density` and `fill_heat_capacity` (formerly `grouting_thermal_conductivity`, `grouting_density` and `grouting_heat_capacity`). The old keyword arguments are removed and give an error.
 - Coaxial wells: the default fill is `:grout` (density 2000 kg/m³ and heat capacity 1500 J/(kg K), as for 1U wells, instead of 1500 kg/m³ and 1460 J/(kg K)), and the default fill thickness is 30 mm (borehole radius ≈ 100.7 mm instead of 100 mm).
 
@@ -17,6 +18,8 @@
 
 - New abstract type `AbstractClosedLoopWell` with the concrete types `ClosedLoopGenericWell`, `ClosedLoop1UWell` and `ClosedLoopCoaxialWell`. The type is stored as the `type` of the `MultiSegmentWell`, and `closed_loop_type` accepts either a type or `:generic`, `:u1` and `:coaxial`. New closed-loop types implement `setup_closed_loop_supply`.
 - `ags` uses `ClosedLoopGenericWell` with a general well topology.
+- `btes`: configurable well fields. The wells are placed with a built-in pattern (`btes(pattern; ...)` with `:sunflower`, `:rectangular`, `:circular` or `:polygonal`), or given explicitly as sectors of well trajectories (`btes(field; ...)`). The sectors are coupled in parallel with the boreholes of each sector in series (`topology = :sectors_parallel`), or in series with the boreholes of each sector in parallel between a shared inlet and outlet (`topology = :sectors_series`). New keyword arguments `reversed_discharge` and `permeability`.
+- `ClosedLoopRestControl`: control for closed-loop wells at rest, which holds the wellhead pressure so that the fluid in the loop can expand and contract with temperature.
 - Borehole fill materials for closed-loop wells (`fill_material = :grout` by default, or a named tuple of properties), see `Fimbul.borehole_fill_properties`.
 - Coaxial wells without grout (`grouting_thickness = 0`): the outer pipe exchanges heat directly with the reservoir through its wall.
 - All closed-loop types accept `dir` (also per reservoir cell), generic wells tag their nodes `:pipe`, and `setup_vertical_closed_loop_well` is exported. The setup for each type is documented in `setup_closed_loop_supply`.
@@ -27,7 +30,7 @@
 
 ### Documentation
 
-- New API page for closed-loop wells (setup functions, closed-loop well types and borehole fill).
+- New API page for closed-loop wells (setup functions, closed-loop well types, controls and borehole fill).
 
 ### Compatibility
 

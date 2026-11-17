@@ -17,8 +17,8 @@ The control is meant to replace `DisabledControl` for the supply well of a
 closed loop during rest periods. The return well should be disabled, so that
 the loop has a single connection to the surface.
 
-See also [`DisabledControl`](@ref), [`InjectorControl`](@ref),
-[`ProducerControl`](@ref).
+See also JutulDarcy's `DisabledControl`, `InjectorControl` and
+`ProducerControl`.
 """
 struct ClosedLoopRestControl{T<:JutulDarcy.WellTarget} <: JutulDarcy.WellControlForce
     target::T
