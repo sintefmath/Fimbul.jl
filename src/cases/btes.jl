@@ -51,6 +51,15 @@ form takes an explicit well field, and does not accept the pattern arguments
     the sunflower, with the wells of each sector ordered from the center
     outwards: the first well of each spine, counter-clockwise, then the second
     well of each spine, and so on (see `Fimbul.group_into_sectors_spiral`).
+    The spines come in families of Fibonacci size `F` (2, 3, 5, 8, 13, 21,
+    ...), and only families with at most `num_wells/2` spines are used. Whole
+    spines divide evenly into sectors when `num_wells` is a multiple of
+    `num_sectors` and `num_sectors` divides such a family: 2, 3, 5 or 8
+    sectors (one spine per sector) for any multiple, 4 sectors (two spines of
+    the 8-family) from 16 wells, and 7 sectors (three spines of the 21-family)
+    from 42 wells. Otherwise, as for 6 sectors, the outermost wells on the
+    boundary spines are moved to neighboring sectors, so that the sector sizes
+    differ by at most one.
   - `:angular` (default for `:circular`): circle sectors, with the wells of
     each sector ordered from the center outwards.
   - `:sequential` (`:sunflower` and `:circular`): consecutive groups of wells

@@ -10,9 +10,9 @@ using HYPRE
 using GLMakie
 
 # ## Set up simulation cases
-# We create BTES systems with 36 wells that extend to 100 m depth, divided into
-# 6 sectors of 6 wells each. The wells are placed in a sunflower, a circular
-# and a rectangular (6 x 6) pattern, all with 5 m between neighboring wells.
+# We create BTES systems with 48 wells that extend to 100 m depth, divided into
+# 8 sectors of 6 wells each. The wells are placed in a sunflower, a circular
+# and a rectangular (6 x 8) pattern, all with 5 m between neighboring wells.
 # The systems operate on a seasonal cycle: wells are charged during summer
 # months (April to September) with hot water at 90°C, and discharged during
 # winter months (October to March) with cold water at 10°C. This seasonal
@@ -23,15 +23,17 @@ using GLMakie
 # spines (`sector_grouping = :spiral`, the default). For the circular pattern,
 # the wells are grouped into sectors from the center outwards
 # (`sector_grouping = :sequential`), instead of into circle sectors, which is
-# the default. For the rectangular pattern, the sectors are blocks of 3 x 2
-# wells (`block_size = (3, 2)`).
+# the default. For the rectangular pattern, the field is set to span 25 m x 35 m
+# (`extent`), which gives a 6 x 8 grid of wells 5 m apart, and the sectors are
+# blocks of 3 x 2 wells (`block_size = (3, 2)`).
 patterns = [:sunflower, :circular, :rectangular]
 pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
     :rectangular => "Rectangular")
-num_wells, num_sectors = 36, 6
+num_wells, num_sectors = 7, 5
 pattern_args = Dict(:sunflower => (sector_grouping = :spiral,),
     :circular => (sector_grouping = :sequential,),
-    :rectangular => (sector_grouping = :cartesian, block_size = (3, 2)))
+    :rectangular => (sector_grouping = :cartesian, extent = (25.0, 35.0),
+        block_size = (3, 2)))
 case_args = (
     num_wells = num_wells,
     num_sectors = num_sectors,
@@ -52,9 +54,8 @@ cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 # faster to simulate than one well per borehole (`well_grouping = :borehole`).
 #
 # For the sunflower pattern, the sectors are bundles of adjacent spiral spines
-# (see below), with the flow running from the center outwards, alternating
-# between the spines of the sector. Where the spines do not divide evenly into
-# sectors, the outermost wells are moved to neighboring sectors. For the
+# (see below), with the flow running from the center outwards. With 48 wells in
+# 8 sectors, each sector is a single spine of the 8-spine family. For the
 # circular pattern,
 # the wells are numbered from the center outwards, counter-clockwise on each
 # ring, and the sectors are consecutive groups in this order. For the
@@ -112,6 +113,7 @@ end
 # of each sector connected in the order the fluid passes them during charging.
 # The first well of each sector is marked with a larger symbol.
 colors = Makie.wong_colors()
+sector_colors = Makie.to_colormap(:tab10)
 fig = Figure(size = (1200, 450))
 for (pno, p) in enumerate(patterns)
     field, spacing = Fimbul.btes_well_field(p;
@@ -130,10 +132,10 @@ for (pno, p) in enumerate(patterns)
     end
     for (sno, sector) in enumerate(field)
         xy = hcat([wc[1:2, 1] for wc in sector]...)
-        lines!(ax, xy[1, :], xy[2, :]; color = colors[sno], linewidth = 2)
-        scatter!(ax, xy[1, :], xy[2, :]; color = colors[sno], markersize = 10,
+        lines!(ax, xy[1, :], xy[2, :]; color = sector_colors[sno], linewidth = 2)
+        scatter!(ax, xy[1, :], xy[2, :]; color = sector_colors[sno], markersize = 10,
             label = "Sector $sno")
-        scatter!(ax, xy[1, 1:1], xy[2, 1:1]; color = colors[sno], markersize = 20)
+        scatter!(ax, xy[1, 1:1], xy[2, 1:1]; color = sector_colors[sno], markersize = 20)
     end
     pno == 1 && Legend(fig[2, 1:3], ax; orientation = :horizontal)
 end
