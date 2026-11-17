@@ -18,13 +18,17 @@ case = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
     charge_period = ["April", "September"],
     discharge_period = ["October", "March"],
     num_years = 4,
+    reversed_discharge = true
 );
 
 # ### Visualize BTES system layout
 # The 48 BTES wells are arranged in a pattern that ensures approximately equal
 # spacing between wells. The wells are organized into 6 sectors of 8 wells
-# each. Water is injected at 0.5 l/s into the innermost well of each sector and
-# flows sequentially through all wells in series to the outermost well. Each
+# each. During charging, water is injected at 0.5 l/s into the innermost well
+# of each sector and flows sequentially through all wells in series to the
+# outermost well. During discharging, the flow is reversed
+# (`reversed_discharge = true`), with water flowing from the outermost well back
+# to the innermost well. Each
 # sector is modelled as a single closed-loop well holding its boreholes in
 # series, which is much faster to simulate than one well per borehole
 # (`well_grouping = :borehole`).
@@ -61,15 +65,16 @@ fig
 # "preconditioning" strategy that starts each timestep by solving the well
 # equations with fixed reservoir conditions.
 simulator, config = setup_reservoir_simulator(case;
-    presolve_wells = true,
     tol_cnv = 1e-2,
     tol_mb = 1e-6,
-    tol_cnve_well = Inf,
-    inc_tol_dT = 1e-2,
+    tol_cnve_well = 1e-2,
+    tol_cnv_well = 1e-2,
     timesteps = :auto,
     initial_dt = 5.0,
     target_its = 10,
-    relaxation = true);
+    relaxation = true,
+    output_substates = true
+    );
 
 # The transition from charging to discharging creates a thermal shock that is
 # numerically challenging for the nonlinear solver. We use a specialized
@@ -86,7 +91,7 @@ config[:timestep_max_decrease] = 1e-6;
 # Note that this simulation can take a few minutes to run. Setting `info_level =
 # 0` will show a progress bar while the simulation runs.`
 results = simulate_reservoir(case;
-simulator=simulator, config=config, info_level=0);
+simulator=simulator, config=config, info_level=2);
 
 # ### Interactive visualization of results
 # We first plot the final temperature distribution in the reservoir and well
@@ -94,13 +99,13 @@ simulator=simulator, config=config, info_level=0);
 # around each well sector, while the well results show the temperature and flow
 # rate evolution throughout the simulation.
 plot_reservoir(case.model, results.states;
-    resolution = (1000, 800),
+    # resolution = (1000, 800),
     well_fontsize = 0,
     key = :Temperature,
     step = length(case.dt),
-    axis_args = axis_args,
+    # axis_args = axis_args,
     colormap = :seaborn_icefire_gradient,
-    fancy = false)
+    fancy = true)
 
 plot_well_results(results.wells, field = :temperature)
 
@@ -175,13 +180,21 @@ end
 fig = Figure(size = (1000, 750))
 sector = 1
 sectors = case.input_data[:sectors]
+# Charging and discharging steps are found from the injection temperature of
+# the sector well. It is injected into at its supply part during charging, and
+# at its return part during discharging, since `reversed_discharge = true`.
+parts = closed_loop_well_names(case.model.models[only(sectors[Symbol("S$sector")])].data_domain)
+function is_injecting(forces, T_inj)
+    controls = forces[:Facility].control
+    return any(c -> c isa InjectorControl && c.temperature == T_inj,
+        (controls[w] for w in parts))
+end
 
 # ### Temperature evolution during the first charging cycle
 # We first visualize how thermal energy propagates through the wellbore network
 # as hot water flows from the innermost to the outermost well in the sector.
-well = first(closed_loop_well_names(case.model.models[sectors[Symbol("S$sector")][1]].data_domain))
 T_ch = convert_to_si(90.0, :Celsius)
-is_charge = [f[:Facility].control[well].temperature == T_ch for f in case.forces]
+is_charge = [is_injecting(f, T_ch) for f in case.forces]
 stop = findfirst(diff(is_charge) .< 0)
 ax = Axis(fig[1, 1]; title = "Temperature evolution, sector $sector (charging)",
 xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
@@ -190,10 +203,10 @@ Legend(fig[1,2], ax; fontsize = 20)
 
 # ### Temperature evolution during the first discharging cycle
 # Next, we show how stored thermal energy is extracted as cold water flows
-# through the sector, again from the innermost to the outermost well.
-well = first(closed_loop_well_names(case.model.models[sectors[Symbol("S$sector")][end]].data_domain))
+# through the sector in the opposite direction, from the outermost to the
+# innermost well.
 T_dch = convert_to_si(10.0, :Celsius)
-is_discharge = [f[:Facility].control[well].temperature == T_dch for f in case.forces]
+is_discharge = [is_injecting(f, T_dch) for f in case.forces]
 start = findfirst(diff(is_discharge) .> 0)+1
 stop = findfirst(diff(is_discharge) .< 0)
 ax = Axis(fig[2, 1]; title = "Temperature evolution, sector $sector (discharging)",
