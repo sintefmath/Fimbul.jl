@@ -54,8 +54,8 @@ temperature_inj = convert_to_si(10.0, :Celsius);
 # ## Drilling costs
 # The cost of drilling a well increases more than linearly with its measured
 # depth (drilled length). We use the correlation of [lukawski_2014](@cite) for
-# the drilling and completion cost of onshore geothermal wells, `C(L) =
-# 1.72e-7 L² + 2.3e-3 L - 0.62` million (2012 USD, with L in meters), which we
+# the drilling and completion cost of geothermal wells, `C(L) = 1.72e-7 L² +
+# 2.3e-3 L - 0.62` million USD, with L the measured depth in meters, which we
 # for simplicity use in million €. Since a coaxial BHE requires a smaller
 # borehole than a geothermal production well, we scale the cost by a factor
 # `f_slim`. Directional drilling is more expensive than vertical drilling, due
