@@ -19,7 +19,9 @@ form takes an explicit well field, and does not accept the pattern arguments
     numbered from the center outwards, counter-clockwise on each ring starting
     from the positive x axis.
   - `:rectangular`: rows of wells, with the outermost wells spanning at most
-    `extent = (Lx, Ly)`. The last row is partly filled if needed.
+    `extent = (Lx, Ly)`. The last row is partly filled if needed. Without
+    `extent`, the field is a whole number of sector blocks wide (see
+    `sector_dims`), and close to square.
 - `field`: Explicit wells for the system, given using the following structure:
   - A full field is represented as `[sector_1, sector_2, ..., sector_n]`.
   - `sector_k` contains all wells in sector `k`, represented as
@@ -65,12 +67,17 @@ form takes an explicit well field, and does not accept the pattern arguments
   - `:sequential` (`:sunflower` and `:circular`): consecutive groups of wells
     in the order they are placed, from the center outwards, so that the first
     sector holds the wells closest to the center.
-  - `:cartesian` (default and only option for `:rectangular`): a grid of
-    blocks, with the wells of each block ordered column by column. The blocks
-    are chosen to give the most even sectors, or set by `sector_dims`.
-- `sector_dims`: Dimensions `(nx, ny)` of each sector of the `:rectangular`
-  pattern, in number of wells along x and y. The resulting number of sectors
-  must equal `num_sectors`. Only used with the `pattern` form.
+  - `:cartesian` (default and only option for `:rectangular`): blocks of
+    `sector_dims` wells tiling the full rows of the field from the bottom up,
+    and bands across the field for the remaining wells at the top (see
+    `Fimbul.group_into_sectors_cartesian`). Within each sector, the wells are
+    ordered column by column. For example, 45 wells in 5 sectors gives a
+    6 x 8 field with four blocks of 3 x 3 wells, and a last sector of 9 wells
+    in the two top rows.
+- `sector_dims`: Dimensions `(nx, ny)` of the blocks of the `:rectangular`
+  pattern, in number of wells along x and y. Defaults to the factor pair of
+  `num_wells/num_sectors` closest to square. Only used with the `pattern`
+  form.
 - `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [2]`: Layers in which the wells are perforated. Layer 1 is the
   insulation cover; the pipes pass through it but exchange nothing with it, so
@@ -491,7 +498,8 @@ function btes_well_field(pattern::Symbol = :sunflower;
     elseif pattern == :circular
         xy, well_spacing = circular_pattern(num_wells, well_spacing, field_size)
     else
-        xy, well_spacing = rectangular_pattern(num_wells, well_spacing, field_size)
+        xy, well_spacing = rectangular_pattern(num_wells, well_spacing, field_size;
+            num_sectors = num_sectors, sector_dims = sector_dims)
     end
     division = sector_grouping
     ismissing(sector_dims) || pattern == :rectangular ||
@@ -563,7 +571,7 @@ function circular_pattern(N, s, R)
     return (hcat(points...), Float64(s))
 end
 
-function rectangular_pattern(N, s, extent)
+function rectangular_pattern(N, s, extent; num_sectors = 1, sector_dims = missing)
     if !ismissing(extent)
         length(extent) == 2 && all(>=(0), extent) ||
             error("extent must be (Lx, Ly) with Lx, Ly ≥ 0, got $extent.")
@@ -587,7 +595,11 @@ function rectangular_pattern(N, s, extent)
             nx, ny = counts(s)
         end
     else
-        nx = max(1, round(Int, sqrt(N)))
+        # A whole number of sector blocks wide, so that the full rows can be
+        # tiled with sectors
+        num_sectors = clamp(num_sectors, 1, N)
+        dims = rectangular_sector_dims(N ÷ num_sectors, sector_dims)
+        nx = rectangular_grid_width(N, num_sectors, dims)
         ny = ceil(Int, N/nx)
     end
     xs = ((0:nx-1) .- (nx-1)/2).*s

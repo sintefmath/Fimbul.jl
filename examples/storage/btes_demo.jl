@@ -12,7 +12,7 @@ using GLMakie
 # ## Set up simulation cases
 # We create BTES systems with 30 wells that extend to 100 m depth, divided into
 # 5 sectors of 6 wells each. The wells are placed in a sunflower, a circular
-# and a rectangular (5 x 6) pattern, all with 5 m between neighboring wells.
+# and a rectangular (6 x 5) pattern, all with 5 m between neighboring wells.
 # The systems operate on a seasonal cycle: wells are charged during summer
 # months (April to September) with hot water at 90°C, and discharged during
 # winter months (October to March) with cold water at 10°C. This seasonal
@@ -23,20 +23,21 @@ using GLMakie
 # spines (`sector_grouping = :spiral`, the default). For the circular pattern,
 # the wells are grouped into sectors from the center outwards
 # (`sector_grouping = :sequential`), instead of into circle sectors, which is
-# the default. For the rectangular pattern, each sector is a column of the grid
-# (`sector_grouping = :cartesian`).
+# the default. For the rectangular pattern, the sectors are blocks of 3 x 2
+# wells, with the last sector in the top row (`sector_grouping = :cartesian`).
 #
 # !!! tip "Adjusting the well fields"
 #     The size of the fields is set by `num_wells` and `num_sectors`. Instead
 #     of the number of wells, the spacing between them can be given
 #     (`well_spacing`), and the size of the field can be set with `radius`
 #     (sunflower and circular) or `extent = (Lx, Ly)` (rectangular), see
-#     [`btes`](@ref). For example, 48 wells in 8 sectors with
-#     `extent = (25.0, 35.0)` and `sector_dims = (3, 2)` for the rectangular
-#     pattern gives a 6 x 8 grid divided into blocks of 3 x 2 wells. The
-#     sunflower sectors are made of whole spines when the number of sectors is
-#     2, 3, 5 or 8; otherwise, a few outer wells are moved between neighboring
-#     sectors to even them out. Larger fields take longer to simulate.
+#     [`btes`](@ref). For the rectangular pattern, the blocks that make up the
+#     sectors are as square as possible, or set by `sector_dims = (nx, ny)`;
+#     for example, 45 wells in 5 sectors gives four blocks of 3 x 3 wells and a
+#     last sector of 9 wells in the two top rows. The sunflower sectors are
+#     made of whole spines when the number of sectors is 2, 3, 5 or 8;
+#     otherwise, a few outer wells are moved between neighboring sectors to
+#     even them out. Larger fields take longer to simulate.
 patterns = [:sunflower, :circular, :rectangular]
 pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
     :rectangular => "Rectangular")
@@ -68,8 +69,10 @@ cases = Dict(p => btes(p; pattern_args[p]..., case_args...) for p in patterns);
 # 5 sectors, each sector is a single spine of the 5-spine family. For the
 # circular pattern, the wells are numbered from the center outwards,
 # counter-clockwise on each ring, and the sectors are consecutive groups in
-# this order. For the rectangular pattern, each sector is a column of the grid,
-# which the flow runs through from bottom to top.
+# this order. For the rectangular pattern, the sectors are blocks of 3 x 2
+# wells, tiling the field from the bottom up, and the wells left over in the
+# top row form the last sector. The flow runs through each sector column by
+# column.
 #
 # The structure underlying each pattern is shown in light gray:
 # - Sunflower: well ``n`` sits at radius ``R\sqrt{(n - 1/2)/(N - 1/2)}`` and

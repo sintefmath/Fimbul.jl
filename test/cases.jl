@@ -397,8 +397,18 @@ end
         @test length(unique(xy[1, :])) == 3
         @test length(unique(xy[2, :])) == 2
     end
-    @test_throws ErrorException Fimbul.btes_well_field(:rectangular;
-        num_wells = 36, num_sectors = 5, sector_dims = (3, 2))
+    # Without a block size, the blocks are as square as possible, and the
+    # wells left at the top form the last sector
+    field, s = Fimbul.btes_well_field(:rectangular; num_wells = 45, num_sectors = 5)
+    @test all(length.(field) .== 9)
+    nx_ny(sector) = (length(unique([w[1, 1] for w in sector])),
+        length(unique([w[2, 1] for w in sector])))
+    @test nx_ny.(field) == [(3, 3), (3, 3), (3, 3), (3, 3), (6, 2)]
+    for N in 1:40, ns in 1:min(N, 6)
+        field, s = Fimbul.btes_well_field(:rectangular; num_wells = N, num_sectors = ns)
+        @test length(field) == ns
+        @test sum(length, field) == N
+    end
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower;
         num_wells = 36, num_sectors = 6, sector_dims = (3, 2))
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower;

@@ -468,58 +468,84 @@ function equal_index_ranges(total::Int, n_groups::Int)
     return ranges
 end
 
+# Dimensions (nx, ny) of the blocks of wells making up the sectors of a
+# rectangular field, for sectors of sector_size wells: the given sector_dims,
+# or the factor pair of sector_size closest to square, wider than tall
+function rectangular_sector_dims(sector_size::Int, sector_dims = missing)
+    if !ismissing(sector_dims)
+        length(sector_dims) == 2 && all(>(0), sector_dims) ||
+            error("sector_dims must be (nx, ny) with nx, ny > 0, got $sector_dims.")
+        return Tuple(Int.(sector_dims))
+    end
+    m = max(sector_size, 1)
+    by = maximum(d for d in 1:isqrt(m) if m % d == 0)
+    return (m ÷ by, by)
+end
+
+# Number of wells per row of a rectangular field, a whole number of sector
+# blocks wide, chosen so that the field is close to square
+function rectangular_grid_width(num_wells::Int, num_sectors::Int, sector_dims)
+    bx, by = sector_dims
+    kx = clamp(round(Int, sqrt(num_sectors*by/bx)), 1, max(num_sectors, 1))
+    return clamp(kx*bx, 1, num_wells)
+end
+
+"""
+    group_into_sectors_cartesian(xy, num_sectors; sector_dims = missing)
+
+Group the wells of a rectangular field, given by their positions `xy`, into
+sectors. The full rows of the field are tiled from the bottom up with blocks of
+`sector_dims = (nx, ny)` wells, by default the factor pair of the sector size
+closest to square. The remaining wells, at the top of the field (and to the
+right, if the field is not a whole number of blocks wide), are divided into the
+remaining sectors in column order. Within each sector, the wells are ordered
+column by column, alternating upwards and downwards.
+"""
 function group_into_sectors_cartesian(xy::AbstractMatrix, num_sectors::Int;
     sector_dims = missing)
-    # Divide the well field into a grid of roughly equal Cartesian blocks
-    # The order of the wells within a sector is done in a zigzag order, 
-    # where the first column is populated from the top, then the next column is populated 
-    # from the bottom etc. 
 
     n = size(xy, 2)
     cols = sort(unique(xy[1, :]))
     rows = sort(unique(xy[2, :]))
-    n_cols_total, n_rows_total = length(cols), length(rows)
+    col_index = Dict(x => j for (j, x) in enumerate(cols))
+    row_index = Dict(y => j for (j, y) in enumerate(rows))
+    ci = [col_index[xy[1, i]] for i in 1:n]
+    ri = [row_index[xy[2, i]] for i in 1:n]
 
-    # Split the rows and columns into bands, n_row_bands*n_col_bands =
-    # num_sectors, choosing the split that gives the most even number of wells
-    # per sector, and among those the one closest to square blocks
-    function band_split(n_row_bands, n_col_bands)
-        col_bands = equal_index_ranges(n_cols_total, n_col_bands)
-        row_bands = equal_index_ranges(n_rows_total, n_row_bands)
-        counts = [count(i -> cols[c0] <= xy[1, i] <= cols[c1] &&
-            rows[r0] <= xy[2, i] <= rows[r1], 1:n)
-            for (c0, c1) in col_bands for (r0, r1) in row_bands]
-        aspect = abs(log((n_rows_total/n_row_bands)/(n_cols_total/n_col_bands)))
-        return (maximum(counts) - minimum(counts), aspect), row_bands, col_bands
+    bx, by = rectangular_sector_dims(n ÷ num_sectors, sector_dims)
+    bx = min(bx, length(cols))
+    kx = length(cols) ÷ bx
+    # Blocks in a block row must be full; stop at the first block row that is
+    # not, or when the blocks would use up all the sectors
+    in_block(i, br, bc) = (br - 1)*by < ri[i] <= br*by && (bc - 1)*bx < ci[i] <= bc*bx
+    blocks = Vector{Vector{Int}}()
+    br = 1
+    while length(blocks) + kx <= num_sectors
+        row_blocks = [[i for i in 1:n if in_block(i, br, bc)] for bc in 1:kx]
+        all(b -> length(b) == bx*by, row_blocks) || break
+        append!(blocks, row_blocks)
+        br += 1
     end
-    if ismissing(sector_dims)
-        splits = [band_split(d, num_sectors ÷ d) for d in 1:num_sectors
-            if num_sectors % d == 0 && d <= n_rows_total && num_sectors ÷ d <= n_cols_total]
-        isempty(splits) && error("Cannot divide a $n_cols_total x $n_rows_total \
-            grid of wells into $num_sectors sectors.")
-        _, row_bands, col_bands = splits[argmin(first.(splits))]
-    else
-        # Blocks of sector_dims[1] columns and sector_dims[2] rows
-        length(sector_dims) == 2 && all(>(0), sector_dims) ||
-            error("sector_dims must be (nx, ny) with nx, ny > 0, got $sector_dims.")
-        bx, by = sector_dims
-        col_bands = [(c, min(c + bx - 1, n_cols_total)) for c in 1:bx:n_cols_total]
-        row_bands = [(r, min(r + by - 1, n_rows_total)) for r in 1:by:n_rows_total]
-        num_blocks = length(col_bands)*length(row_bands)
-        num_blocks == num_sectors || error("Blocks of $bx x $by wells divide \
-            the $n_cols_total x $n_rows_total grid of wells into $num_blocks \
-            sectors, but num_sectors = $num_sectors.")
+    in_blocks = falses(n)
+    for b in blocks
+        in_blocks[b] .= true
     end
+    remaining = findall(.!in_blocks)
+    if !isempty(remaining) && length(blocks) == num_sectors
+        # The remaining wells need a sector: merge them with the last block
+        append!(remaining, pop!(blocks))
+    end
+    num_rest = num_sectors - length(blocks)
+    num_rest <= length(remaining) || error("Cannot divide the $n wells into \
+        $num_sectors sectors with blocks of $bx x $by wells.")
 
-    sector_indices = Vector{Vector{Int}}()
-    for (c0, c1) in col_bands
-        band_cols = cols[c0:c1]
-        col_rank = Dict(xc => j for (j, xc) in enumerate(band_cols))
-        for (r0, r1) in row_bands
-            band_rows = rows[r0:r1]
-            idx = [i for i in 1:n if xy[1, i] in band_cols && xy[2, i] in band_rows]
-            idx = sort(idx, by = i -> (xy[1, i], iseven(col_rank[xy[1, i]]) ? -xy[2, i] : xy[2, i]))
-            push!(sector_indices, idx)
+    # Order the wells column by column, alternating upwards and downwards
+    zigzag(idx) = sort(idx, by = i -> (ci[i], isodd(ci[i]) ? ri[i] : -ri[i]))
+    sector_indices = [zigzag(b) for b in blocks]
+    remaining = zigzag(remaining)
+    if num_rest > 0
+        for (a, b) in equal_index_ranges(length(remaining), num_rest)
+            push!(sector_indices, remaining[a:b])
         end
     end
     return sector_indices
