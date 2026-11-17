@@ -249,12 +249,11 @@ fig
 
 # ## Comparison of the patterns
 # ### Temperature evolution in the reservoir
-# Next, we compare how thermal energy storage develops in the subsurface for
-# the three patterns. We examine the temperature distribution at the end of
-# each of the four charging periods to see how the thermal plume grows. For
-# better visualization, we only display cells below 50 m depth with
-# temperatures above 15°C (warmer than the natural ground temperature), seen
-# from above with x to the right and y upwards.
+# Next, we compare how thermal energy storage develops in the subsurface for the
+# three patterns. We examine the temperature distribution at the end of each of
+# the four charging periods to see how the thermal plume grows. For better
+# visualization, we only display cells below 50 m depth with, seen from above
+# with x to the right and y upwards.
 axis_args = (
     zreversed = true,
     aspect = :data,
@@ -295,13 +294,13 @@ fig
 # ### Charged and discharged energy
 # Finally, we compare how much energy each pattern stores and recovers. With
 # only 40 wells, the differences between the patterns are small; they become
-# larger for fields with more wells. The net
-# energy exchanged with the ground over a ministep of length Δt is
-# ``Δt \sum_w q_w h_w``, where ``q_w`` is the surface mass rate of well part
-# ``w`` (positive for injection) and ``h_w`` its specific enthalpy at the
-# surface. Summing over the charging steps of a cycle gives the charged energy,
-# and summing over the discharging steps gives the discharged energy (with
-# opposite sign). The ratio of the two is the recovery factor of the cycle.
+# larger for fields with more wells. The net energy exchanged with the ground
+# over a ministep of length Δt is ``Δt \sum_w q_w h_w``, where ``q_w`` is the
+# surface mass rate of well part ``w`` (positive for injection) and ``h_w`` its
+# specific enthalpy at the surface. Summing over the charging steps of a cycle
+# gives the charged energy, and summing over the discharging steps gives the
+# discharged energy (with opposite sign). The ratio of the two is the recovery
+# factor of the cycle.
 #
 # The substates hold the ministeps of each report step but the last, whose
 # state is the report state itself.
