@@ -144,7 +144,7 @@ end
 ##
 @testset "BTES topology" begin
 
-    kw = (num_wells = 6, num_sectors = 2, well_spacing = 5.0,
+    kw = (num_wells = 6, num_sectors = 2,
         depths = [0.0, 0.5, 50.0, 65.0], n_z = [1, 2, 1], n_xy = 2, num_years = 1)
 
     is_closed_loop(case) = [k for (k, m) in pairs(case.model.models)
@@ -152,8 +152,50 @@ end
     part_names(case, well) = closed_loop_well_names(case.model.models[well].data_domain)
 
     # ## Sectors in parallel, boreholes within each sector in series
-    # One closed-loop well per borehole, each sector fed at its first well
+    # Default: one closed-loop well per sector, with the boreholes in series
     case = btes(:sunflower; kw...)
+    @test case.input_data[:topology] == :sectors_parallel
+    @test length(is_closed_loop(case)) == kw.num_sectors
+    control = case.forces[1][:Facility].control
+    geo = tpfv_geometry(physical_representation(reservoir_model(case.model).data_domain))
+    for sno in 1:kw.num_sectors
+        name = Symbol("S$sno")
+        @test case.input_data[:sectors][name] == [name]
+        sup, ret = part_names(case, name)
+        @test control[sup].target isa TotalRateTarget
+        @test control[ret] isa ProducerControl
+        well_model = case.model.models[name]
+        well = well_model.domain.representation
+        N = well.neighborship
+        boreholes = well_model.data_domain[:borehole, Cells()]
+        nb = maximum(boreholes)
+        @test sort(unique(boreholes[1:end-1])) == collect(1:nb)
+        # Fluid enters the first borehole and leaves the last one
+        @test boreholes[1] == 1
+        @test boreholes[well.end_nodes[1]] == nb
+        # Consecutive boreholes are connected by a resistance-free surface
+        # pipe that carries flow. The last segment connects the return part.
+        connectors = [j for j in 1:size(N, 2) - 1
+            if boreholes[N[1, j]] != boreholes[N[2, j]]]
+        @test length(connectors) == nb - 1
+        @test all(boreholes[N[2, j]] == boreholes[N[1, j]] + 1 for j in connectors)
+        @test all(!JutulDarcy.well_segment_is_closed(well.segment_models[j]) for j in connectors)
+        @test all(case.parameters[name][:SegmentLength][connectors] .== 0.0)
+        # Perforations pair well nodes with reservoir cells at the same depth
+        perfs = 1:well.num_perforations - 1
+        z_well = well_model.data_domain[:cell_centroids, Cells()][3, well.perforations.self[perfs]]
+        z_reservoir = geo.cell_centroids[3, well.perforations.reservoir[perfs]]
+        @test z_well ≈ z_reservoir
+    end
+    simulate_reservoir(case[1:1])
+    # A sector modelled as a single well cannot be fed from its last borehole
+    @test_throws ErrorException btes(:sunflower; reversed_discharge = true, kw...)
+    @test_throws ErrorException btes(:sunflower; well_grouping = :nonsense, kw...)
+    @test_throws ErrorException btes(:sunflower; topology = :sectors_series,
+        well_grouping = :borehole, kw...)
+
+    # One closed-loop well per borehole, each sector fed at its first well
+    case = btes(:sunflower; well_grouping = :borehole, kw...)
     @test case.input_data[:topology] == :sectors_parallel
     @test length(is_closed_loop(case)) == kw.num_wells
     @test length(well_symbols(case.model)) == 2*kw.num_wells
@@ -250,4 +292,43 @@ end
 
     @test_throws ErrorException btes(:sunflower; topology = :nonsense, kw...)
 
+end
+
+##
+@testset "BTES well patterns" begin
+    field_wells(field) = vcat(field...)
+    xy(field) = hcat([w[1:2, 1] for w in field_wells(field)]...)
+    r_max(field) = maximum(sqrt.(sum(xy(field).^2, dims = 1)))
+    for pattern in (:sunflower, :circular, :rectangular)
+        size_kw = pattern == :rectangular ? (extent = (20.0, 10.0),) : (radius = 20.0,)
+        # The number of wells is honored exactly, with and without a field size
+        for N in (1, 7, 17, 37)
+            for kw in ((num_wells = N,), (num_wells = N, size_kw...))
+                field, s = Fimbul.btes_well_field(pattern; num_sectors = 3, kw...)
+                @test length(field_wells(field)) == N
+                @test s > 0
+            end
+        end
+        # A field size and a spacing give the number of wells, which fit
+        # within the field
+        field, s = Fimbul.btes_well_field(pattern; well_spacing = 4.0, size_kw...)
+        @test s == 4.0
+        if pattern == :rectangular
+            span = maximum(xy(field), dims = 2) - minimum(xy(field), dims = 2)
+            @test all(span .<= [20.0, 10.0] .+ 1e-8)
+        else
+            @test r_max(field) <= 20.0 + 1e-8
+        end
+        # Defaults: 48 wells at 5 m spacing
+        field, s = Fimbul.btes_well_field(pattern)
+        @test length(field_wells(field)) == 48
+        @test s == 5.0
+        # The number of wells and the spacing cannot both be given
+        @test_throws ErrorException Fimbul.btes_well_field(pattern;
+            num_wells = 10, well_spacing = 5.0)
+    end
+    # The field size matches the pattern
+    @test_throws ErrorException Fimbul.btes_well_field(:rectangular; radius = 10.0)
+    @test_throws ErrorException Fimbul.btes_well_field(:sunflower; extent = (10.0, 10.0))
+    @test_throws ErrorException Fimbul.btes_well_field(:polygonal)
 end

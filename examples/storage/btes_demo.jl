@@ -23,10 +23,11 @@ case = btes(num_wells = 48, depths = [0.0, 0.5, 100, 125],
 # ### Visualize BTES system layout
 # The 48 BTES wells are arranged in a pattern that ensures approximately equal
 # spacing between wells. The wells are organized into 6 sectors of 8 wells
-# each. During charging, water is injected at 0.5 l/s into the innermost well of
-# each sector and flows sequentially through all wells in series to the
-# outermost well. During discharging, the flow direction reverses, with water
-# flowing from the outermost well back to the innermost well.
+# each. Water is injected at 0.5 l/s into the innermost well of each sector and
+# flows sequentially through all wells in series to the outermost well. Each
+# sector is modelled as a single closed-loop well holding its boreholes in
+# series, which is much faster to simulate than one well per borehole
+# (`well_grouping = :borehole`).
 msh = physical_representation(reservoir_model(case.model).data_domain)
 fig = Figure(size = (800, 800))
 axis_args = (
@@ -154,15 +155,19 @@ function plot_btes_temperature(ax, sector, timesteps)
     out = []
     for (sno, step) in enumerate(timesteps)
         label = String("$(round((time[step]),digits=1)) days")
-        for (wno, well) in enumerate(sectors[Symbol("S$sector")])
-            lbl = wno == 1 ? label : nothing
-            T = results.result.states[step][well][:Temperature]
-            T = convert_from_si.(T, :Celsius)
-            ## Plot the pipe nodes (one per perforation) of the supply part
-            supply = get_model_wells(case.model)[first(closed_loop_well_names(case.model.models[well].data_domain))]
-            num_nodes = length(supply.perforations.reservoir)
+        ## The sector is a single well, with the borehole of each node given
+        ## by the `borehole` field. Plot the pipe nodes of each borehole.
+        well = only(sectors[Symbol("S$sector")])
+        d = case.model.models[well].data_domain
+        borehole, tag = d[:borehole, Cells()], d[:tag, Cells()]
+        T = results.result.states[step][well][:Temperature]
+        T = convert_from_si.(T, :Celsius)
+        for b in 1:maximum(borehole)
+            lbl = b == 1 ? label : nothing
+            nodes = findall(i -> borehole[i] == b &&
+                tag[i] in (:pipe_left, :pipe_right), eachindex(borehole))
             plot_mswell_values!(ax, case.model, well, T;
-            nodes = 1:num_nodes, geo = geo, color = colors[sno], linewidth = 6, label = lbl)
+            nodes = nodes, geo = geo, color = colors[sno], linewidth = 6, label = lbl)
         end
     end
 end
@@ -184,8 +189,8 @@ plot_btes_temperature(ax, sector, 1:stop)
 Legend(fig[1,2], ax; fontsize = 20)
 
 # ### Temperature evolution during the first discharging cycle
-# Next, we show how stored thermal energy is extracted as flow direction
-# reverses, with water flowing from the outermost to the innermost well.
+# Next, we show how stored thermal energy is extracted as cold water flows
+# through the sector, again from the innermost to the outermost well.
 well = first(closed_loop_well_names(case.model.models[sectors[Symbol("S$sector")][end]].data_domain))
 T_dch = convert_to_si(10.0, :Celsius)
 is_discharge = [f[:Facility].control[well].temperature == T_dch for f in case.forces]

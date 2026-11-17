@@ -5,12 +5,18 @@
 Setup function for borehole thermal energy storage (BTES) system.
 
 The first form places the wells using one of the built-in patterns. The second
-form takes an explicit well field, and does not accept `num_sides`, `num_wells`
-or `num_sectors`, since the placement and grouping are given by `field` itself.
+form takes an explicit well field, and does not accept the pattern arguments
+(`num_wells`, `radius`, `extent` and `num_sectors`), since the placement and
+grouping are given by `field` itself.
 
 # Arguments
-- `pattern = :sunflower`: Well placement pattern. One of `:sunflower`,
-  `:rectangular`, `:circular` or `:polygonal`.
+- `pattern = :sunflower`: Well placement pattern.
+  - `:sunflower`: Fibonacci spiral, with the outermost well at distance
+    `radius` from the center.
+  - `:circular`: a center well surrounded by concentric rings, with the
+    outermost ring at distance `radius` from the center.
+  - `:rectangular`: rows of wells, with the outermost wells spanning at most
+    `extent = (Lx, Ly)`. The last row is partly filled if needed.
 - `field`: Explicit wells for the system, given using the following structure:
   - A full field is represented as `[sector_1, sector_2, ..., sector_n]`.
   - `sector_k` contains all wells in sector `k`, represented as
@@ -24,14 +30,19 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
   case of a field with a single sector containing a single well.
 
 # Keyword arguments
-- `num_sides = 6`: Number of sides of the polygon when `pattern = :polygonal`.
-  Only used with the `pattern` form.
-- `num_wells = 48`: Number of wells in the BTES system. Only used with the
+- `num_wells`, `well_spacing`: Number of wells, and horizontal spacing between
+  neighboring wells [m]. Give at most one of them: the other follows from the
+  field size (`radius` or `extent`). Without a field size, the missing one
+  defaults to `num_wells = 48` or `well_spacing = 5.0`, and the field size
+  follows. With the `field` form, `well_spacing = 5.0` only sets the horizontal
+  mesh resolution.
+- `radius`: Field size for `:sunflower` and `:circular` [m]. Only used with the
   `pattern` form.
-- `num_sectors = 6`: Number of sectors in the BTES system. The system is
-  divided into equal circle sectors, and all wells in each sector are coupled in
-  series. Only used with the `pattern` form.
-- `well_spacing = 5.0`: Horizontal spacing between wells [m].
+- `extent`: Field size `(Lx, Ly)` for `:rectangular` [m]. Only used with the
+  `pattern` form.
+- `num_sectors = 6`: Number of sectors in the BTES system. The field is divided
+  into equal circle sectors (`:sunflower`, `:circular`) or a grid of blocks
+  (`:rectangular`). Only used with the `pattern` form.
 - `depths = [0.0, 0.5, 50, 65]`: Depths delineating geological layers [m].
 - `well_layers = [2]`: Layers in which the wells are perforated. Layer 1 is the
   insulation cover; the pipes pass through it but exchange nothing with it, so
@@ -49,21 +60,34 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
   - `:sectors_parallel`: the sectors are operated in parallel, and the
     boreholes within each sector are coupled in series. Each sector receives
     `rate_charge`, so the field circulates `num_sectors*rate_charge` in total.
-    Each borehole is its own closed-loop well `B<n>`, controlled as
-    `B<n>_supply` and `B<n>_return` (see [`closed_loop_well_names`](@ref)).
+    How the boreholes are represented is set by `well_grouping`.
   - `:sectors_series`: the sectors are coupled in series, and the boreholes
     within each sector are coupled in parallel off a shared wellhead. The field
     circulates `rate_charge` in total, or `rate_charge/wells_per_sector` per
     borehole on average. Each sector is a single closed-loop well `S<n>`,
     controlled as `S<n>_supply` and `S<n>_return`, holding all its boreholes
-    between a shared inlet and a shared outlet node. The split between the boreholes is resolved from
-    wellbore friction, while the manifold itself is treated as resistance-free.
-    Per-borehole results are reached through the `borehole` field of the well
-    domain, since a sector rather than a borehole is the unit of well output.
+    between a shared inlet and a shared outlet node. The split between the
+    boreholes is resolved from wellbore friction, while the manifold itself is
+    treated as resistance-free.
+- `well_grouping = :sector`: Wells representing the boreholes when
+  `topology = :sectors_parallel`.
+  - `:sector`: each sector is a single closed-loop well `S<n>`, controlled as
+    `S<n>_supply` and `S<n>_return`, with the boreholes connected in series
+    within the well. The surface pipes between the boreholes are treated as
+    resistance-free.
+  - `:borehole`: each borehole is its own closed-loop well `B<n>`, controlled
+    as `B<n>_supply` and `B<n>_return` (see [`closed_loop_well_names`](@ref)).
+    Each borehole is fed by the return of the previous one with a
+    `ReinjectionTarget`. Use this to control individual boreholes, e.g. to
+    operate only some of them.
+  With a single well per sector, per-borehole results are reached through the
+  `borehole` field of the well domain.
 - `reversed_discharge = false`: During charging, flow runs from the first to the
   last well in each sector, or from the first to the last sector when
   `topology = :sectors_series`. If `reversed_discharge = false`, discharge uses
-  the same direction as charge. If `true`, discharge flow is reversed.
+  the same direction as charge. If `true`, discharge flow is reversed, which
+  requires separate wells per borehole within a sector
+  (`well_grouping = :borehole`) or `topology = :sectors_series`.
 - `temperature_surface = 10 °C/283.15 K`: Temperature at the surface [K].
 - `num_years = 4`: Number of years to run the simulation.
 - `charge_period = ["June", "September"]`: Period during which the system is charged.
@@ -79,10 +103,11 @@ or `num_sectors`, since the placement and grouping are given by `field` itself.
 """
 function btes(
     pattern::Symbol = :sunflower;
-    num_sides = 6,
-    num_wells = 48,
+    num_wells = missing,
+    well_spacing = missing,
+    radius = missing,
+    extent = missing,
     num_sectors = 6,
-    well_spacing = 5.0,
     depths = [0.0, 0.5, 50, 65],
     well_layers = [2],
     density = [30, 2580, 2580]*kilogram/meter^3,
@@ -96,6 +121,7 @@ function btes(
     rate_discharge = rate_charge,
     reversed_discharge = false,
     topology = :sectors_parallel,
+    well_grouping = :sector,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 4,
     charge_period = ["June", "September"],
@@ -107,19 +133,12 @@ function btes(
     mesh_args = NamedTuple(),
     )
 
-    if pattern == :sunflower
-        field = sunflower_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
-    elseif pattern == :rectangular
-        field = rectangular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
-    elseif pattern == :circular
-        field = circular_pattern(num_wells, well_spacing; num_sectors = num_sectors, depths = depths)
-    elseif pattern == :polygonal
-        field = polygonal_pattern(num_wells, well_spacing, num_sides; num_sectors = num_sectors, depths = depths)
-    else
-        error("Unknown pattern: $pattern. Supported patterns are :sunflower, :rectangular, :circular and :polygonal.")
-    end
+    field, well_spacing = btes_well_field(pattern;
+        num_wells = num_wells, well_spacing = well_spacing,
+        radius = radius, extent = extent,
+        num_sectors = num_sectors, depths = depths)
 
-    return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,
+    return btes(field; well_spacing = well_spacing,depths = depths,well_layers = well_layers,topology = topology,well_grouping = well_grouping,
     density = density, thermal_conductivity = thermal_conductivity,heat_capacity = heat_capacity,permeability = permeability,
     geothermal_gradient = geothermal_gradient,temperature_charge = temperature_charge,temperature_discharge = temperature_discharge,
     rate_charge = rate_charge,rate_discharge = rate_discharge,reversed_discharge = reversed_discharge,temperature_surface = temperature_surface,num_years = num_years,charge_period = charge_period,
@@ -143,6 +162,7 @@ function btes(
     rate_discharge = rate_charge,
     reversed_discharge = false,
     topology = :sectors_parallel,
+    well_grouping = :sector,
     temperature_surface = convert_to_si(10.0, :Celsius),
     num_years = 4,
     charge_period = ["June", "September"],
@@ -157,6 +177,21 @@ function btes(
     topology in (:sectors_parallel, :sectors_series) ||
         error("Unknown topology: $topology. Supported topologies are \
             :sectors_parallel and :sectors_series.")
+    well_grouping in (:sector, :borehole) ||
+        error("Unknown well_grouping: $well_grouping. Supported values are \
+            :sector and :borehole.")
+    if topology == :sectors_series && well_grouping == :borehole
+        error("well_grouping = :borehole is only supported with topology = \
+            :sectors_parallel. With :sectors_series, the boreholes of a sector \
+            share a single well.")
+    end
+    # A single well per sector is fed at its first borehole
+    single_series_well = topology == :sectors_parallel && well_grouping == :sector
+    if single_series_well && reversed_discharge && any(sector -> length(sector) > 1, field)
+        error("reversed_discharge = true requires well_grouping = :borehole \
+            when topology = :sectors_parallel, since a sector modelled as a \
+            single well is always fed at its first borehole.")
+    end
 
     well_coords_3d = vcat(field...)
     num_wells = length(well_coords_3d)
@@ -186,7 +221,7 @@ function btes(
     hxy_min = metrics.hxy_min
     well_models = []
     well_names = Symbol[]
-    manifold_segments = Vector{Vector{Int}}()
+    surface_segments_per_well = Vector{Vector{Int}}()
     nl = length(layers)
     geo = tpfv_geometry(mesh)
 
@@ -197,7 +232,7 @@ function btes(
         return cells
     end
 
-    if topology == :sectors_parallel
+    if topology == :sectors_parallel && well_grouping == :borehole
         # One closed-loop well per borehole
         for (wno, wc) in enumerate(well_coords_3d)
             name = Symbol("B$wno")
@@ -208,14 +243,20 @@ function btes(
             push!(well_names, name)
         end
     else
-        # One closed-loop well per sector, with the boreholes of the sector hung
-        # in parallel between a shared inlet and a shared outlet node
+        # One closed-loop well per sector, with the boreholes of the sector in
+        # series, or hung in parallel between a shared inlet and outlet node
         for (sno, sector) in enumerate(field)
             name = Symbol("S$sno")
             println("Adding sector $name ($sno/$(length(field))) with \
                 $(length(sector)) wells")
             cells = [trajectory_cells(wc) for wc in sector]
-            disc = discretize_closed_loop_u1_manifold(cells, geo.cell_centroids)
+            if topology == :sectors_parallel
+                disc = discretize_closed_loop_u1_series(cells, geo.cell_centroids)
+                surface_segments = disc.connector_segments
+            else
+                disc = discretize_closed_loop_u1_manifold(cells, geo.cell_centroids)
+                surface_segments = disc.manifold_segments
+            end
             well = setup_btes_well(domain, disc.reservoir_cells;
                 name                  = name,
                 closed_loop_type      = :u1,
@@ -229,7 +270,7 @@ function btes(
                 borehole              = disc.borehole)
             push!(well_models, well)
             push!(well_names, name)
-            push!(manifold_segments, disc.manifold_segments)
+            push!(surface_segments_per_well, surface_segments)
         end
     end
 
@@ -267,7 +308,7 @@ function btes(
     bc_cells = geo.boundary_neighbors[.!bottom]
     bc = flow_boundary_condition(bc_cells, domain, p(z_hat), T(z_hat));
 
-    if topology == :sectors_parallel
+    if topology == :sectors_parallel && well_grouping == :borehole
         # Group closed-loop wells by sector, preserving the order given in `field`
         wells_per_sector = Vector{Vector{Symbol}}()
         wtot = 0
@@ -275,6 +316,9 @@ function btes(
             push!(wells_per_sector, well_names[wtot .+ (1:length(sector))])
             wtot += length(sector)
         end
+    elseif topology == :sectors_parallel
+        # One well per sector, each fed on its own
+        wells_per_sector = [[name] for name in well_names]
     else
         # A single chain running through the sectors, in the order given in `field`
         wells_per_sector = [copy(well_names)]
@@ -283,9 +327,8 @@ function btes(
         model, wells_per_sector,
         rate_charge, rate_discharge, temperature_charge, temperature_discharge;
         reversed_discharge = reversed_discharge);
-    if topology == :sectors_series
-        # setup_controls saw one chain, and so returned a single group. Restore
-        # one entry per sector, each holding the closed-loop well of the sector.
+    if topology == :sectors_series || well_grouping == :sector
+        # One entry per sector, each holding the closed-loop well of the sector
         sectors = Dict(Symbol("S$sno") => [name]
             for (sno, name) in enumerate(well_names))
     end
@@ -312,13 +355,14 @@ function btes(
 
     # ## Set parameters
     parameters = nothing
-    if topology == :sectors_series
-        # The manifold is treated as resistance-free: its segment lengths, which
-        # would otherwise be the distance from the wellhead to each borehole,
-        # are set to zero so that node placement does not bias the flow split.
+    if !isempty(surface_segments_per_well)
+        # The surface pipes (the manifold, or the connections between boreholes
+        # in series) are treated as resistance-free: their segment lengths,
+        # which would otherwise follow from the node positions, are set to zero
+        # so that node placement does not affect the flow.
         parameters = setup_parameters(model)
-        for (sno, segments) in enumerate(manifold_segments)
-            parameters[Symbol("S$sno")][:SegmentLength][segments] .= 0.0
+        for (name, segments) in zip(well_names, surface_segments_per_well)
+            parameters[name][:SegmentLength][segments] .= 0.0
         end
     end
 
@@ -337,72 +381,157 @@ end
 
 # ## Patterns
 #
-# Each pattern function takes the number of wells and the approximate
-# spacing between neighboring wells, and returns a full field
+# Each pattern is set by the number of wells `N`, the spacing `s` between
+# neighboring wells and the field size, of which exactly two are given. The
+# third is computed, and the full field is returned along with the spacing.
 
-function sunflower_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
-    xy = fibonacci_pattern_2d(num_wells; spacing = spacing)
-    return field_from_points(:angular,xy, num_sectors, depths)
-end
+"""
+    btes_well_field(pattern = :sunflower; num_wells = missing, well_spacing = missing,
+        radius = missing, extent = missing, num_sectors = 6, depths = [0.0, 0.5, 50, 65])
 
-function rectangular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
-    nx = max(1, round(Int, sqrt(num_wells)))
-    ny = ceil(Int, num_wells/nx)
-    xs = ((0:nx-1) .- (nx-1)/2).*spacing
-    ys = ((0:ny-1) .- (ny-1)/2).*spacing
-    xy = Matrix{Float64}(undef, 2, nx*ny)
-    k = 0
-    for y in ys, x in xs
-        k += 1
-        xy[:, k] = [x, y]
+Well field for [`btes`](@ref) with a built-in pattern, returned as
+`(field, well_spacing)`. See [`btes`](@ref) for the patterns and how the number
+of wells, the spacing and the field size are set.
+"""
+function btes_well_field(pattern::Symbol = :sunflower;
+    num_wells = missing,
+    well_spacing = missing,
+    radius = missing,
+    extent = missing,
+    num_sectors = 6,
+    depths = [0.0, 0.5, 50, 65],
+    )
+    ismissing(num_wells) || ismissing(well_spacing) ||
+        error("Give either num_wells or well_spacing, not both. The other \
+            follows from the field size (radius or extent).")
+    if pattern in (:sunflower, :circular)
+        ismissing(extent) || error("extent is only used with the :rectangular \
+            pattern. Use radius to set the size of a :$pattern field.")
+        field_size = radius
+    elseif pattern == :rectangular
+        ismissing(radius) || error("radius is not used with the :rectangular \
+            pattern. Use extent = (Lx, Ly) to set the size of the field.")
+        field_size = extent
+    else
+        error("Unknown pattern: $pattern. Supported patterns are :sunflower, \
+            :rectangular and :circular.")
     end
-    xy = xy[:, 1:num_wells]
-    return field_from_points(:cartesian,xy, num_sectors, depths)
+    if ismissing(field_size)
+        ismissing(num_wells) && (num_wells = 48)
+        ismissing(well_spacing) && (well_spacing = 5.0)
+    elseif ismissing(num_wells) && ismissing(well_spacing)
+        well_spacing = 5.0
+    end
+    ismissing(num_wells) || num_wells >= 1 ||
+        error("num_wells must be at least 1, got $num_wells.")
+    ismissing(well_spacing) || well_spacing > 0 ||
+        error("well_spacing must be positive, got $well_spacing.")
+
+    if pattern == :sunflower
+        xy, well_spacing = sunflower_pattern(num_wells, well_spacing, field_size)
+        division = :angular
+    elseif pattern == :circular
+        xy, well_spacing = circular_pattern(num_wells, well_spacing, field_size)
+        division = :angular
+    else
+        xy, well_spacing = rectangular_pattern(num_wells, well_spacing, field_size)
+        division = :cartesian
+    end
+    size(xy, 2) >= 1 || error("No wells fit in a :$pattern field of size \
+        $field_size with spacing $well_spacing.")
+    field = field_from_points(division, xy, min(num_sectors, size(xy, 2)), depths)
+    return (field, Float64(well_spacing))
 end
 
-function circular_pattern(num_wells, spacing; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
-    points = Vector{Vector{Float64}}()
-    push!(points, [0.0, 0.0])
+# Outermost radius of a sunflower pattern with N wells at spacing s. The
+# distance between the innermost wells, which sets the spacing, scales as
+# 1/sqrt(N) for a fixed outer radius.
+function sunflower_radius(N, s)
+    N == 1 && return 0.0
+    xy = fibonacci_pattern_2d(N; spacing = s)
+    return maximum(sqrt.(xy[1, :].^2 .+ xy[2, :].^2))
+end
+
+function sunflower_pattern(N, s, R)
+    if ismissing(N)
+        # Largest number of wells that fits within R
+        c = sunflower_radius(2, s)/sqrt(2)
+        N = max(1, floor(Int, (R/c)^2*(1 + 1e-10)))
+    elseif ismissing(s)
+        N == 1 && return (zeros(2, 1), Float64(R))
+        s = R/sunflower_radius(N, 1.0)
+    end
+    N == 1 && return (zeros(2, 1), Float64(s))
+    return (fibonacci_pattern_2d(N; spacing = s), Float64(s))
+end
+
+# Number of wells on ring k of the circular pattern, where the ring radius is k
+# spacings. The count does not depend on the spacing itself.
+circular_ring_size(k) = max(1, round(Int, 2π*k))
+
+function circular_pattern(N, s, R)
+    if ismissing(N)
+        K = floor(Int, R/s*(1 + 1e-10))
+        N = 1 + sum(circular_ring_size, 1:K; init = 0)
+    elseif ismissing(s)
+        # The number of rings is fixed by N, so the outer ring sets the spacing
+        K, n = 0, 1
+        while n < N
+            K += 1
+            n += circular_ring_size(K)
+        end
+        s = K == 0 ? Float64(R) : R/K
+    end
+    points = [[0.0, 0.0]]
     ring = 1
-    while length(points) < num_wells
-        r = ring*spacing
-        n_ring = min(max(1, round(Int, 2π*r/spacing)), num_wells - length(points))
+    while length(points) < N
+        r = ring*s
+        n_ring = min(circular_ring_size(ring), N - length(points))
         for k in 0:n_ring-1
             θ = 2π*k/n_ring
             push!(points, [r*cos(θ), r*sin(θ)])
         end
         ring += 1
     end
-    xy = hcat(points...)
-    return field_from_points(:angular,xy, num_sectors, depths)
+    return (hcat(points...), Float64(s))
 end
 
-function polygonal_pattern(num_wells, spacing, num_sides; num_sectors = 6, depths = [0.0, 0.5, 50, 65])
-    # Regular polygon with an area roughly matching num_wells points at the
-    # given spacing
-    R = sqrt(2*num_wells*spacing^2/(num_sides*sin(2π/num_sides)))
-    θ = range(0.0, 2π, length = num_sides + 1)[1:num_sides]
-    polygon = vcat((R*cos.(θ))', (R*sin.(θ))')
-
-    # Build a rectangular grid covering the polygon with some margin, and
-    # keep only the points that fall inside it
-    margin = 1.2
-    nxy = 2*ceil(Int, margin*R/spacing) + 1
-    xs = ((0:nxy-1) .- (nxy-1)/2).*spacing
-    xy = Matrix{Float64}(undef, 2, nxy^2)
+function rectangular_pattern(N, s, extent)
+    if !ismissing(extent)
+        length(extent) == 2 && all(>=(0), extent) ||
+            error("extent must be (Lx, Ly) with Lx, Ly ≥ 0, got $extent.")
+        Lx, Ly = extent
+        counts(s) = (floor(Int, Lx/s*(1 + 1e-10)) + 1, floor(Int, Ly/s*(1 + 1e-10)) + 1)
+        if ismissing(N)
+            nx, ny = counts(s)
+            N = nx*ny
+        else
+            # Largest spacing that fits N wells. The count only changes where
+            # a whole number of spacings fits Lx or Ly, so those are the
+            # candidates.
+            candidates = filter(>(0), vcat(Lx./(1:N), Ly./(1:N)))
+            candidates = filter(c -> prod(counts(c)) >= N, candidates)
+            if isempty(candidates)
+                N == 1 || error("extent $extent has no room for $N wells.")
+                s = 1.0
+            else
+                s = maximum(candidates)
+            end
+            nx, ny = counts(s)
+        end
+    else
+        nx = max(1, round(Int, sqrt(N)))
+        ny = ceil(Int, N/nx)
+    end
+    xs = ((0:nx-1) .- (nx-1)/2).*s
+    ys = ((0:ny-1) .- (ny-1)/2).*s
+    xy = Matrix{Float64}(undef, 2, nx*ny)
     k = 0
-    for y in xs, x in xs
+    for y in ys, x in xs
         k += 1
         xy[:, k] = [x, y]
     end
-    xy = xy[:, points_in_polygon(xy, polygon)]
-
-    # Keep the num_wells points closest to the center
-    r = sqrt.(xy[1,:].^2 .+ xy[2,:].^2)
-    order = sortperm(r)[1:min(num_wells, size(xy, 2))]
-    xy = xy[:, order]
-
-    return field_from_points(:angular,xy, num_sectors, depths)
+    return (xy[:, 1:N], Float64(s))
 end
 
 # Controls for the closed-loop wells in `wells_per_sector`, where the wells of
