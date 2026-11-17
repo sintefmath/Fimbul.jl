@@ -172,13 +172,17 @@ end
 charge_ranges = step_ranges(is_charge)
 discharge_ranges = step_ranges(is_discharge)
 
-# ## Results for the sunflower pattern
-# ### Interactive visualization of results
+# ## Results for a single pattern
 # We first plot the temperature distribution in the reservoir and well
-# performance over time for the sunflower pattern. The reservoir plot shows the
-# thermal plumes developed around each well sector, while the well results show
-# the temperature and flow rate evolution throughout the simulation.
-case, result = cases[:sunflower], results[:sunflower]
+# performance over time for one of the patterns, here the sunflower pattern
+# (set `case_name` to `:sunflower`, `:circular` or `:rectangular`). The
+# reservoir plot shows the thermal plumes developed around each well sector,
+# while the well results show the temperature and flow rate evolution
+# throughout the simulation.
+case_name = :sunflower
+case, result = cases[case_name], results[case_name];
+
+# ### Interactive visualization of reservoir results
 plot_reservoir(case.model, result.states;
     well_fontsize = 0,
     key = :Temperature,
@@ -224,7 +228,7 @@ end
 
 # #### Temperature evolution during the first charging cycle
 # We first visualize how thermal energy propagates through the wellbore network
-# as hot water flows from the innermost to the outermost well in the sector.
+# as hot water flows from the first to the last well of the sector.
 fig = Figure(size = (1000, 750))
 sector = 1
 ax = Axis(fig[1, 1]; title = "Temperature evolution, sector $sector (charging)",
@@ -234,8 +238,8 @@ Legend(fig[1,2], ax; fontsize = 20)
 
 # #### Temperature evolution during the first discharging cycle
 # Next, we show how stored thermal energy is extracted as cold water flows
-# through the sector in the opposite direction, from the outermost to the
-# innermost well.
+# through the sector in the opposite direction, from the last to the first
+# well.
 ax = Axis(fig[2, 1]; title = "Temperature evolution, sector $sector (discharging)",
 xlabel = "T [°C]", ylabel = "Depth [m]", yreversed = true)
 plot_btes_temperature(ax, case, result, sector, discharge_ranges[1])
