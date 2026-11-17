@@ -1,38 +1,44 @@
+"""
+    fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
+
+Points in a sunflower (Vogel spiral) pattern, returned as a `2 x num_points`
+matrix. Point `n` is placed at angle `n*Δθ`, with `Δθ = 2π/φ^2` and `φ` the
+golden ratio, and at radius `radius*sqrt((n - 1/2)/(num_points - 1/2))`. The
+half-step offset closes the gap that otherwise forms at the center of the
+pattern. Points `F` apart in this order, for a Fibonacci number `F`, lie on a
+spiral ("spine") through the pattern.
+
+The pattern is scaled either by `spacing`, the median distance from a point to
+its nearest neighbor, or by `radius`, the distance from the center to the
+outermost point. A single point is placed at the origin.
+"""
 function fibonacci_pattern_2d(num_points; spacing = 5.0, radius = missing)
-    
-    # Define coordinate function using golden ratio
     N = num_points
-    φ = (1 + sqrt(5))/2 # ≈ golden ratio
-    Δθ = 2*π/φ^2
-    
-    # Generate points as matrix (2×N)
+    N >= 1 || error("num_points must be at least 1, got $N")
+    Δθ = 2π/Base.MathConstants.golden^2
     points = Matrix{Float64}(undef, 2, N)
-    
     for n = 1:N
-        r_n = sqrt(n/N)
-        θ_n = n * Δθ
-        points[1, n] = r_n * cos(θ_n)
-        points[2, n] = r_n * sin(θ_n)
+        r_n = N == 1 ? 0.0 : sqrt((n - 0.5)/(N - 0.5))
+        θ_n = n*Δθ
+        points[1, n] = r_n*cos(θ_n)
+        points[2, n] = r_n*sin(θ_n)
     end
-    
-    # Set radius from spacing if not provided
     if !ismissing(spacing)
-        @assert ismissing(radius) "Please provide either radius or spacing"
-        # Calculate spacing between first two points
-        p1 = points[:, 1]
-        p2 = points[:, 2]
-        current_spacing = norm(p1 - p2)
-        radius = 1.3513 * spacing / current_spacing
+        ismissing(radius) || error("Please provide either radius or spacing")
+        N == 1 && return points
+        scale = spacing/median(nearest_neighbor_distances(points))
     elseif !ismissing(radius)
-        @assert ismissing(spacing) "Please provide either radius or spacing"
+        scale = radius
     else
-        radius = 1.0
+        scale = 1.0
     end
-    
-    # Scale points by radius
-    points .*= radius
-    
-    return points
+    return points.*scale
+end
+
+# Distance from each column of x to its nearest neighbor among the others
+function nearest_neighbor_distances(x::AbstractMatrix)
+    n = size(x, 2)
+    return [minimum(norm(x[:, i] - x[:, j]) for j in 1:n if j != i) for i in 1:n]
 end
 
 function get_convex_hull(points::AbstractMatrix, tol = eps(Float64))
@@ -277,12 +283,117 @@ function field_from_points(sector_division::Symbol,xy::AbstractMatrix, num_secto
     elseif sector_division == :sequential
         # Consecutive groups of wells, in the order given
         sector_indices = [collect(a:b) for (a, b) in equal_index_ranges(num_wells, num_sectors)]
+    elseif sector_division == :spiral
+        # Bundles of sunflower spines, with the wells in sunflower order
+        sector_indices = group_into_sectors_spiral(num_wells, num_sectors)
     else
         error("Unknown sector division: $sector_division")
     end
 
     return [well_coords[idx] for idx in sector_indices]
 
+end
+
+"""
+    group_into_sectors_spiral(num_wells, num_sectors)
+
+Group the points of a sunflower pattern (see [`fibonacci_pattern_2d`](@ref)),
+given in sunflower order, into sectors made of adjacent spines. Points `F`
+apart lie on the same spine, for a Fibonacci number `F`, so that a family of
+`F` spines holds all points. The spines are ordered counter-clockwise and split
+into `num_sectors` bundles of adjacent spines with as equal a number of points
+as possible. Within a bundle, the points are ordered from the center
+outwards: the first point of each spine, counter-clockwise, then the second
+point of each spine, and so on.
+
+The spine family is chosen among the Fibonacci numbers `num_sectors ≤ F ≤
+num_wells/2` to give the most even sectors, and among those the family whose
+spines connect the nearest points.
+"""
+function group_into_sectors_spiral(num_wells::Int, num_sectors::Int)
+    N = num_wells
+    num_sectors <= N || error("Cannot divide $N wells into $num_sectors sectors.")
+    num_sectors == 1 && return [collect(1:N)]
+    Δθ = 2π/Base.MathConstants.golden^2
+    unit_points = fibonacci_pattern_2d(N; spacing = missing, radius = 1.0)
+    # Candidate spine families
+    fib = [1, 2]
+    while fib[end] < N
+        push!(fib, fib[end] + fib[end-1])
+    end
+    candidates = filter(F -> num_sectors <= F <= max(num_sectors, N ÷ 2), unique(fib))
+    isempty(candidates) && (candidates = [num_sectors])
+    best = nothing
+    for F in candidates
+        # Spines j = 1, ..., F hold the points j, j + F, j + 2F, ...
+        spines = [collect(j:F:N) for j in 1:F]
+        # Counter-clockwise order of the spines, compared at a common position
+        # along the spiral: spine j turns by δ for every step of F points
+        δ = mod(F*Δθ + π, 2π) - π
+        φ = [mod(j*Δθ - δ*j/F, 2π) for j in 1:F]
+        order = sortperm(φ)
+        counts = length.(spines[order])
+        # Split the spines into contiguous bundles, trying every starting spine
+        for start in 0:F-1
+            c = circshift(counts, -start)
+            cuts = spine_bundle_cuts(c, num_sectors)
+            isnothing(cuts) && continue
+            sizes = [sum(c[a:b]) for (a, b) in cuts]
+            imbalance = maximum(sizes) - minimum(sizes)
+            # Mean distance between consecutive points on a spine
+            step = sum(norm(unit_points[:, n + F] - unit_points[:, n]) for n in 1:N-F; init = 0.0)/max(N - F, 1)
+            score = (imbalance, step, start)
+            if isnothing(best) || score < best[1]
+                best = (score, spines, circshift(order, -start), cuts)
+            end
+        end
+    end
+    _, spines, order, cuts = best
+    sector_indices = Vector{Vector{Int}}()
+    for (a, b) in cuts
+        bundle = spines[order[a:b]]
+        idx = Int[]
+        for level in 1:maximum(length, bundle)
+            for spine in bundle
+                level <= length(spine) && push!(idx, spine[level])
+            end
+        end
+        push!(sector_indices, idx)
+    end
+    return sector_indices
+end
+
+# Split items with the given counts into num_groups contiguous, non-empty
+# groups, minimizing the sum of squared deviations of the group totals from an
+# equal share (dynamic programming over the cut positions). Returns the index
+# ranges, or nothing if there are fewer items than groups.
+function spine_bundle_cuts(counts, num_groups)
+    n = length(counts)
+    n >= num_groups || return nothing
+    target = sum(counts)/num_groups
+    cum = [0; cumsum(counts)]
+    cost(i, j) = (cum[j+1] - cum[i] - target)^2  # group of items i..j
+    # best[k, j]: minimal cost of splitting items 1..j into k groups
+    best = fill(Inf, num_groups, n)
+    prev = zeros(Int, num_groups, n)
+    for j in 1:n
+        best[1, j] = cost(1, j)
+    end
+    for k in 2:num_groups, j in k:n, i in k:j
+        c = best[k-1, i-1] + cost(i, j)
+        if c < best[k, j]
+            best[k, j] = c
+            prev[k, j] = i
+        end
+    end
+    ranges = Vector{Tuple{Int, Int}}(undef, num_groups)
+    j = n
+    for k in num_groups:-1:1
+        i = k == 1 ? 1 : prev[k, j]
+        ranges[k] = (i, j)
+        j = i - 1
+    end
+    return ranges
 end
 
 function group_into_sectors_angular(xy::AbstractMatrix, num_sectors::Int)

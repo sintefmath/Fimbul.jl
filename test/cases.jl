@@ -373,6 +373,27 @@ end
     @test all(maximum(r.(sector)) > 2*s for sector in field)
     @test_throws ErrorException Fimbul.btes_well_field(:rectangular;
         sector_grouping = :angular)
+    # Sunflower sectors are bundles of spiral spines, ordered from the center
+    # outwards, with the wells of each sector in sunflower order level by level
+    field, s = Fimbul.btes_well_field(:sunflower; num_wells = 30, num_sectors = 5)
+    @test all(length.(field) .== 6)
+    sectors = Fimbul.group_into_sectors_spiral(30, 5)
+    @test sort(vcat(sectors...)) == 1:30
+    # With one spine per sector, the wells of a sector are F apart
+    @test all(length(unique(diff(sector))) == 1 for sector in sectors)
+    @test all(issorted(r.(sector)) for sector in field)
+    for (N, ns) in ((12, 3), (48, 6), (100, 8))
+        sizes = length.(Fimbul.group_into_sectors_spiral(N, ns))
+        @test sum(sizes) == N
+        @test maximum(sizes) - minimum(sizes) <= 2
+    end
+    @test_throws ErrorException Fimbul.btes_well_field(:sunflower;
+        sector_grouping = :angular)
+    # The sunflower pattern has no gap at the center: the largest empty circle
+    # around the center is smaller than the spacing
+    x = fibonacci_pattern_2d(30; spacing = 5.0)
+    @test minimum(sqrt.(sum(x.^2, dims = 1))) < 5.0/2
+    @test Fimbul.median(Fimbul.nearest_neighbor_distances(x)) ≈ 5.0
     # The field size matches the pattern
     @test_throws ErrorException Fimbul.btes_well_field(:rectangular; radius = 10.0)
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower; extent = (10.0, 10.0))

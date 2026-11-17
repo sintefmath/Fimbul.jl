@@ -11,8 +11,9 @@ the placement and grouping are given by `field` itself.
 
 # Arguments
 - `pattern = :sunflower`: Well placement pattern.
-  - `:sunflower`: Fibonacci spiral, with the outermost well at distance
-    `radius` from the center.
+  - `:sunflower`: Fibonacci spiral (see [`fibonacci_pattern_2d`](@ref)), with
+    the outermost well at distance `radius` from the center. The well spacing
+    is the median distance between neighboring wells.
   - `:circular`: a center well surrounded by concentric rings, with the
     outermost ring at distance `radius` from the center. The wells are
     numbered from the center outwards, counter-clockwise on each ring starting
@@ -46,8 +47,12 @@ the placement and grouping are given by `field` itself.
   `pattern` form.
 - `sector_grouping`: How the wells are grouped into sectors. Only used with the
   `pattern` form.
-  - `:angular` (default for `:sunflower` and `:circular`): circle sectors, with
-    the wells of each sector ordered from the center outwards.
+  - `:spiral` (default for `:sunflower`): bundles of adjacent spiral spines of
+    the sunflower, with the wells of each sector ordered from the center
+    outwards: the first well of each spine, counter-clockwise, then the second
+    well of each spine, and so on (see `Fimbul.group_into_sectors_spiral`).
+  - `:angular` (default for `:circular`): circle sectors, with the wells of
+    each sector ordered from the center outwards.
   - `:sequential` (`:sunflower` and `:circular`): consecutive groups of wells
     in the order they are placed, from the center outwards, so that the first
     sector holds the wells closest to the center.
@@ -454,7 +459,8 @@ function btes_well_field(pattern::Symbol = :sunflower;
     ismissing(well_spacing) || well_spacing > 0 ||
         error("well_spacing must be positive, got $well_spacing.")
 
-    allowed = pattern == :rectangular ? (:cartesian,) : (:angular, :sequential)
+    allowed = Dict(:sunflower => (:spiral, :sequential),
+        :circular => (:angular, :sequential), :rectangular => (:cartesian,))[pattern]
     if ismissing(sector_grouping)
         sector_grouping = first(allowed)
     end
@@ -490,9 +496,16 @@ end
 
 function sunflower_pattern(N, s, R)
     if ismissing(N)
-        # Largest number of wells that fits within R
-        c = sunflower_radius(2, s)/sqrt(2)
-        N = max(1, floor(Int, (R/c)^2*(1 + 1e-10)))
+        # Largest number of wells that fits within R. The radius grows about
+        # as sqrt(N), which gives a first guess to correct from.
+        fits(n) = sunflower_radius(n, s) <= R*(1 + 1e-10)
+        N = max(1, floor(Int, (R/sunflower_radius(2, s))^2*2))
+        while N > 1 && !fits(N)
+            N -= 1
+        end
+        while fits(N + 1)
+            N += 1
+        end
     elseif ismissing(s)
         N == 1 && return (zeros(2, 1), Float64(R))
         s = R/sunflower_radius(N, 1.0)

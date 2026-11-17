@@ -19,13 +19,15 @@ using GLMakie
 # operation is simulated over a 4-year period to study the thermal energy
 # storage performance.
 #
-# For the circular pattern, the wells are grouped into sectors from the center
-# outwards (`sector_grouping = :sequential`), instead of into circle sectors,
-# which is the default.
+# The wells of the sunflower pattern are grouped into sectors along its spiral
+# spines (`sector_grouping = :spiral`, the default). For the circular pattern,
+# the wells are grouped into sectors from the center outwards
+# (`sector_grouping = :sequential`), instead of into circle sectors, which is
+# the default.
 patterns = [:sunflower, :circular, :rectangular]
 pattern_names = Dict(:sunflower => "Sunflower", :circular => "Circular",
     :rectangular => "Rectangular")
-sector_grouping = Dict(:sunflower => :angular, :circular => :sequential,
+sector_grouping = Dict(:sunflower => :spiral, :circular => :sequential,
     :rectangular => :cartesian)
 num_wells, num_sectors = 30, 5
 case_args = (
@@ -48,18 +50,20 @@ cases = Dict(p => btes(p; sector_grouping = sector_grouping[p], case_args...)
 # as a single closed-loop well holding its boreholes in series, which is much
 # faster to simulate than one well per borehole (`well_grouping = :borehole`).
 #
-# For the sunflower pattern, the sectors are circle sectors, with the flow
-# running from the innermost to the outermost well. For the circular pattern,
+# For the sunflower pattern, the sectors are bundles of adjacent spiral spines
+# (see below), with the flow running from the center outwards along the spines.
+# With 30 wells in 5 sectors, each sector is a single spine. For the circular
+# pattern,
 # the wells are numbered from the center outwards, counter-clockwise on each
 # ring, and the sectors are consecutive groups in this order. For the
 # rectangular pattern, the sectors are blocks of the grid, which the flow runs
 # through column by column.
 #
 # The structure underlying each pattern is shown in light gray:
-# - Sunflower: well ``n`` sits at radius ``R\sqrt{n/N}`` and angle ``nΔθ``,
-#   where ``Δθ = 2π/φ^2`` and ``φ`` is the golden ratio. Wells ``F`` apart in
-#   this order, for consecutive Fibonacci numbers ``F``, line up along spirals,
-#   the "spines" of the sunflower.
+# - Sunflower: well ``n`` sits at radius ``R\sqrt{(n - 1/2)/(N - 1/2)}`` and
+#   angle ``nΔθ``, where ``Δθ = 2π/φ^2`` and ``φ`` is the golden ratio. Wells
+#   ``F`` apart in this order, for consecutive Fibonacci numbers ``F``, line up
+#   along spirals, the "spines" of the sunflower.
 # - Circular: a center well surrounded by concentric rings, one well spacing
 #   apart.
 # - Rectangular: the Cartesian grid on which the wells are placed.
@@ -78,7 +82,7 @@ function plot_sunflower_spines!(ax, N, R; num_points = 200)
         δ = mod(F*Δθ + π, 2π) - π
         for n in 1:F
             t = range(0.0, (N - n)/F, length = num_points)
-            r = R.*sqrt.((n .+ F.*t)./N)
+            r = R.*sqrt.((n .+ F.*t .- 0.5)./(N - 0.5))
             θ = n*Δθ .+ δ.*t
             lines!(ax, r.*cos.(θ), r.*sin.(θ); color = structure_color, linewidth = 1)
         end
