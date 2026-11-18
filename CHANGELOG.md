@@ -1,6 +1,6 @@
 # Fimbul.jl Changelog
 
-## [Unreleased]
+## [v0.5.0]
 
 ### Breaking changes
 
@@ -32,10 +32,20 @@
 ### Improvements
 
 - `H2OSystem`: adapted to the upwinding on potential differences in the compositional fluxes of JutulDarcy 0.4.1, and accepts (and ignores) the flash-specific variable defaults that JutulDarcy passes on.
+- `well_mismatch_thermal` works with merged closed-loop wells: a part (e.g. `CoaxialWell_inner`) is looked up in the merged well, and the temperature is taken at the top node of that part. This is needed to calibrate against the production temperature of a closed-loop well.
 
 ### Documentation
 
 - New API page for closed-loop wells (setup functions, closed-loop well types, controls and borehole fill).
+- Reworked coaxial BHE demo (`examples/production/coaxial_bhe_demo.jl`): a layered reservoir, a study of the inner pipe conductivity, and calibration of a homogeneous digital twin against the production temperature and against the temperature along the well.
+- New example: design optimization of a system of tilted coaxial BHEs (`examples/production/coaxial_bhe_design_demo.jl`), which minimizes the drilling cost under a constraint on the thermal power, with the drilling cost correlation of Lukawski et al. (2014).
+- Reworked BTES demo (`examples/storage/btes_demo.jl`): compares the sunflower, circular and rectangular patterns, with plots of the well fields, the thermal plume over the charge cycles, and the charged and discharged energy and recovery factor per cycle.
+- Example notebooks are published with each documentation version and preview, and example scripts link to the documented revision instead of `main`.
+- Versioned documentation: released versions get their own documentation, selectable alongside `dev`.
+
+### Development
+
+- The code is formatted with [Runic](https://github.com/fredrikekre/Runic.jl). CI checks the formatting and suggests fixes on pull requests, and a pre-commit hook is provided. The formatting commit is listed in `.git-blame-ignore-revs`.
 
 ### Compatibility
 
