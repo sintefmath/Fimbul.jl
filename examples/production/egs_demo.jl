@@ -52,7 +52,7 @@ common_args = (
     num_years = num_years,
     hxy_min = 30.0,
     schedule_args = (report_interval = si_unit(:year) / 4,),
-)
+);
 
 # ### Well trajectories
 # `egs_well_coordinates` returns `(injector_coords, producer_coords)` as vectors
@@ -85,7 +85,7 @@ function plot_egs_wells!(ax, inj_w, prod_w; colors = Makie.wong_colors(6)[[6, 1]
         end
     end
     return
-end
+end;
 
 # Visualize the computational mesh, DFM fracture network and wells.
 function plot_egs_mesh(c, inj_w, prod_w, title)
@@ -108,7 +108,7 @@ function plot_egs_mesh(c, inj_w, prod_w, title)
     Jutul.plot_mesh!(ax_, fm_; color = :lightgray)
     plot_egs_wells!(ax_, inj_w, prod_w)
     return fig_
-end
+end;
 
 # Set up the EGS reservoir simulator with standard convergence settings.
 # A `VariableChangeTimestepSelector` limits the maximum temperature change per
@@ -127,7 +127,7 @@ function setup_egs_simulator(c)
     )
     push!(cfg[:timestep_selectors], sel)
     return sim, cfg
-end
+end;
 
 # Compute per-fracture thermal power from the energy balance:
 #   power = dE/dt + q_out − q_in
@@ -139,7 +139,7 @@ function fracture_power(fdata, dt)
     Er = fdata[:TotalThermalEnergy]
     dEdt = diff(vcat(Er[1, :]', Er), dims = 1) ./ dt
     return dEdt .+ fdata[:q_out] .- fdata[:q_in]
-end
+end;
 
 # Plot fracture temperature change (ΔT relative to initial state) at three
 # representative timesteps: 12.5 %, 50 % and 100 % of the simulation period.
@@ -179,7 +179,7 @@ function plot_fracture_dt_fig(c, inj_w, prod_w, results)
     )
     rowgap!(fig_.layout, 0)
     return fig_
-end
+end;
 
 # Plot four fracture-level performance metrics for a single run:
 # temperature evolution, thermal power (stacked by fracture), annual energy
@@ -260,7 +260,7 @@ function plot_fracture_metrics_fig(fdata, time, dt, num_years)
 
     Legend(fig_[2:3, 2], ax_p)
     return fig_
-end
+end;
 
 # ## Run 1: Uniform fractures, 100 m well spacing
 # Fractures are placed perpendicular to the injector well at uniform spacing
@@ -394,9 +394,9 @@ function make_cax(title, ylabel, rno)
         fig[rno, 1]; title = title, xlabel = "Time (years)", ylabel = ylabel,
         limits = lim_c, xticks = xtick_c
     )
-end
+end;
 
-# ── Total thermal power ───────────────────────────────────────────────────────
+# ### Total thermal power
 ax_c1 = make_cax("Total thermal power", "Power (MW)", 1)
 lines!(
     ax_c1, time[fs:end], total_power1[fs:end] ./ 1.0e6;
@@ -411,9 +411,9 @@ lines!(
     color = colors[3], linewidth = 2, linestyle = :dash, label = "Random 200 m"
 )
 axislegend(ax_c1; position = :rt)
-hidexdecorations!(ax_c1, grid = false)
+hidexdecorations!(ax_c1, grid = false);
 
-# ── Per-fracture power spread ─────────────────────────────────────────────────
+# ### Per-fracture power spread
 ax_c2 = make_cax("Per-fracture power (shaded band = min–max)", "Power (MW)", 2)
 function band_fractures!(ax, t, pwr; color = :steelblue, label = "")
     total_pwr = sum(pwr, dims = 2)[:]
@@ -429,9 +429,9 @@ band_fractures!(ax_c2, time[fs:end], power[fs:end, :]; color = colors[1], label 
 band_fractures!(ax_c2, time2[fs:end], power2[fs:end, :]; color = colors[2], label = "Uniform 200 m (mean)")
 band_fractures!(ax_c2, time3[fs:end], power3[fs:end, :]; color = colors[3], label = "Random 200 m (mean)")
 axislegend(ax_c2; position = :rt)
-hidexdecorations!(ax_c2, grid = false)
+hidexdecorations!(ax_c2, grid = false);
 
-# ── Annual energy ─────────────────────────────────────────────────────────────
+# ### Annual energy
 ax_c3 = make_cax("Annual energy production", "Energy (GWh)", 3)
 function annual_energy(pwr, t, dt_v)
     ix = vcat(0, [findfirst(isapprox.(t, y; atol = 1.0e-2)) for y in 1:num_years]) .+ 1
@@ -445,6 +445,6 @@ args = (width = 0.25, strokecolor = :black, strokewidth = 1)
 barplot!(ax_c3, years .- 0.28, ann1; args..., color = colors[1], label = "Uniform 100 m")
 barplot!(ax_c3, years, ann2; args..., color = colors[2], label = "Uniform 200 m")
 barplot!(ax_c3, years .+ 0.28, ann3; args..., color = colors[3], label = "Random 200 m")
-axislegend(ax_c3; position = :rt)
+axislegend(ax_c3; position = :rt);
 
 fig

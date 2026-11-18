@@ -173,7 +173,7 @@ function is_injecting(forces, T_inj)
 end
 schedule = cases[patterns[1]].forces
 is_charge = [is_injecting(f, T_ch) for f in schedule]
-is_discharge = [is_injecting(f, T_dch) for f in schedule]
+is_discharge = [is_injecting(f, T_dch) for f in schedule];
 
 # Contiguous ranges of steps where `mask` holds, one per cycle. The state after
 # a step is the state at its end, so the last step of each range gives the
@@ -184,7 +184,7 @@ function step_ranges(mask)
     return [a:b for (a, b) in zip(starts, stops)]
 end
 charge_ranges = step_ranges(is_charge)
-discharge_ranges = step_ranges(is_discharge)
+discharge_ranges = step_ranges(is_discharge);
 
 # ## Results for a single pattern
 # We first plot the temperature distribution in the reservoir and well
@@ -245,7 +245,7 @@ function plot_btes_temperature(ax, case, result, sector, timesteps)
         end
     end
     return
-end
+end;
 
 # #### Temperature evolution during the first charging cycle
 # We first visualize how thermal energy propagates through the wellbore network

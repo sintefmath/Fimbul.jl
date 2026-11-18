@@ -298,7 +298,7 @@ results_prod = (results_noinj, results_inj)
 ΔT_all = [res.states[end][:Temperature] .- T_ns for res in results_prod]
 ΔT_max = maximum(maximum.(ΔT_all))
 ΔT_min = minimum(minimum.(ΔT_all))
-ΔT_range = (ΔT_min, ΔT_max)
+ΔT_range = (ΔT_min, ΔT_max);
 # Diverging colormap with the neutral (white) color at ΔT = 0: the negative and
 # positive parts of the range are mapped to the two halves of the colormap.
 vik = cgrad(:vik)
