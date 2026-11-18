@@ -10,7 +10,7 @@ Mass conservation is written as
 ```math
     \partial_t\left([1-\phi]\rho_R + \phi[\rho_L s_L + \rho_V s_V]\right)
     + \nabla \cdot \left(\rho_L \vec{v}_L + \rho_V \vec{v}_V\right)
-    = Q_M,
+    = Q_M, \tag{1}
 ```
 
 where $\phi$ is porosity, $\rho_\alpha$ is density for the rock ($\alpha = R$)
@@ -20,12 +20,12 @@ The term $Q_M$ denotes mass sources and sinks, including wells and boundary
 fluxes. Phase velocities are given by Darcy's law,
 
 ```math
-    \vec{v}_\alpha = - \lambda_\alpha \mathbf{K} \left(\nabla p - \rho_\alpha g \nabla z\right),
+    \vec{v}_\alpha = - \frac{k_{r,\alpha}}{\mu_\alpha} \mathbf{K} \left(\nabla p - \rho_\alpha g \nabla z\right),
 ```
 
-where $\lambda_\alpha = k_{r,\alpha}/\mu_\alpha$ is phase mobility (ratio of
-relative permeability to viscosity), $\mathbf{K}$ is absolute permeability, $p$
-is pressure, $g$ is gravitational acceleration, and $z$ is elevation.
+where $k_{r,\alpha}$ is relative permeability, $\mu_\alpha$ is viscosity,
+$\mathbf{K}$ is absolute permeability, $p$ is pressure, $g$ is gravitational
+acceleration, and $z$ is depth (positive downwards).
 
 > NOTE: In practice, the interface between liquid and vapor phases in an
 > H₂O system may exhibit non-negligible capillary pressure effects.
@@ -36,14 +36,16 @@ is pressure, $g$ is gravitational acceleration, and $z$ is elevation.
 Thermal energy conservation is expressed as
 
 ```math
-    \partial_t\left([1-\phi]\rho_R u_R + \phi[\rho_L s_L u_L + \rho_V s_V u_V]\right)
-    + \nabla \cdot \left(\rho_L h_L \vec{v}_L + \rho_V h_V \vec{v}_V\right)
+\begin{aligned}
+    &\partial_t\left([1-\phi]\rho_R u_R + \phi[\rho_L s_L u_L + \rho_V s_V u_V]\right)\\
+    &\quad + \nabla \cdot \left(\rho_L h_L \vec{v}_L + \rho_V h_V \vec{v}_V\right)
     - \nabla \cdot \left(\mathbf{\Lambda}\nabla T\right)
     = Q_H,
+\end{aligned} \tag{2}
 ```
 
-where $u_\alpha$ is specific internal energy, $h_\alpha = u_\alpha +
-p/\rho_\alpha$ is specific enthalpy, $T$ is temperature, and $\mathbf{\Lambda}$
+where $u_\alpha$ is specific internal energy,
+$h_\alpha = u_\alpha + p/\rho_\alpha$ is specific enthalpy, $T$ is temperature, and $\mathbf{\Lambda}$
 is the effective thermal conductivity tensor of the rock–fluid mixture. The
 second term on the left represents advective heat transport by the flowing
 phases; the third term is conductive heat transport via Fourier's law,
@@ -52,12 +54,14 @@ phases; the third term is conductive heat transport via Fourier's law,
     \vec{q}_c = - \mathbf{\Lambda}\nabla T.
 ```
 
-The term $Q_H$ denotes thermal energy sources and sinks.
+The term $Q_H$ denotes thermal energy sources and sinks, and generally consists
+of an advective part (e.g., heat transported with injected fluid), and a
+conductive part (e.g., heat from a closed, hot wellbore).
 
 ## Fluid properties
 The fluid properties of H₂O—such as density, viscosity, enthalpy,
-and phase state—depend on both pressure and enthalpy and are provided through
-precomputed lookup tables.
+and phase state—depend on pressure and enthalpy (or temperature) and are
+provided through precomputed lookup tables.
 
 For the high-enthalpy (two-phase) regime, the steam tables are generated using
 the [`CoolProp`](https://www.coolprop.org/) library [bell_pure_2014](@cite) via
@@ -66,9 +70,6 @@ loaded automatically when using the high-enthalpy formulation. The tables can
 also be loaded directly using the `Artifacts` API. To generate your own tables,
 see `build_steam_tables_h2o` in `FimbulCoolPropExt`.
 
-For the low-enthalpy (single-phase liquid) regime, Fimbul uses PVT tables from
-JutulDarcy generated using the NIST database.
-
 The figure below shows the temperature, density, and vapor saturation of
 H₂O as functions of pressure and specific enthalpy, covering the
 full range of both single-phase and two-phase states. The saturation line
@@ -76,57 +77,108 @@ separates the single-phase liquid region (left), two-phase region (center), and
 single-phase vapor region (right). These phase diagram contours can be
 visualized using `plot_phase_diagram_contours`.
 
-## Single- and two-phase systems
-Most Fimbul examples currently operate in the low-enthalpy regime, i.e.,
-single-phase liquid conditions. The high-enthalpy examples use the two-phase
-steam-table formulation described above.
+![Temperature, density and vapor saturation of H₂O as functions of pressure and specific enthalpy](../../assets/h2o-pvt.png)
 
-## Multi-continuum and fractures
-The formulation above assumes local thermal equilibrium between rock and fluid,
-i.e., a single shared temperature field $T$. This is appropriate for many
-porous-medium geothermal applications, but may not be adequate when flow is
-dominated by fractures or other high-contrast heterogeneities.
-
-To model fractured systems, Fimbul can be combined with the discrete fracture
-modeling framework in JutulDarcy—see e.g., 
-[the FTES setup function](@ref ftes).
+For the low-enthalpy (single-phase liquid) regime, Fimbul uses PVT tables from
+JutulDarcy generated using the [NIST
+database](https://webbook.nist.gov/chemistry/fluid/). In this case, $s_V = 0$,
+so that only liquid terms in Equations (1) and (2) remain.
 
 ## Wells
-Flow in wells can be modelled in two different ways:
+Flow in wells can be modeled in two different ways:
 - As a simple well where flow in and out of the wellbore is computed based on an
-  explicitly computed pressure drawdown from the top to each perforated cell
-  -- see JutulDarcy's [`SimpleWell`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.SimpleWell). In this
+  explicitly computed pressure drawdown from the top to each perforated cell—see
+  JutulDarcy's [`SimpleWell`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.SimpleWell). In this
   formulation, the entire wellbore gets a single temperature, which in many
   cases is a poor approximation for geothermal wells.
 - As a multisegment well where each wellbore is discretized as a 1D object with
   its own conservation equations for mass and energy, with accompanying pressure
   and heat variables (either temperature or enthalpy depending on the
-  formulation) -- see JutulDarcy's
+  formulation)—see JutulDarcy's
   [`MultiSegmentWell`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.MultiSegmentWell).
 
-In geothermal energy, the main product (heat) is in principle leaking from or
-into the formation along the entire wellbore, so a multisegment well
-formulation is the preferred modelling choice. For closed-loop geothermal wells
-(e.g., AGS, BHE and BTES), a multisegment well formulation is necessary, since
-temperature changes along the wellbore are crucial to model. All examples in
-Fimbul use the multisegment well formulation.
-
-Both simple and multisegment wells (with the exception of closed-loop wells)
-compute mass and conductive heat flow using Peaceman-type well indices. Mass
-flow between the well and the reservoir is handled by JutulDarcy, using a well
-index $\mathrm{WI}$ computed with Peaceman's formula -- see
-[`compute_peaceman_index`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.compute_peaceman_index) and the
-[JutulDarcy documentation on wells](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells). For a perforation connecting well
-node $w$ to reservoir cell $c$, the heat flow from the reservoir into the well
-is the sum of advective and conductive heat flow,
+In geothermal energy, heat is exchanged with the formation along the entire
+wellbore, so a multisegment well formulation is the preferred modeling choice. For closed-loop geothermal wells (e.g., AGS,
+BHE and BTES), a multisegment well formulation is necessary, since temperature
+changes along the wellbore are crucial to model. All examples in Fimbul use the
+multisegment well formulation. This models conservation of mass and energy as in
+Equations (1) and (2), but with only void space, $\phi = 1$. Wellbore fluxes are
+computed on the segments that connect the well nodes. The primary unknown on a
+segment from node $a$ to node $b$ is the total mass flow $q$, which is
+determined by balancing the potential difference between the nodes against the
+frictional pressure drop along the segment,
 
 ```math
-    q_H = \sum_\alpha h_\alpha q_\alpha + \mathrm{WI}_{th}\left(T_c - T_w\right),
+    p_a - p_b - \bar\rho g (z_a - z_b) = \Delta p_f(q),
+    \qquad
+    \Delta p_f = 2 f \frac{L}{D_h} \rho v |v|,
+    \qquad
+    v = \frac{q}{\rho A},
 ```
 
-where $q_\alpha$ is the mass flow of phase $\alpha$ and the phase enthalpy
-$h_\alpha$ is taken from the reservoir cell for production and from the well
-for injection.
+where $\bar\rho$ is the average of the mixture densities in the
+two nodes, $L$ is the segment length, $A = \pi(r_o^2 - r_i^2)$ is the
+cross-sectional area of the flow path, and $D_h = 2(r_o - r_i)$ is its
+hydraulic diameter, with $r_o$ and $r_i$ the outer and inner radius ($r_i = 0$
+for a pipe, $r_i > 0$ for an annulus). The mixture density $\rho$ and viscosity
+$\mu$ are saturation-weighted averages over the phases, taken from the upstream
+node. The Fanning friction factor $f$ depends on the Reynolds number
+$\mathrm{Re} = \rho |v| D_h/\mu$,
+
+```math
+    f = \begin{cases}
+        16/\mathrm{Re}, & \mathrm{Re} \leq 2000 \quad \text{(laminar)},\\[4pt]
+        \left[-3.6 \log_{10}\left(\dfrac{6.9}{\mathrm{Re}}
+        + \left(\dfrac{\varepsilon}{3.7 D_o}\right)^{10/9}\right)\right]^{-2},
+        & \mathrm{Re} \geq 4000 \quad \text{(turbulent)},
+    \end{cases}
+```
+
+where $\varepsilon$ is the pipe roughness and $D_o = 2r_o$ (Haaland's
+correlation). In between, $f$ is interpolated linearly in $\mathrm{Re}$ between
+the laminar and turbulent values. The mass flow from node $a$ to node $b$ is
+$q$, and the corresponding heat flow is
+
+```math
+    q_{H} = q \sum_\alpha x_\alpha h_\alpha + G_{ab}\left(T_a - T_b\right),
+```
+
+where $x_\alpha = \rho_\alpha s_\alpha / \sum_\beta \rho_\beta s_\beta$ is the
+mass fraction of phase $\alpha$ and the phase enthalpies $h_\alpha$ are taken
+from the upstream node. The last term is heat conduction between the nodes,
+with $G_{ab}$ the thermal conductance of the segment. It is zero by default,
+but closed-loop wells use it for the thermal resistances between pipe and grout
+nodes, which are connected by segments without flow ($q = 0$), with
+$G_{ab} = L/R_{ab}$—see [Closed-loop wells](#Closed-loop-wells).
+
+Perforations of both simple and multisegment wells compute mass and conductive
+heat flow using Peaceman-type well indices, with the exception of U-tube and
+coaxial closed-loop wells (see below). The well index $\mathrm{WI}$ is computed
+with Peaceman's formula—see
+[`compute_peaceman_index`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.compute_peaceman_index)
+and the [JutulDarcy documentation on
+wells](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells). For
+a perforation connecting well node $w$ to reservoir cell $c$, the mass flow of
+phase $\alpha$ from the well into the reservoir (positive for injection) is
+
+```math
+    q_\alpha = \mathrm{WI}\, m_\alpha \left(p_w - p_c - \bar\rho_\alpha g (z_w - z_c)\right),
+```
+
+where $\bar\rho_\alpha$ is the average of the phase densities in the well node
+and the reservoir cell. The mass mobility $m_\alpha$ is
+$\rho_\alpha k_{r,\alpha}/\mu_\alpha$ of the reservoir cell for production. For
+injection, it is $\rho_\alpha s_\alpha$ of the well node times the total
+mobility $\sum_\beta k_{r,\beta}/\mu_\beta$ of the reservoir cell. The heat flow
+from the well into the reservoir is the sum of advective and conductive heat
+flow,
+
+```math
+    q_H = \sum_\alpha h_\alpha q_\alpha + \mathrm{WI}_{th}\left(T_w - T_c\right),
+```
+
+where the phase enthalpy $h_\alpha$ is taken from the well for injection and
+from the reservoir cell for production.
 
 ### Thermal well index
 The thermal well index $\mathrm{WI}_{th}$ accounts for conduction through the
@@ -173,16 +225,18 @@ reservoir) is
 
 where $R_{ab}$ is the thermal resistance per unit length. In the expressions
 below, $d_g = 2r_g$ is the borehole diameter, $\lambda_g$ is the grout
-conductivity, and subscripts $i$ and $o$ denote the inner and outer radius of a
-pipe wall. Advective resistances inside the pipes are currently neglected.
+thermal conductivity, and subscripts $i$ and $o$ denote the inner and outer
+radius of a pipe wall. The convective (fluid-to-pipe-wall) resistances inside
+the pipes are currently neglected.
 
-**Generic closed-loop well** (`ClosedLoopGenericWell`): the pipe exchanges heat
+**Generic closed-loop well** ([`ClosedLoopGenericWell`](@ref)): the pipe exchanges heat
 directly with the reservoir through $\mathrm{WI}_{th}$, as computed above with
 the pipe wall as casing and the surrounding grout.
 
-**Single U-tube** (`ClosedLoop1UWell`): two pipes with outer diameter
-$d_p = 2r_{p,o}$ and shank spacing $w$, each connected to its own grout node.
-With
+**Single U-tube** ([`ClosedLoop1UWell`](@ref)): two pipes with outer diameter
+$d_p = 2r_{p,o}$ and pipe wall thermal conductivity $\lambda_p$, each connected
+to its own grout node. With $w$ the shank spacing (the center-to-center
+distance between the two pipes) and
 
 ```math
     x = \frac{\ln\left(\sqrt{d_g^2 + 2d_p^2}/(2d_p)\right)}{\ln\left(d_g/(\sqrt{2}d_p)\right)}, \qquad
@@ -205,9 +259,10 @@ the resistances are
 where
 $R_{ar} = \cosh^{-1}\left((2w^2 - d_p^2)/d_p^2\right)/(2\pi\lambda_g)$.
 
-**Coaxial** (`ClosedLoopCoaxialWell`): an inner pipe inside an outer pipe
-(the annulus), surrounded by grout. With $d_p = 2r_{op,o}$ the outer
-diameter of the outer pipe,
+**Coaxial** ([`ClosedLoopCoaxialWell`](@ref)): an inner pipe inside an outer pipe
+(the annulus), surrounded by grout. The subscripts $ip$ and $op$ denote the
+inner and outer pipe, with pipe wall thermal conductivities $\lambda_{ip}$ and
+$\lambda_{op}$. With $d_p = 2r_{op,o}$ the outer diameter of the outer pipe and
 
 ```math
     x = \frac{\ln\sqrt{(d_g^2 + d_p^2)/(2d_p^2)}}{\ln(d_g/d_p)}, \qquad
@@ -237,3 +292,55 @@ indices can be overridden when setting up the well.
 > the temperature of the perforated cell is assumed to approximate the borehole
 > wall temperature. This is the same assumption as in [feflow_btes](@cite), and
 > requires the reservoir grid to be refined around the well.
+
+## Fracture flow
+In many geothermal systems, flow is dominated by fractures. In enhanced
+geothermal systems (EGS), hydraulically stimulated fractures provide the flow
+paths between injection and production wells in otherwise low-permeability
+rock. In fracture thermal energy storage (FTES), heat is stored by circulating
+hot water through fractures in crystalline rock. Such fractures are much thinner
+than the grid cells but far more permeable than the surrounding rock, and they
+are therefore poorly represented by the matrix permeability alone.
+
+To model fractured systems, Fimbul can be combined with the discrete fracture
+modeling (DFM) framework in JutulDarcy—see the [EGS](@ref egs) and
+[FTES](@ref ftes) setup functions. In DFM, the fractures are represented as a separate, lower-dimensional
+mesh made up of faces of the matrix mesh, and we model conservation of mass and
+energy in the fractures just as in the matrix using Equations (1) and (2). A
+fracture cell has volume $A_f a$, where $A_f$ is the area of the cell and $a$ is
+the fracture aperture, and the fracture permeability is by default given by the
+cubic law, $K_f = a_h^2/12$, with $a_h$ the hydraulic aperture (by default equal
+to $a$).
+
+**Matrix–fracture exchange.** Each fracture cell lies on a face of the matrix
+mesh and is connected to the two matrix cells on either side of that face. The
+direct connection between the two matrix cells is removed, so that all flow
+across the face passes through the fracture, and half of the fracture volume is
+subtracted from each of the two matrix cells. The mass flow of phase $\alpha$
+from fracture cell $f$ into matrix cell $m$ is
+
+```math
+    q_\alpha = \rho_\alpha \frac{k_{r,\alpha}}{\mu_\alpha} \Theta_{fm} \left(p_f - p_m - \bar\rho_\alpha g (z_f - z_m)\right),
+```
+
+where $\Theta_{fm}$ is the fracture–matrix transmissibility, $\bar\rho_\alpha$
+is the average of the phase densities in the two cells, and the mass mobility
+$\rho_\alpha k_{r,\alpha}/\mu_\alpha$ is taken from the upstream cell. The heat
+flow from the fracture cell into the matrix cell is the sum of advective and
+conductive heat flow,
+
+```math
+    q_H = \sum_\alpha h_\alpha q_\alpha + \Lambda_{fm}\left(T_f - T_m\right),
+```
+
+where the phase enthalpy $h_\alpha$ is taken from the upstream cell, and
+$\Lambda_{fm}$ is the fracture–matrix thermal conductance of the rock and the
+fluid.
+
+**Well–fracture exchange.** Multisegment wells that cross a fracture are
+connected directly to the fracture cells they intersect: each crossing gets an
+additional well node that perforates the fracture cell. Mass and heat exchange
+through these perforations is computed as for the matrix (see
+[Wells](#Wells)), with Peaceman-type well indices computed from the fracture
+permeability and thermal conductivity. Simple wells do not currently support
+crossing fractures: they are only connected to the matrix cells they perforate.
