@@ -427,3 +427,27 @@ end
     @test_throws ErrorException Fimbul.btes_well_field(:sunflower; extent = (10.0, 10.0))
     @test_throws ErrorException Fimbul.btes_well_field(:polygonal)
 end
+
+##
+@testset "Thermal well mismatch for merged closed-loop wells" begin
+    case = btes(:sunflower; num_wells = 2, num_sectors = 1,
+        depths = [0.0, 0.5, 50.0, 65.0], n_z = [1, 2, 1], n_xy = 2, num_years = 1)
+    model = case.model
+    supply, ret = closed_loop_well_names(model.models[:S1].data_domain)
+    # The parts are controlled under their own names, but their states are
+    # stored in the merged well, at the top node of each part
+    @test Fimbul.well_state_top_node(model, supply) == (:S1, 1)
+    key, node = Fimbul.well_state_top_node(model, ret)
+    @test key == :S1
+    @test node == number_of_cells(physical_representation(model.models[:S1].data_domain))
+    @test Fimbul.well_state_top_node(model, :S1) == (:S1, 1)
+    res = simulate_reservoir(case[1:1]; info_level = -1)
+    states = res.result.states
+    step_info = Dict(:step => 1)
+    m(state) = well_mismatch_thermal(model, [supply, ret], states, state,
+        case.dt[1], step_info, case.forces[1]; w_bhp = 0.0, w_energy = 0.0)
+    @test m(states[1]) == 0.0
+    perturbed = deepcopy(states[1])
+    perturbed[:S1][:Temperature][node] += 1.0
+    @test m(perturbed) ≈ case.dt[1]
+end
