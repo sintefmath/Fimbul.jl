@@ -69,7 +69,7 @@ lukawski_cost(L) = 1.0e6 * (1.72e-7 * L^2 + 2.3e-3 * L - 0.62)
 function drilling_cost(θ, L; num_wells = 4)
     surcharge = 1 + α_dev * sin(θ) * (L - kickoff) / L
     return num_wells * f_slim * lukawski_cost(L) * surcharge
-end
+end;
 
 # ## Well trajectories
 # The trajectories of the four wells are given by the surface location, the
@@ -89,7 +89,7 @@ function plot_trajectory!(ax, trajectory; color = :black, linewidth = 4, kwarg..
         ax, trajectory[:, 1], trajectory[:, 2], trajectory[:, 3];
         color = color, linewidth = linewidth, kwarg...
     )
-end
+end;
 
 # ## Simulation model
 # Due to the symmetry of the pattern, we only need to simulate a quarter of
@@ -109,7 +109,7 @@ function graded_cells(L_fine, h, L_total; growth = 1.5)
         push!(d, min(d[end] * growth, L_total - sum(d)))
     end
     return d
-end
+end;
 
 # The wells are close to each other in the vertical section above the kickoff
 # depth. To limit the thermal interference there, the upper section of each
@@ -215,7 +215,7 @@ function run_case(case)
         push!(cfg[:timestep_selectors], sel)
     end
     return simulate_reservoir(case; simulator = sim, config = cfg)
-end
+end;
 
 # ## Thermal power
 # The thermal power of the system is the power of the simulated well
@@ -233,7 +233,7 @@ function average_power(results, N = N_years)
     active = t .<= N * year + 1.0
     P = system_power(results)
     return sum(P[active] .* dt[active]) / sum(dt[active])
-end
+end;
 
 # ## Evaluate designs
 # Since the mesh and well geometry change with the design, we cannot use the

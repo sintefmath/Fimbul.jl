@@ -196,7 +196,7 @@ function plot_lateral_data!(ax, time, data; stacked = false)
         end
     end
     return
-end
+end;
 
 # Plot lateral temperature and power over time
 fig = Figure(size = (800, 800))

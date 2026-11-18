@@ -178,7 +178,7 @@ fig
 # which is drawn down less in layers with high conductivity, where heat is
 # more efficiently supplied from the surrounding rock. This gives distinct
 # steps in the temperature profile at the layer interfaces.
-colors_well = cgrad(:BrBG_4, 4, categorical = true)[[1, 2, 4]]
+colors_well = cgrad(:BrBG_4, 4, categorical = true)[[1, 2, 4]];
 # The closed-loop well is a single merged well, :CoaxialWell, controlled as
 # :CoaxialWell_inner and :CoaxialWell_outer (see `closed_loop_well_names`).
 # The inner part holds the pipes and the grout, and its nodes come first in the
@@ -429,7 +429,7 @@ plot_comparison(
 # the DT with the prior conductivity is used as initial guess.
 z = x[3, :]
 num_layers = length(depths_layers) - 1
-layers = [clamp(searchsortedlast(depths_layers, zi), 1, num_layers) for zi in z]
+layers = [clamp(searchsortedlast(depths_layers, zi), 1, num_layers) for zi in z];
 
 # The DTS measurements are the grout temperatures of the reference at the end
 # of the simulation. Since the DT has the same mesh as the reference, the well
