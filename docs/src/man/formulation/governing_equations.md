@@ -88,14 +88,14 @@ so that only liquid terms in Equations (1) and (2) remain.
 Flow in wells can be modeled in two different ways:
 - As a simple well where flow in and out of the wellbore is computed based on an
   explicitly computed pressure drawdown from the top to each perforated cell—see
-  JutulDarcy's [`SimpleWell`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.SimpleWell). In this
+  JutulDarcy's [`SimpleWell`](@extref JutulDarcy.SimpleWell). In this
   formulation, the entire wellbore gets a single temperature, which in many
   cases is a poor approximation for geothermal wells.
 - As a multisegment well where each wellbore is discretized as a 1D object with
   its own conservation equations for mass and energy, with accompanying pressure
   and heat variables (either temperature or enthalpy depending on the
   formulation)—see JutulDarcy's
-  [`MultiSegmentWell`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.MultiSegmentWell).
+  [`MultiSegmentWell`](@extref JutulDarcy.MultiSegmentWell).
 
 In geothermal energy, heat is exchanged with the formation along the entire
 wellbore, so a multisegment well formulation is the preferred modeling choice. For closed-loop geothermal wells (e.g., AGS,
@@ -155,9 +155,9 @@ Perforations of both simple and multisegment wells compute mass and conductive
 heat flow using Peaceman-type well indices, with the exception of U-tube and
 coaxial closed-loop wells (see below). The well index $\mathrm{WI}$ is computed
 with Peaceman's formula—see
-[`compute_peaceman_index`](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells#JutulDarcy.compute_peaceman_index)
+[`compute_peaceman_index`](@extref JutulDarcy.compute_peaceman_index)
 and the [JutulDarcy documentation on
-wells](https://sintefmath.github.io/JutulDarcy.jl/stable/man/basics/wells). For
+wells](@extref JutulDarcy man/basics/wells). For
 a perforation connecting well node $w$ to reservoir cell $c$, the mass flow of
 phase $\alpha$ from the well into the reservoir (positive for injection) is
 
@@ -208,7 +208,7 @@ $\Lambda = \phi\Lambda_f + (1-\phi)\Lambda_R$, and $r_e^{th}$ is the
 Peaceman equivalent radius computed with $\Lambda$ in place of $\mathbf{K}$
 and the Peaceman constant doubled ($0.56$ instead of $0.28$). Both indices
 can also be set directly when setting up
-the well (`WI` and `WIth` in `setup_well`).
+the well (`WI` and `WIth` in [`setup_well`](@extref JutulDarcy.setup_well)).
 
 ### Closed-loop wells
 Closed-loop wells (see [`setup_closed_loop_well`](@ref)) do not exchange mass with the

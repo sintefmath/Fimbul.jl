@@ -6,6 +6,7 @@ using Documenter
 using OrderedCollections
 
 using DocumenterCitations
+using DocumenterInterLinks
 using DocumenterVitepress
 
 ##
@@ -296,7 +297,15 @@ function build_fimbul_docs(
     DocMeta.setdocmeta!(Fimbul, :DocTestSetup, :(using Fimbul); recursive = true)
     # DocMeta.setdocmeta!(JutulDarcy, :DocTestSetup, :(using JutulDarcy); recursive=true)
     # DocMeta.setdocmeta!(Jutul, :DocTestSetup, :(using Jutul); recursive=true)
-    plugins = Documenter.Plugin[CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))]
+    # Links to the documentation of Jutul and JutulDarcy, used with @extref
+    links = InterLinks(
+        "Jutul" => "https://sintefmath.github.io/Jutul.jl/stable/",
+        "JutulDarcy" => "https://sintefmath.github.io/JutulDarcy.jl/stable/",
+    )
+    plugins = Documenter.Plugin[
+        CitationBibliography(joinpath(@__DIR__, "src", "refs.bib")),
+        links,
+    ]
 
     if isnothing(build_format)
         if use_vitepress

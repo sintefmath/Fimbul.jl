@@ -1,6 +1,7 @@
 [deps]
 Documenter = "e30172f5-a6a5-5a46-863b-614d45cd2de4"
 DocumenterCitations = "daee34ce-89f3-4625-b898-19384cb65244"
+DocumenterInterLinks = "d12716ef-a0f6-4df4-a9f1-a5a34e75c656"
 DocumenterVitepress = "4710194d-e776-4893-9690-8d956a29c365"
 Fimbul = "cac51d78-27de-4708-bd2b-bd13a82f652b"
 GLMakie = "e9467ef8-e4e7-5192-8a1a-b1aee30e663a"
