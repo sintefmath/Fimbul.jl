@@ -28,8 +28,10 @@ output_file = joinpath(output_folder, "steam_tables_h2o.jld2")
 println("Building steam tables with CoolProp ...")
 t = @elapsed tables = build_steam_tables_h2o()
 T = tables[:temperature]
-@printf("Built tables in %.1f s: %d pressure points (%.3g–%.3g Pa), %d enthalpy points (%.3g–%.3g J/kg)\n",
-    t, length(T.X), extrema(T.X)..., length(T.Y), extrema(T.Y)...)
+@printf(
+    "Built tables in %.1f s: %d pressure points (%.3g–%.3g Pa), %d enthalpy points (%.3g–%.3g J/kg)\n",
+    t, length(T.X), extrema(T.X)..., length(T.Y), extrema(T.Y)...
+)
 
 # ## Save tables
 # The artifact loader expects a dictionary with the tables stored under "data".
@@ -44,10 +46,10 @@ loaded = Jutul.JLD2.load(output_file)["data"]
 @assert keys(loaded) == keys(tables) "Saved tables do not match the generated tables"
 Sv = loaded[:saturation_vapor_ph]
 p_c, h_c = Fimbul.WATER_CRITICAL_PRESSURE, Fimbul.WATER_CRITICAL_ENTHALPY
-for (h, Sv_expected) in ((h_c + 200e3, 1.0), (h_c - 200e3, 0.0))
-    for p in (p_c - 50e3, p_c, p_c + 50e3, p_c + 1e6)
+for (h, Sv_expected) in ((h_c + 200.0e3, 1.0), (h_c - 200.0e3, 0.0))
+    for p in (p_c - 50.0e3, p_c, p_c + 50.0e3, p_c + 1.0e6)
         Sv_ph = Sv(p, h)
-        @assert isapprox(Sv_ph, Sv_expected; atol = 1e-8) "Unexpected vapor saturation $Sv_ph at p = $p Pa, h = $h J/kg"
+        @assert isapprox(Sv_ph, Sv_expected; atol = 1.0e-8) "Unexpected vapor saturation $Sv_ph at p = $p Pa, h = $h J/kg"
     end
 end
 println("Checked phase labelling across the critical pressure.")

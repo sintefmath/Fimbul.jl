@@ -9,7 +9,7 @@ using Jutul, JutulDarcy, Fimbul, GLMakie
 
 to_celsius(T) = convert_from_si.(T, :Celsius)
 to_megapascal(p) = convert_from_si.(p, "megapascal")
-to_kj_per_kg(h) = h ./ 1e3
+to_kj_per_kg(h) = h ./ 1.0e3
 
 const SINGLE_PHASE_CASES = (:a, :b, :c)
 const TWO_PHASE_CASES = (:d, :e)
@@ -21,12 +21,18 @@ const CASE_COLORS = Dict(
     :e => :magenta,
 )
 const PROFILE_SPECS = (
-    (name = :Pressure, label = "Pressure [MPa]", transform = to_megapascal,
-        hydrotherm_column = "pressure_mpa"),
-    (name = :Temperature, label = "Temperature [°C]", transform = to_celsius,
-        hydrotherm_column = "temperature_c"),
-    (name = :Saturations, label = "Liquid saturation [-]", transform = x -> vec(x[1,:]),
-        hydrotherm_column = "liquid_saturation"),
+    (
+        name = :Pressure, label = "Pressure [MPa]", transform = to_megapascal,
+        hydrotherm_column = "pressure_mpa",
+    ),
+    (
+        name = :Temperature, label = "Temperature [°C]", transform = to_celsius,
+        hydrotherm_column = "temperature_c",
+    ),
+    (
+        name = :Saturations, label = "Liquid saturation [-]", transform = x -> vec(x[1, :]),
+        hydrotherm_column = "liquid_saturation",
+    ),
 )
 
 nx = 200
@@ -48,8 +54,8 @@ function simulate_benchmark_case(case_symbol; vertical = false, nx = 100, cell_s
     )
     simulator, config = setup_reservoir_simulator(
         case;
-        tol_cnv = 1e-3,
-        tol_mb = 1e-7,
+        tol_cnv = 1.0e-3,
+        tol_mb = 1.0e-7,
         max_timestep = Inf,
         timesteps = :none,
         relaxation = true,
@@ -109,23 +115,27 @@ function plot_property_maps(tables)
     fig = Figure(size = (1200, 500))
     for (i, spec) in enumerate(specs)
         yaxisposition = ifelse(i < length(specs), :left, :right)
-        ax = Axis(fig[2, i];
+        ax = Axis(
+            fig[2, i];
             xticksmirrored = true, yticksmirrored = true,
-            yaxisposition = yaxisposition, aspect = AxisAspect(1))
+            yaxisposition = yaxisposition, aspect = AxisAspect(1)
+        )
         handles = Fimbul.plot_phase_diagram_contours!(
             ax,
             tables;
             variable = spec.variable,
-            pressure_limits = (1e5, 52.5e6),
-            enthalpy_limits = (500e3, 3500e3),
+            pressure_limits = (1.0e5, 52.5e6),
+            enthalpy_limits = (500.0e3, 3500.0e3),
             n_pressure = 500,
             n_enthalpy = 500,
             levels = 18,
             lines = true,
             contourf_kwargs = (; colormap = :seaborn_icefire_gradient),
-        )       
-        Colorbar(fig[1, i], handles.filled, vertical = false, flipaxis = true, width = ax.width,
-            label = spec.label, labelsize = 20)
+        )
+        Colorbar(
+            fig[1, i], handles.filled, vertical = false, flipaxis = true, width = ax.width,
+            label = spec.label, labelsize = 20
+        )
         if i > 1
             hideydecorations!(ax, ticks = false)
         end
@@ -138,14 +148,14 @@ end
 function plot_case_profiles(case_symbol, results)
     vertical_modes = Fimbul.available_vertical_modes_ht_1d(case_symbol)
     fig_height = 400 * length(vertical_modes)
-    fig = Figure(size = (800 + 400*(case_symbol ∈ TWO_PHASE_CASES), fig_height))
+    fig = Figure(size = (800 + 400 * (case_symbol ∈ TWO_PHASE_CASES), fig_height))
 
     for (k, vertical) in enumerate(vertical_modes)
         out = results[(case_symbol, vertical)]
         x = reservoir_coordinate(out)
         state = out.results.states[end]
 
-        row = 2*(k-1)
+        row = 2 * (k - 1)
         vertical_label = vertical ? "vertical" : "horizontal"
         for (col, spec) in enumerate(PROFILE_SPECS)
             if spec.name == :Saturations && case_symbol ∉ TWO_PHASE_CASES
@@ -155,26 +165,30 @@ function plot_case_profiles(case_symbol, results)
             hydrotherm = Fimbul.load_hydrotherm_1d_property(case_symbol, vertical, spec.hydrotherm_column)
             if vertical
                 ax = Axis(
-                    fig[row+1, col];
+                    fig[row + 1, col];
                     xlabel = spec.label,
                     ylabel = "Depth [m]",
                     yreversed = true,
                 )
                 if hydrotherm !== nothing
-                    lines!(ax, hydrotherm.values, hydrotherm.coordinate_m .- cell_size/2;
-                        linewidth = 8, linestyle = :dash, color = :black, label = "HYDROTHERM")
+                    lines!(
+                        ax, hydrotherm.values, hydrotherm.coordinate_m .- cell_size / 2;
+                        linewidth = 8, linestyle = :dash, color = :black, label = "HYDROTHERM"
+                    )
                 end
                 lines!(ax, values, x, color = CASE_COLORS[case_symbol], linewidth = 3, label = "Fimbul")
             else
                 ax = Axis(
-                    fig[row+1, col];
+                    fig[row + 1, col];
                     xlabel = "Distance [m]",
                     ylabel = spec.label,
                 )
                 y = ordered_values(values, vertical)
                 if hydrotherm !== nothing
-                    lines!(ax, hydrotherm.coordinate_m .- cell_size/2, hydrotherm.values;
-                        linewidth = 8, linestyle = :dash, color = :black, label = "HYDROTHERM")
+                    lines!(
+                        ax, hydrotherm.coordinate_m .- cell_size / 2, hydrotherm.values;
+                        linewidth = 8, linestyle = :dash, color = :black, label = "HYDROTHERM"
+                    )
                 end
                 lines!(ax, x, y, color = CASE_COLORS[case_symbol], linewidth = 3, label = "Fimbul")
                 if col == 1
@@ -190,7 +204,8 @@ end;
 # ## Simulate all cases
 all_results = simulate_case_family(
     (SINGLE_PHASE_CASES..., TWO_PHASE_CASES...);
-    nx = nx, cell_size = cell_size);
+    nx = nx, cell_size = cell_size
+);
 
 # ## H2O properties in pressure-enthalpy space
 # The steam tables have been generated using the `CoolProp` library
@@ -264,8 +279,8 @@ handles = Fimbul.plot_phase_diagram_contours!(
     ax,
     tables;
     variable = :temperature,
-    pressure_limits = (1e5, 52.5e6),
-    enthalpy_limits = (500e3, 3500e3),
+    pressure_limits = (1.0e5, 52.5e6),
+    enthalpy_limits = (500.0e3, 3500.0e3),
     levels = 20,
     lines = true,
 )

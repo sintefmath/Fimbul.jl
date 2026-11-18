@@ -27,8 +27,10 @@ function borehole_fill_properties(material::Symbol = :grout; kwarg...)
     return borehole_fill_properties(BOREHOLE_FILL_MATERIALS[material]; kwarg...)
 end
 
-function borehole_fill_properties(material::NamedTuple;
-    thermal_conductivity = missing, density = missing, heat_capacity = missing)
+function borehole_fill_properties(
+        material::NamedTuple;
+        thermal_conductivity = missing, density = missing, heat_capacity = missing
+    )
     override(value, key) = ismissing(value) ? material[key] : value
     for key in (:thermal_conductivity, :density, :heat_capacity)
         haskey(material, key) || error("Borehole fill must define $key.")
@@ -53,4 +55,5 @@ function check_removed_kwargs(; kwarg...)
         error("Keyword argument `$k` has been removed, use \
             $(replacements[k]) instead.")
     end
+    return
 end

@@ -1,10 +1,12 @@
-function Fimbul.plot_well_data!(ax, time, reference, other; 
-    wells = :all, 
-    names = missing, 
-    field = :energy, 
-    nan_ix = missing,
-    legend = true,
-    kwargs...)
+function Fimbul.plot_well_data!(
+        ax, time, reference, other;
+        wells = :all,
+        names = missing,
+        field = :energy,
+        nan_ix = missing,
+        legend = true,
+        kwargs...
+    )
 
     if wells == :all
         wells = setdiff(keys(reference[1]), [:Reservoir, :Facility])
@@ -12,18 +14,20 @@ function Fimbul.plot_well_data!(ax, time, reference, other;
 
     for well in wells
         vr = get_field(reference, well, field)
-        lines!(ax, time, vr; label=names[1], linestyle = (:dash, 1), linewidth = 6, color = :black)
+        lines!(ax, time, vr; label = names[1], linestyle = (:dash, 1), linewidth = 6, color = :black)
         for (i, proxy) in enumerate(other)
             vp = get_field(proxy, well, field)
             if !ismissing(nan_ix) && !ismissing(nan_ix[i])
                 vp[nan_ix[i]] .= NaN
             end
-            lines!(ax, time, vp, label=names[i+1], 
-                linewidth = 3, kwargs...)
+            lines!(
+                ax, time, vp, label = names[i + 1],
+                linewidth = 3, kwargs...
+            )
         end
     end
 
-    if legend
+    return if legend
         axislegend(ax, loc = :best)
     end
 
@@ -37,10 +41,10 @@ function get_field(data, well, field)
         Cp = 4.1864
         p = 1.0si_unit(:atm)
         ρ = 1000.0
-        h0 = Cp*T0 + p/ρ
+        h0 = Cp * T0 + p / ρ
         q = getter(data, :TotalMassFlux)
         h = getter(data, :FluidEnthalpy) .- h0
-        v = abs.(q.*h)
+        v = abs.(q .* h)
     else
         v = getter(data, field)
     end
@@ -60,7 +64,7 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
         msh = physical_representation(rmodel.data_domain)
         geo = tpfv_geometry(msh)
     end
-        
+
     # Wells may be part of a merged well (e.g., the supply and return parts of
     # a closed-loop well). Plot only the nodes of the named part by default.
     well_key = JutulDarcy.WellMerging.merged_well_key(model, well)
@@ -79,7 +83,7 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
 
     branches = dfs_branches(N)
     rcells = well_representation.perforations.reservoir
-    
+
     z = model.models[well_key].data_domain[:cell_centroids][3, :]
     # Plot edges
     for (i, branch) in enumerate(branches)
@@ -89,17 +93,18 @@ function Fimbul.plot_mswell_values!(ax, model, well, values; nodes = missing, la
             vb = values[branch]
             lines!(ax, vb, zb; color = :blue, label = lbl, kwargs...)
         else
-            vb = values[branch,:]
-            lines!(ax, vb[:, 1], vb[:,2], zb; color = :blue, label = lbl, kwargs...)
+            vb = values[branch, :]
+            lines!(ax, vb[:, 1], vb[:, 2], zb; color = :blue, label = lbl, kwargs...)
         end
     end
-    
+
+    return
 end
 
 function dfs_branches(edges)
     # Build adjacency list
-    from_nodes = edges[1,:]
-    to_nodes = edges[2,:]
+    from_nodes = edges[1, :]
+    to_nodes = edges[2, :]
     nodes = unique(vcat(from_nodes, to_nodes))
     adj = Dict(n => Int[] for n in nodes)
     for (f, t) in zip(from_nodes, to_nodes)
@@ -119,7 +124,7 @@ function dfs_branches(edges)
                 dfs(child, path)
             end
         end
-        pop!(path)
+        return pop!(path)
     end
 
     for root in roots

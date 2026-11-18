@@ -118,39 +118,39 @@ production from high-enthalpy geothermal fields. *Geothermics*, 112, 102744.
 https://doi.org/10.1016/j.geothermics.2023.102744
 """
 function magmatic_intrusion(;
-    dims = (48, 48, 80),
-    domain_size = (10000.0, 10000.0, 5000.0).*meter,
-    refinement_margin = 0.0meter,
-    cell_growth = 1.25,
-    cap_cells = nothing,
-    pressure_surface = 10.0*si_unit(:bar),
-    temperature_surface = convert_to_si(10.0, :Celsius),
-    geothermal_gradient = 0.0375Kelvin/meter,
-    intrusion_radius = 1500.0meter,
-    intrusion_depths = [2000.0, 3000.0].*meter,
-    temperature_intrusion = convert_to_si(900.0, :Celsius),
-    permeability = 1e-15,
-    permeability_cap = 1e-16,
-    cap_thickness = 500.0meter,
-    porosity = 0.1,
-    rock_density = 2700.0kilogram/meter^3,
-    rock_heat_capacity = 880.0joule/kilogram/Kelvin,
-    rock_thermal_conductivity = 2.0watt/meter/Kelvin,
-    boundaries = :all,
-    producer_position = (-500.0, 0.0).*meter,
-    producer_depths = [750.0, 1750.0].*meter,
-    injector_position = nothing,
-    injector_depths = [1750.0, 1950.0].*meter,
-    whp_producer = 10.0*si_unit(:bar),
-    whp_injector = 80.0*si_unit(:bar),
-    temperature_injection = convert_to_si(80.0, :Celsius),
-    natural_state_time = 2400.0year,
-    dt_natural_state = 100.0year,
-    num_years = 100,
-    injection_years = num_years,
-    report_interval = year/4,
-    initial_state = nothing,
-)
+        dims = (48, 48, 80),
+        domain_size = (10000.0, 10000.0, 5000.0) .* meter,
+        refinement_margin = 0.0meter,
+        cell_growth = 1.25,
+        cap_cells = nothing,
+        pressure_surface = 10.0 * si_unit(:bar),
+        temperature_surface = convert_to_si(10.0, :Celsius),
+        geothermal_gradient = 0.0375Kelvin / meter,
+        intrusion_radius = 1500.0meter,
+        intrusion_depths = [2000.0, 3000.0] .* meter,
+        temperature_intrusion = convert_to_si(900.0, :Celsius),
+        permeability = 1.0e-15,
+        permeability_cap = 1.0e-16,
+        cap_thickness = 500.0meter,
+        porosity = 0.1,
+        rock_density = 2700.0kilogram / meter^3,
+        rock_heat_capacity = 880.0joule / kilogram / Kelvin,
+        rock_thermal_conductivity = 2.0watt / meter / Kelvin,
+        boundaries = :all,
+        producer_position = (-500.0, 0.0) .* meter,
+        producer_depths = [750.0, 1750.0] .* meter,
+        injector_position = nothing,
+        injector_depths = [1750.0, 1950.0] .* meter,
+        whp_producer = 10.0 * si_unit(:bar),
+        whp_injector = 80.0 * si_unit(:bar),
+        temperature_injection = convert_to_si(80.0, :Celsius),
+        natural_state_time = 2400.0year,
+        dt_natural_state = 100.0year,
+        num_years = 100,
+        injection_years = num_years,
+        report_interval = year / 4,
+        initial_state = nothing,
+    )
     if boundaries == :all
         boundaries = [:top, :sides, :bottom]
     end
@@ -161,18 +161,24 @@ function magmatic_intrusion(;
     tables = sys.pvt_tables
 
     # ## Mesh and rock properties
-    center = domain_size[1:2]./2
+    center = domain_size[1:2] ./ 2
     if cell_growth > 1.0
         r = intrusion_radius + refinement_margin
         sizes = (
-            magmatic_intrusion_cell_sizes(domain_size[1], dims[1],
-                center[1] - r, center[1] + r; growth = cell_growth),
-            magmatic_intrusion_cell_sizes(domain_size[2], dims[2],
-                center[2] - r, center[2] + r; growth = cell_growth),
-            magmatic_intrusion_cell_sizes(domain_size[3], dims[3],
+            magmatic_intrusion_cell_sizes(
+                domain_size[1], dims[1],
+                center[1] - r, center[1] + r; growth = cell_growth
+            ),
+            magmatic_intrusion_cell_sizes(
+                domain_size[2], dims[2],
+                center[2] - r, center[2] + r; growth = cell_growth
+            ),
+            magmatic_intrusion_cell_sizes(
+                domain_size[3], dims[3],
                 cap_thickness, intrusion_depths[2] + refinement_margin;
                 growth = cell_growth,
-                top = cap_cells == 0 ? nothing : (cap_thickness, cap_cells)),
+                top = cap_cells == 0 ? nothing : (cap_thickness, cap_cells)
+            ),
         )
         g = CartesianMesh(dims, sizes)
     else
@@ -181,16 +187,17 @@ function magmatic_intrusion(;
     geo = tpfv_geometry(g)
     x, y, z = (geo.cell_centroids[i, :] for i in 1:3)
 
-    T_background = depth -> temperature_surface + geothermal_gradient*depth
-    r_xy = @. sqrt((x - center[1])^2 + (y - center[2])^2)/intrusion_radius
-    z_mid = sum(intrusion_depths)/2
-    r_z = @. abs(z - z_mid)/((intrusion_depths[2] - intrusion_depths[1])/2)
+    T_background = depth -> temperature_surface + geothermal_gradient * depth
+    r_xy = @. sqrt((x - center[1])^2 + (y - center[2])^2) / intrusion_radius
+    z_mid = sum(intrusion_depths) / 2
+    r_z = @. abs(z - z_mid) / ((intrusion_depths[2] - intrusion_depths[1]) / 2)
     in_intrusion = @. r_xy^2 + r_z^2 <= 1.0
 
     perm = fill(permeability, length(z))
     perm[z .<= cap_thickness] .= permeability_cap
 
-    domain = reservoir_domain(g;
+    domain = reservoir_domain(
+        g;
         permeability = perm,
         porosity = porosity,
         rock_density = rock_density,
@@ -211,8 +218,10 @@ function magmatic_intrusion(;
         open_cells = magmatic_intrusion_well_cells(g, center .+ pos, depths)
         closed = [!(c in open_cells) for c in cells]
         WI = [cl ? 0.0 : NaN for cl in closed]
-        return setup_well(domain, cells; name = name, simple_well = false,
-            reference_depth = 0.0, WI = WI, WIth = WI)
+        return setup_well(
+            domain, cells; name = name, simple_well = false,
+            reference_depth = 0.0, WI = WI, WIth = WI
+        )
     end
     has_producer = num_years > 0
     has_injector = has_producer && !isnothing(injector_position) &&
@@ -230,7 +239,8 @@ function magmatic_intrusion(;
     # ## Model
     # Wells must not be shut automatically, since the multisegment wells may
     # appear to inject during the first iterations after they are opened.
-    model, parameters = setup_reservoir_model(domain, sys;
+    model, parameters = setup_reservoir_model(
+        domain, sys;
         wells = wells,
         can_shut_wells = false,
         thermal = true,
@@ -241,8 +251,10 @@ function magmatic_intrusion(;
     push!(rmodel.output_variables, :PhaseMassDensities, :PhaseViscosities)
 
     # ## Initial state
-    p_hydrostatic = hydrostatic_pressure_h2o(tables, pressure_surface,
-        T_background, domain_size[3])
+    p_hydrostatic = hydrostatic_pressure_h2o(
+        tables, pressure_surface,
+        T_background, domain_size[3]
+    )
     if isnothing(initial_state)
         p0 = p_hydrostatic.(z)
         T0 = T_background.(z)
@@ -254,7 +266,8 @@ function magmatic_intrusion(;
         T0 = haskey(initial_state, :Temperature) ?
             initial_state[:Temperature] : tables[:temperature].(p0, h0)
     end
-    state0 = setup_reservoir_state(model,
+    state0 = setup_reservoir_state(
+        model,
         Pressure = p0,
         Temperature = T0,
         Enthalpy = h0,
@@ -289,20 +302,27 @@ function magmatic_intrusion(;
     bc = []
     for d in unique(bc_dir)
         ix = bc_dir .== d
-        append!(bc, flow_boundary_condition(bc_cells[ix], domain,
-            bc_pressure[ix], bc_temperature[ix];
-            density = bc_density[ix], enthalpy = bc_enthalpy[ix], dir = d))
+        append!(
+            bc, flow_boundary_condition(
+                bc_cells[ix], domain,
+                bc_pressure[ix], bc_temperature[ix];
+                density = bc_density[ix], enthalpy = bc_enthalpy[ix], dir = d
+            )
+        )
     end
     bc = [b for b in bc]
     isempty(bc) && (bc = nothing)
 
     # ## Forces
     ctrl_prod = ProducerControl(BottomHolePressureTarget(whp_producer))
-    ctrl_inj = InjectorControl(BottomHolePressureTarget(whp_injector), [1.0];
+    ctrl_inj = InjectorControl(
+        BottomHolePressureTarget(whp_injector), [1.0];
         temperature = temperature_injection,
         enthalpy = tables[:enthalpy](whp_injector, temperature_injection),
-        density = tables[:density_mix](whp_injector,
-            tables[:enthalpy](whp_injector, temperature_injection)),
+        density = tables[:density_mix](
+            whp_injector,
+            tables[:enthalpy](whp_injector, temperature_injection)
+        ),
         check = false,
     )
     if has_producer
@@ -322,8 +342,8 @@ function magmatic_intrusion(;
     dt, forces = Float64[], []
     # Uniform report steps of approximately length dt_report over total_time
     function report_steps(total_time, dt_report)
-        n = max(1, ceil(Int, total_time/dt_report - 1e-8))
-        return fill(total_time/n, n)
+        n = max(1, ceil(Int, total_time / dt_report - 1.0e-8))
+        return fill(total_time / n, n)
     end
     if natural_state_time > 0
         dt_ns = report_steps(natural_state_time, dt_natural_state)
@@ -331,11 +351,15 @@ function magmatic_intrusion(;
         append!(forces, fill(forces_natural, length(dt_ns)))
     end
     if num_years > 0
-        dt_prod = report_steps(num_years*year, report_interval)
+        dt_prod = report_steps(num_years * year, report_interval)
         t_end = cumsum(dt_prod)
         append!(dt, dt_prod)
-        append!(forces, [t <= injection_years*year + 1.0 ? forces_inj : forces_prod
-            for t in t_end])
+        append!(
+            forces, [
+                t <= injection_years * year + 1.0 ? forces_inj : forces_prod
+                    for t in t_end
+            ]
+        )
     end
 
     # ## Additional case info
@@ -345,7 +369,8 @@ function magmatic_intrusion(;
         :natural_state_steps => count(f -> f === forces_natural, forces),
     )
 
-    return JutulCase(model, dt, forces;
+    return JutulCase(
+        model, dt, forces;
         state0 = state0,
         parameters = parameters,
         input_data = info,
@@ -381,10 +406,12 @@ function magmatic_intrusion_cell_sizes(L, n, a, b; growth = 1.25, top = nothing)
         n_top = 1
         sizes = Float64[]
         for _ in 1:20
-            sizes = magmatic_intrusion_cell_sizes(L, n, a, b;
-                growth = growth, top = (L_top, n_top))
+            sizes = magmatic_intrusion_cell_sizes(
+                L, n, a, b;
+                growth = growth, top = (L_top, n_top)
+            )
             h_fine = minimum(sizes[(n_top + 1):end])
-            n_next = max(1, round(Int, L_top/h_fine))
+            n_next = max(1, round(Int, L_top / h_fine))
             n_next == n_top && break
             n_top = n_next
         end
@@ -398,30 +425,30 @@ function magmatic_intrusion_cell_sizes(L, n, a, b; growth = 1.25, top = nothing)
     else
         L_top, n_top = top
         L_top <= a || throw(ArgumentError("Top layer must be above the refined region"))
-        h_top = L_top/n_top
+        h_top = L_top / n_top
     end
     # Number of cells (real-valued) needed to grade outwards over length Lo,
     # starting from cells of size h, with cell sizes limited by h_max
     function count(Lo, h, h_max)
         Lo <= 0 && return 0.0
         h_max = max(h_max, h)
-        k = floor(log(h_max/h)/log(growth))
-        S = h*growth*(growth^k - 1)/(growth - 1)
-        S >= Lo && return log(1 + Lo*(growth - 1)/(h*growth))/log(growth)
-        return k + (Lo - S)/h_max
+        k = floor(log(h_max / h) / log(growth))
+        S = h * growth * (growth^k - 1) / (growth - 1)
+        S >= Lo && return log(1 + Lo * (growth - 1) / (h * growth)) / log(growth)
+        return k + (Lo - S) / h_max
     end
-    total = h -> W/h + count(a - L_top, h, h_top) + n_top + count(L - b, h, Inf)
-    lo, hi = 1e-6*L, Float64(L)
+    total = h -> W / h + count(a - L_top, h, h_top) + n_top + count(L - b, h, Inf)
+    lo, hi = 1.0e-6 * L, Float64(L)
     for _ in 1:200
-        h = sqrt(lo*hi)
+        h = sqrt(lo * hi)
         total(h) > n ? (lo = h) : (hi = h)
     end
-    h = sqrt(lo*hi)
+    h = sqrt(lo * hi)
     m_a = ceil(Int, count(a - L_top, h, h_top) - 0.1)
     m_b = round(Int, count(L - b, h, Inf))
     n_fine = n - m_a - m_b - n_top
     n_fine > 0 || throw(ArgumentError("Too few cells for the refined region"))
-    h_fine = W/n_fine
+    h_fine = W / n_fine
     left = magmatic_intrusion_graded_sizes(a - L_top, m_a, h_fine, h_top)
     right = magmatic_intrusion_graded_sizes(L - b, m_b, h_fine, Inf)
     return vcat(fill(h_top, n_top), reverse(left), fill(h_fine, n_fine), right)
@@ -431,14 +458,14 @@ end
 # cell of size `h0`, with cell sizes limited by `h_max` where possible.
 function magmatic_intrusion_graded_sizes(Lo, m, h0, h_max = Inf)
     m == 0 && return Float64[]
-    m*h_max <= Lo && return fill(Lo/m, m)
-    sizes = r -> [min(h0*r^k, h_max) for k in 1:m]
-    lo, hi = 1e-3, 10.0
+    m * h_max <= Lo && return fill(Lo / m, m)
+    sizes = r -> [min(h0 * r^k, h_max) for k in 1:m]
+    lo, hi = 1.0e-3, 10.0
     for _ in 1:200
-        r = (lo + hi)/2
+        r = (lo + hi) / 2
         sum(sizes(r)) > Lo ? (hi = r) : (lo = r)
     end
-    return sizes((lo + hi)/2)
+    return sizes((lo + hi) / 2)
 end
 
 """
@@ -450,15 +477,15 @@ Compute a hydrostatic pressure profile for pure H₂O with temperature profile
 """
 function hydrostatic_pressure_h2o(tables, p_top, T, depth; dz = 1.0)
     rho = (p, z) -> tables[:density_mix](p, tables[:enthalpy](p, T(z)))
-    n = max(ceil(Int, depth/dz), 1) + 1
+    n = max(ceil(Int, depth / dz), 1) + 1
     zv = collect(range(0.0, depth, length = n))
     pv = similar(zv)
     pv[1] = p_top
     for i in 2:n
-        h = zv[i] - zv[i-1]
-        rho_0 = rho(pv[i-1], zv[i-1])
-        rho_1 = rho(pv[i-1] + rho_0*gravity_constant*h, zv[i])
-        pv[i] = pv[i-1] + 0.5*(rho_0 + rho_1)*gravity_constant*h
+        h = zv[i] - zv[i - 1]
+        rho_0 = rho(pv[i - 1], zv[i - 1])
+        rho_1 = rho(pv[i - 1] + rho_0 * gravity_constant * h, zv[i])
+        pv[i] = pv[i - 1] + 0.5 * (rho_0 + rho_1) * gravity_constant * h
     end
     return get_1d_interpolator(zv, pv)
 end

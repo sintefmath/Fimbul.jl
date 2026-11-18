@@ -1,5 +1,7 @@
 [![Fimbul logo](https://github.com/sintefmath/Fimbul.jl/raw/main/docs/src/assets/logo_text_wide.png)](https://sintefmath.github.io/Fimbul.jl/dev/)
 
+[![code style: runic](https://img.shields.io/badge/code_style-%E1%9A%B1%E1%9A%A2%E1%9A%BE%E1%9B%81%E1%9A%B2-black)](https://github.com/fredrikekre/Runic.jl)
+
 > [!TIP]
 > Visit the docs at https://sintefmath.github.io/Fimbul.jl/dev/
 

@@ -6,12 +6,12 @@ Specific enthalpy [J/kg] as a primary variable, for use in the pressure-enthalpy
 """
 Base.@kwdef struct Enthalpy{T} <: ScalarVariable
     min::T = 0.0
-    max::T = 1e8
+    max::T = 1.0e8
     max_rel::Union{T, Nothing} = nothing
     max_abs::Union{T, Nothing} = nothing
 end
 
-Jutul.default_value(model, ::Enthalpy) = 125e3  # ~30°C liquid water [J/kg]
+Jutul.default_value(model, ::Enthalpy) = 125.0e3  # ~30°C liquid water [J/kg]
 Jutul.minimum_value(h::Enthalpy) = h.min
 Jutul.maximum_value(h::Enthalpy) = h.max
 Jutul.absolute_increment_limit(h::Enthalpy) = h.max_abs
@@ -30,7 +30,8 @@ end
 Jutul.subvariable(v::TemperatureFromEnthalpy, map) = v
 
 @jutul_secondary function update_temperature_from_enthalpy!(
-    T_out, var::TemperatureFromEnthalpy, model, Pressure, Enthalpy, ix)
+        T_out, var::TemperatureFromEnthalpy, model, Pressure, Enthalpy, ix
+    )
     for c in ix
         T_out[c] = var.tab(Pressure[c], Enthalpy[c])
     end
@@ -39,15 +40,16 @@ end
 struct FluidInternalEnergyFromEnthalpy <: JutulDarcy.PhaseVariables end
 
 @jutul_secondary function update_internal_energy_from_enthalpy!(
-    U, var::FluidInternalEnergyFromEnthalpy, model,
-    FluidEnthalpy, PhaseMassDensities, Pressure, ix)
+        U, var::FluidInternalEnergyFromEnthalpy, model,
+        FluidEnthalpy, PhaseMassDensities, Pressure, ix
+    )
     nph = size(PhaseMassDensities, 1)
     for ph in 1:nph
         for c in ix
             H = FluidEnthalpy[ph, c]
             p = Pressure[c]
             rho = PhaseMassDensities[ph, c]
-            U[ph, c] = H - p./rho
+            U[ph, c] = H - p ./ rho
         end
     end
 end
@@ -58,7 +60,8 @@ struct PHDependentPhaseVariableH2O{TL, TV} <: JutulDarcy.PhaseVariables
 end
 
 @jutul_secondary function update_pressure_enthalpy_dependent_phase_variable_h2o!(
-    result, var::PHDependentPhaseVariableH2O, model, Pressure, Enthalpy, ix)
+        result, var::PHDependentPhaseVariableH2O, model, Pressure, Enthalpy, ix
+    )
     for c in ix
         p = Pressure[c]
         h = Enthalpy[c]
@@ -74,12 +77,13 @@ struct PhaseEnthalpyH2O{TL, TV} <: JutulDarcy.PhaseVariables
 end
 
 @jutul_secondary function update_phase_enthalpy_h2o!(
-    h_ph, var::PhaseEnthalpyH2O, model, Pressure, Enthalpy, Saturations, ix)
+        h_ph, var::PhaseEnthalpyH2O, model, Pressure, Enthalpy, Saturations, ix
+    )
     for c in ix
         p = Pressure[c]
         h = Enthalpy[c]
         S_l = Saturations[1, c]
-        ϵ = 1e-6
+        ϵ = 1.0e-6
         if ϵ < S_l < 1 - ϵ
             h_ph[1, c] = var.tab_liq(p, h)
             h_ph[2, c] = var.tab_vap(p, h)
@@ -96,7 +100,8 @@ struct SaturationH2O{T} <: JutulDarcy.PhaseVariables
 end
 
 @jutul_secondary function update_saturation_h2o!(
-    S, var::SaturationH2O, model, Pressure, Enthalpy, ix)
+        S, var::SaturationH2O, model, Pressure, Enthalpy, ix
+    )
     for c in ix
         p = Pressure[c]
         h = Enthalpy[c]
@@ -112,7 +117,8 @@ struct EnthalpyFromPT{T} <: ScalarVariable
 end
 
 @jutul_secondary function update_enthalpy_from_pt!(
-    h, var::EnthalpyFromPT, model, Pressure, Temperature, ix)
+        h, var::EnthalpyFromPT, model, Pressure, Temperature, ix
+    )
     for c in ix
         p = Pressure[c]
         T = Temperature[c]

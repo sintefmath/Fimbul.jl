@@ -13,7 +13,7 @@ cd(@__DIR__)
 
 function dir_to_doc_name(x::String)
     x = replace(x, "_" => " ")
-    x = uppercase(x[1:1])*x[2:end]
+    x = uppercase(x[1:1]) * x[2:end]
     return x
 end
 
@@ -98,7 +98,7 @@ function all_tags()
         "rgb(255, 255, 51)",
         "rgb(166, 86, 40)",
         "rgb(247, 129, 191)",
-        "rgb(153, 153, 153)"
+        "rgb(153, 153, 153)",
     ]
 
     out = OrderedDict{String, NamedTuple{(:desc, :color), Tuple{String, String}}}()
@@ -200,28 +200,28 @@ function write_tags()
             end
         end
     end
-    println("Wrote tags to $outpth")
+    return println("Wrote tags to $outpth")
 end
 
 function timer_str()
     start = "example_t_start = time_ns(); # hide\n"
     stop_1 = "\nt_s = (time_ns() - example_t_start) / 1e9 # hide\n"
-    stop = stop_1*"println(\"This example took "*raw"$t_s"*" seconds to complete.\") # hide"
+    stop = stop_1 * "println(\"This example took " * raw"$t_s" * " seconds to complete.\") # hide"
     return (start, stop)
 end
 
 function post_run_variables_gc()
     # Attempt of post-processing to GC some objects in temporary @example modules
     # https://discourse.julialang.org/t/delete-a-module/62226
-    s =  "\nfunction clear_module!(M::Module)        # hide\n"*
-    "    for name ∈ names(M, all=true)        # hide\n"*
-    "        if !isconst(M, name)             # hide\n"*
-    raw"            @eval M $name = $nothing     # hide"*
-    "\n        end                              # hide\n"*
-    "    end                                  # hide\n"*
-    "end                                      # hide\n"*
-    "clear_module!(@__MODULE__)               # hide\n"*
-    "GC.gc();                                 # hide\n"
+    s = "\nfunction clear_module!(M::Module)        # hide\n" *
+        "    for name ∈ names(M, all=true)        # hide\n" *
+        "        if !isconst(M, name)             # hide\n" *
+        raw"            @eval M $name = $nothing     # hide" *
+        "\n        end                              # hide\n" *
+        "    end                                  # hide\n" *
+        "end                                      # hide\n" *
+        "clear_module!(@__MODULE__)               # hide\n" *
+        "GC.gc();                                 # hide\n"
     return s
 end
 
@@ -238,11 +238,11 @@ function example_info_footer(subdir, exname, revision; include_notebook = false,
     if include_notebook && vitepress_notebooks
         # VitePress public assets are copied after Documenter checks Markdown links.
         return footer * """
-        #
-        # ```@raw html
-        # <p>Download the <a href="$script_link">Julia script</a> or the <a href="$notebook_link" download>Jupyter notebook</a>.</p>
-        # ```
-        """
+            #
+            # ```@raw html
+            # <p>Download the <a href="$script_link">Julia script</a> or the <a href="$notebook_link" download>Jupyter notebook</a>.</p>
+            # ```
+            """
     end
     footer *= "# Download the [Julia script]($script_link)"
     if include_notebook
@@ -293,7 +293,7 @@ function build_fimbul_docs(
     if has_explicit_list
         @info "Building only examples as examples_explicit_list was specified" examples_explicit_list
     end
-    DocMeta.setdocmeta!(Fimbul, :DocTestSetup, :(using Fimbul); recursive=true)
+    DocMeta.setdocmeta!(Fimbul, :DocTestSetup, :(using Fimbul); recursive = true)
     # DocMeta.setdocmeta!(JutulDarcy, :DocTestSetup, :(using JutulDarcy); recursive=true)
     # DocMeta.setdocmeta!(Jutul, :DocTestSetup, :(using Jutul); recursive=true)
     plugins = Documenter.Plugin[CitationBibliography(joinpath(@__DIR__, "src", "refs.bib"))]
@@ -305,15 +305,15 @@ function build_fimbul_docs(
             )
         else
             build_format = Documenter.HTML(;
-                prettyurls=get(ENV, "CI", "false") == "true",
-                canonical="https://sintefmath.github.io/Fimbul.jl",
-                edit_link="main",
+                prettyurls = get(ENV, "CI", "false") == "true",
+                canonical = "https://sintefmath.github.io/Fimbul.jl",
+                edit_link = "main",
                 size_threshold_ignore = [
                     "ref/jutul.md",
                     "docstrings.md",
-                    "man/first_ex.md"
+                    "man/first_ex.md",
                 ],
-                assets=String["assets/citations.css"],
+                assets = String["assets/citations.css"],
             )
         end
     end
@@ -380,8 +380,10 @@ function build_fimbul_docs(
             if build_notebooks
                 Literate.notebook(in_pth, joinpath(notebook_dir, category); execute = false)
             end
-            upd(content) = update_footer(content, category, exname, revision;
-                include_notebook = build_notebooks, vitepress_notebooks)
+            upd(content) = update_footer(
+                content, category, exname, revision;
+                include_notebook = build_notebooks, vitepress_notebooks
+            )
             fixt(content) = replace_tags(content, category, exname)
             Literate.markdown(in_pth, joinpath(out_dir, category), preprocess = upd, postprocess = fixt)
         end
@@ -414,13 +416,13 @@ function build_fimbul_docs(
                 "Closed-loop wells" => "man/wells/closed_loop.md",
             ],
             "References" => [
-                "Bibliography" => "extras/refs.md"
+                "Bibliography" => "extras/refs.md",
             ],
         ],
         "Examples" => examples_markdown,
         "Validation" => [
             "Models" => validation_markdown,
-        ]
+        ],
     ]
     # for (k, subpages) in build_pages
     #     println("$k")
@@ -440,10 +442,10 @@ function build_fimbul_docs(
             draft = get(ENV, "FIMBUL_DOCS_DRAFT_MODE", "0") == "1"
         )
     end
-    if deploy
+    return if deploy
         DocumenterVitepress.deploydocs(;
-            repo="github.com/sintefmath/Fimbul.jl.git",
-            devbranch="main",
+            repo = "github.com/sintefmath/Fimbul.jl.git",
+            devbranch = "main",
             target = "build", # this is where Vitepress stores its output
             branch = "gh-pages",
             push_preview = true

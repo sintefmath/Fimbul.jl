@@ -33,10 +33,11 @@ meter, year = si_units(:meter, :year);
 dims = (41, 41, 40)
 case_args = (
     dims = dims,
-    injector_position = (0.0, 0.0).*meter,
+    injector_position = (0.0, 0.0) .* meter,
     cell_growth = 1.25,
 )
-case_ns = magmatic_intrusion(; case_args...,
+case_ns = magmatic_intrusion(;
+    case_args...,
     natural_state_time = 2400.0year,
     num_years = 0,
 )
@@ -51,15 +52,15 @@ mesh = physical_representation(model.data_domain);
 # quadrant of the domain facing the viewer, so that the cut planes pass through
 # the center of the intrusion.
 xc = model.data_domain[:cell_centroids]
-x_mid = sum(extrema(xc[1, :]))/2
-y_mid = sum(extrema(xc[2, :]))/2
+x_mid = sum(extrema(xc[1, :])) / 2
+y_mid = sum(extrema(xc[2, :])) / 2
 cutaway = .!(xc[1, :] .< x_mid .&& xc[2, :] .< y_mid)
-axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π/16)
+axis_args = (zreversed = true, aspect = :data, perspectiveness = 0.75, elevation = π / 16)
 plot_res_args = (
     resolution = (1000, 800), aspect = :data,
     axis_args = axis_args,
     cells = cutaway,
-    fancy = false
+    fancy = false,
 )
 plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
 
@@ -69,8 +70,10 @@ plot_reservoir(case_ns; key = :Temperature, plot_res_args...)
 fig = Figure(size = (900, 700))
 ax = Axis3(fig[1, 1]; title = "Initial temperature", axis_args...)
 T0 = convert_from_si.(case_ns.state0[:Reservoir][:Temperature], :Celsius)
-plt = plot_cell_data!(ax, mesh, T0;
-    cells = cutaway, colormap = :seaborn_icefire_gradient)
+plt = plot_cell_data!(
+    ax, mesh, T0;
+    cells = cutaway, colormap = :seaborn_icefire_gradient
+)
 Colorbar(fig[1, 2], plt; label = "T (°C)")
 fig
 
@@ -88,15 +91,18 @@ fig
 # region develops above it, requires many short timesteps. Once the
 # convection pattern is established, the timesteps increase.
 function run_case(case)
-    sim, cfg = setup_reservoir_simulator(case;
+    sim, cfg = setup_reservoir_simulator(
+        case;
         max_timestep = Inf,
         relaxation = true,
-        tol_cnv = 1e-2,
-        tol_mb = 1e-5,
+        tol_cnv = 1.0e-2,
+        tol_mb = 1.0e-5,
         info_level = 0
     )
-    tss = VariableChangeTimestepSelector(:Enthalpy, 1e5;
-    relative = false, model = :Reservoir)
+    tss = VariableChangeTimestepSelector(
+        :Enthalpy, 1.0e5;
+        relative = false, model = :Reservoir
+    )
     push!(cfg[:timestep_selectors], tss)
     return simulate_reservoir(case; simulator = sim, config = cfg)
 end
@@ -107,8 +113,10 @@ results_ns = run_case(case_ns);
 # The interactive viewer shows the temperature at each report step of the
 # natural state. Filtering out low temperatures shows how the hot plume
 # develops above the intrusion.
-plot_reservoir(case_ns.model, results_ns.states;
-    key = :Temperature, colormap = :seaborn_icefire_gradient, cells = cutaway, plot_res_args...)
+plot_reservoir(
+    case_ns.model, results_ns.states;
+    key = :Temperature, colormap = :seaborn_icefire_gradient, cells = cutaway, plot_res_args...
+)
 
 # ### Development of the convection plume
 # The hot intrusion heats the surrounding water, which rises buoyantly and is
@@ -116,27 +124,37 @@ plot_reservoir(case_ns.model, results_ns.states;
 # (top) and liquid saturation (bottom) at selected times.
 t_ns = cumsum(case_ns.dt)
 nearest_step(t) = argmin(abs.(t_ns .- t))
-plot_times = [300.0, 600.0, 1200.0].*year
+plot_times = [300.0, 600.0, 1200.0] .* year
 T_range = (10.0, 900.0)
 fig = Figure(size = (1200, 750))
 for (i, t) in enumerate(plot_times)
     step = nearest_step(t)
     T = convert_from_si.(results_ns.states[step][:Temperature], :Celsius)
-    ax = Axis3(fig[1, i];
-        title = "$(round(Int, t_ns[step]/year)) years", axis_args...)
-    plot_cell_data!(ax, mesh, T; cells = cutaway,
-        colormap = :seaborn_icefire_gradient, colorrange = T_range)
+    ax = Axis3(
+        fig[1, i];
+        title = "$(round(Int, t_ns[step] / year)) years", axis_args...
+    )
+    plot_cell_data!(
+        ax, mesh, T; cells = cutaway,
+        colormap = :seaborn_icefire_gradient, colorrange = T_range
+    )
     hidedecorations!(ax)
     S = results_ns.states[step][:Saturations][1, :]
     ax = Axis3(fig[2, i]; axis_args...)
-    plot_cell_data!(ax, mesh, S; cells = cutaway,
-        colormap = :gray1, colorrange = (0.0, 1.0))
+    plot_cell_data!(
+        ax, mesh, S; cells = cutaway,
+        colormap = :gray1, colorrange = (0.0, 1.0)
+    )
     hidedecorations!(ax)
 end
-Colorbar(fig[1, length(plot_times) + 1]; colormap = :seaborn_icefire_gradient,
-    colorrange = T_range, label = "T (°C)")
-Colorbar(fig[2, length(plot_times) + 1]; colormap = :gray1,
-    colorrange = (0.0, 1.0), label = "Liquid saturation")
+Colorbar(
+    fig[1, length(plot_times) + 1]; colormap = :seaborn_icefire_gradient,
+    colorrange = T_range, label = "T (°C)"
+)
+Colorbar(
+    fig[2, length(plot_times) + 1]; colormap = :gray1,
+    colorrange = (0.0, 1.0), label = "Liquid saturation"
+)
 fig
 
 # ### Phase diagram
@@ -151,26 +169,36 @@ fig
 # 2.085 MJ/kg), where the fluid properties change rapidly. This is the most
 # challenging part of the simulation.
 x_c = (x_mid, y_mid)
-probe_depths = [2500.0, 1900.0, 1300.0, 700.0].*meter
-probe_cells = [argmin((xc[1, :] .- x_c[1]).^2 .+ (xc[2, :] .- x_c[2]).^2 .+
-    (xc[3, :] .- d).^2) for d in probe_depths]
+probe_depths = [2500.0, 1900.0, 1300.0, 700.0] .* meter
+probe_cells = [
+    argmin(
+        (xc[1, :] .- x_c[1]) .^ 2 .+ (xc[2, :] .- x_c[2]) .^ 2 .+
+            (xc[3, :] .- d) .^ 2
+    ) for d in probe_depths
+]
 probe_labels = ["Intrusion center", "Above intrusion", "Upper plume", "Near surface"]
 probe_colors = [:red, :lightgreen, :cyan, :magenta]
 states_ph = vcat([case_ns.state0[:Reservoir]], results_ns.states)
 tables = model.system.pvt_tables
 fig = Figure(size = (900, 650), fontsize = 14)
 ax = Axis(fig[1, 1])
-handles = plot_phase_diagram_contours!(ax, tables;
-    pressure_limits = (0.0, 30e6), enthalpy_limits = (0.0, 4.5e6), lines = true)
+handles = plot_phase_diagram_contours!(
+    ax, tables;
+    pressure_limits = (0.0, 30.0e6), enthalpy_limits = (0.0, 4.5e6), lines = true
+)
 for (i, (c, label)) in enumerate(zip(probe_cells, probe_labels))
-    h = [state[:Enthalpy][c] for state in states_ph]./1e3
-    p = [state[:Pressure][c] for state in states_ph]./1e6
+    h = [state[:Enthalpy][c] for state in states_ph] ./ 1.0e3
+    p = [state[:Pressure][c] for state in states_ph] ./ 1.0e6
     depth = round(Int, xc[3, c])
     lines!(ax, h, p; color = probe_colors[i], linewidth = 3, label = "$label ($depth m)")
-    scatter!(ax, h, p; color = probe_colors[i], markersize = 10,
-        strokecolor = :black, strokewidth = 1)
-    scatter!(ax, h[1:1], p[1:1]; color = :yellow, markersize = 12,
-        strokecolor = :black, strokewidth = 1, marker = :star5)
+    scatter!(
+        ax, h, p; color = probe_colors[i], markersize = 10,
+        strokecolor = :black, strokewidth = 1
+    )
+    scatter!(
+        ax, h[1:1], p[1:1]; color = :yellow, markersize = 12,
+        strokecolor = :black, strokewidth = 1, marker = :star5
+    )
 end
 
 axislegend(ax; position = :rb)
@@ -189,13 +217,15 @@ fig
 # injector is not included in the
 # model. We use report steps of one year.
 state_ns = results_ns.states[end]
-case_inj = magmatic_intrusion(; case_args...,
+case_inj = magmatic_intrusion(;
+    case_args...,
     natural_state_time = 0.0,
     num_years = 100,
     report_interval = 1.0year,
     initial_state = state_ns,
 )
-case_noinj = magmatic_intrusion(; case_args...,
+case_noinj = magmatic_intrusion(;
+    case_args...,
     natural_state_time = 0.0,
     num_years = 100,
     injection_years = 0,
@@ -205,9 +235,12 @@ case_noinj = magmatic_intrusion(; case_args...,
 wells = get_model_wells(case_inj.model)
 function plot_wells!(ax)
     for well in values(wells)
-        plot_well!(ax, mesh, well;
-            color = :black, linewidth = 3, markersize = 0.0, fontsize = 0.0)
+        plot_well!(
+            ax, mesh, well;
+            color = :black, linewidth = 3, markersize = 0.0, fontsize = 0.0
+        )
     end
+    return
 end
 
 # ### Simulate
@@ -228,12 +261,15 @@ results_inj = run_case(case_inj);
 fig = Figure(size = (800, 450))
 ax = Axis(fig[1, 1]; xlabel = "Time (years)", ylabel = "Power output (MW)")
 colors = Makie.wong_colors()
-for (i, (res, label)) in enumerate(zip(
-        [results_noinj, results_inj], ["Production only", "With reinjection"]))
-    t = res.time./year
+for (i, (res, label)) in enumerate(
+        zip(
+            [results_noinj, results_inj], ["Production only", "With reinjection"]
+        )
+    )
+    t = res.time ./ year
     q = -res.wells[:Producer][:mass_rate]
     h = [state[:Producer][:Enthalpy][1] for state in res.result.states]
-    lines!(ax, t, q.*h./1e6; color = colors[i], linewidth = 2, label = label)
+    lines!(ax, t, q .* h ./ 1.0e6; color = colors[i], linewidth = 2, label = label)
 end
 axislegend(ax; position = :rt)
 fig
@@ -243,12 +279,14 @@ fig
 # state for the scenario with reinjection. Filtering out values close to zero
 # shows the cold zone developing around the injector.
 Δstates_inj = JutulDarcy.delta_state(results_inj.states, results_ns.states[end])
-plot_reservoir(case_inj.model, Δstates_inj;
+plot_reservoir(
+    case_inj.model, Δstates_inj;
     key = :Temperature, colormap = :seaborn_icefire_gradient,
     well_color = :black,
     well_arg = (markersize = 0.0,),
     step = length(Δstates_inj),
-    plot_res_args...)
+    plot_res_args...
+)
 
 # ### Reservoir temperature change
 # Finally, we plot the temperature change relative to the natural state for the
@@ -265,19 +303,27 @@ results_prod = (results_noinj, results_inj)
 # positive parts of the range are mapped to the two halves of the colormap.
 vik = cgrad(:vik)
 ΔT_cmap = map(range(ΔT_min, ΔT_max, length = 256)) do v
-    v < 0 ? vik[0.5*(v - ΔT_min)/(0 - ΔT_min)] : vik[0.5 + 0.5*v/ΔT_max]
+    v < 0 ? vik[0.5 * (v - ΔT_min) / (0 - ΔT_min)] : vik[0.5 + 0.5 * v / ΔT_max]
 end
 fig = Figure(size = (1000, 600))
-for (i, (res, ΔT, title)) in enumerate(zip(results_prod, ΔT_all,
-        ["Production only", "With reinjection"]))
+for (i, (res, ΔT, title)) in enumerate(
+        zip(
+            results_prod, ΔT_all,
+            ["Production only", "With reinjection"]
+        )
+    )
     ax = Axis3(fig[1, i]; title = title, axis_args...)
-    plot_cell_data!(ax, mesh, ΔT; cells = cutaway,
-        colormap = ΔT_cmap, colorrange = ΔT_range)
+    plot_cell_data!(
+        ax, mesh, ΔT; cells = cutaway,
+        colormap = ΔT_cmap, colorrange = ΔT_range
+    )
     plot_wells!(ax)
     hidedecorations!(ax)
 end
-Colorbar(fig[2, 1:2];
+Colorbar(
+    fig[2, 1:2];
     colormap = ΔT_cmap, colorrange = ΔT_range,
     vertical = false,
-    label = "ΔT (°C)")
+    label = "ΔT (°C)"
+)
 fig

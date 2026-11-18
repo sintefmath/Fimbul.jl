@@ -45,10 +45,11 @@ plot_res_args = (
         zreversed = true,
         perspectiveness = 0.75,
     ),
-    aspect = (4,4,1),
+    aspect = (4, 4, 1),
     fancy = false,
 )
-plot_reservoir(hifi;
+plot_reservoir(
+    hifi;
     key = :permeability,
     plot_res_args...,
 )
@@ -62,11 +63,12 @@ results_hifi = simulate_reservoir(hifi)
 # `plot_reservoir`. We see that a hot thermal plume develops around the main
 # well, while a cold plume develops around the supporting well. After a few
 # cycles, the plumes start to interact slightly.
-plot_reservoir(hifi, results_hifi.states;
+plot_reservoir(
+    hifi, results_hifi.states;
     key = :Temperature, step = length(hifi.dt),
     colormap = :seaborn_icefire_gradient,
     plot_res_args...,
-    )
+)
 
 # ### Inspect well output
 # We can also inspect the well output using `plot_well_results`.
@@ -76,22 +78,26 @@ plot_well_results(results_hifi.wells)
 # The high-fidelity model is posed on a logically Cartesian mesh with 60×60×7
 # cells. We construct a proxy model by coarsening the high-fidelity model to
 # 15×15×3 cells using the `coarsen_reservoir_case` function.
-coarsening = (15,15,3)
-proxy = JutulDarcy.coarsen_reservoir_case(hifi, coarsening,
-    method=:ijk,
-    setup_arg = (block_backend = true,);
+coarsening = (15, 15, 3)
+proxy = JutulDarcy.coarsen_reservoir_case(
+    hifi, coarsening,
+    method = :ijk,
+    setup_arg = (block_backend = true,)
 )
-results_proxy = simulate_reservoir(proxy, info_level=0)
-plot_reservoir(proxy, results_proxy.states;
+results_proxy = simulate_reservoir(proxy, info_level = 0)
+plot_reservoir(
+    proxy, results_proxy.states;
     key = :Temperature, step = length(hifi.dt),
     colormap = :seaborn_icefire_gradient,
     plot_res_args...
-    )
+)
 
 # ### Compare proxy models to high-fidelity model
 # We compare the well output of the proxy models to the high-fidelity model.
-plot_well_results([results_hifi.wells, results_proxy.wells],
-    names = ["High-fidelity", "Proxy"])
+plot_well_results(
+    [results_hifi.wells, results_proxy.wells],
+    names = ["High-fidelity", "Proxy"]
+)
 
 
 # ### Define mismatch objective function
@@ -109,21 +115,23 @@ states_proxy = results_proxy.result.states;
 # or more of the wells and WellObs, you can change num_years_cal and wells_cal
 # below.
 num_years_cal = 2
-n_steps = 12*4*num_years_cal
+n_steps = 12 * 4 * num_years_cal
 wells_cal = [:WellA, :WellB]
 objective = (model, state, dt, step_no, forces) ->
-    well_mismatch_thermal(model, wells_cal,
-        states_hf, state, dt, step_no, forces;
-        scale=sum(hifi.dt[1:n_steps]),
-        w_bhp = 0.0,
-        w_temp = 1.0/si_unit(:Kelvin), 
-        w_energy = 0.0,
-    );
+well_mismatch_thermal(
+    model, wells_cal,
+    states_hf, state, dt, step_no, forces;
+    scale = sum(hifi.dt[1:n_steps]),
+    w_bhp = 0.0,
+    w_temp = 1.0 / si_unit(:Kelvin),
+    w_energy = 0.0,
+);
 
 # ### Compute mismatch for initial proxy model
 obj0 = Jutul.evaluate_objective(
-    objective, proxy.model, states_proxy[1:n_steps], 
-    proxy.dt[1:n_steps], proxy.forces[1:n_steps])
+    objective, proxy.model, states_proxy[1:n_steps],
+    proxy.dt[1:n_steps], proxy.forces[1:n_steps]
+)
 println("Initial proxy mismatch: $obj0")
 
 # ## Set up optimization
@@ -135,36 +143,47 @@ dprm = setup_reservoir_dict_optimization(deepcopy(proxy[1:n_steps]));
 # We declare the subset of parameters to calibrate together with their
 # relative bounds. Parameters that are not freed here remain fixed.
 free_optimization_parameter!( # Permeability
-    dprm, [:model, :permeability]; rel_min = 1e-6, rel_max = 1e1)
+    dprm, [:model, :permeability]; rel_min = 1.0e-6, rel_max = 1.0e1
+)
 free_optimization_parameter!( # Porosity
-    dprm, [:model, :porosity]; abs_min = 0.0001, abs_max = 0.9)
+    dprm, [:model, :porosity]; abs_min = 0.0001, abs_max = 0.9
+)
 free_optimization_parameter!( # Rock density
-    dprm, [:model, :rock_density]; abs_min = 100.0, abs_max = 4000.0)
+    dprm, [:model, :rock_density]; abs_min = 100.0, abs_max = 4000.0
+)
 free_optimization_parameter!( # Rock heat capacity
-    dprm, [:model, :rock_heat_capacity]; abs_min = 100.0, abs_max = 2000.0)
+    dprm, [:model, :rock_heat_capacity]; abs_min = 100.0, abs_max = 2000.0
+)
 free_optimization_parameter!( # Rock thermal conductivity
-    dprm, [:model, :rock_thermal_conductivity]; rel_min = 1e-6, rel_max = 1e1)
+    dprm, [:model, :rock_thermal_conductivity]; rel_min = 1.0e-6, rel_max = 1.0e1
+)
 free_optimization_parameter!( # Fluid thermal conductivity
-    dprm, [:model, :fluid_thermal_conductivity]; rel_min = 1e-6, rel_max = 1e1)
+    dprm, [:model, :fluid_thermal_conductivity]; rel_min = 1.0e-6, rel_max = 1.0e1
+)
 
 # ### Calibrate proxy model
 # We run the optimization using the built-in L-BFGS optimizer.
-prm_opt = optimize_reservoir(dprm, objective;
-    simulator_arg=(output_substates=false,), gradient_scaling=false, max_it=200)
+prm_opt = optimize_reservoir(
+    dprm, objective;
+    simulator_arg = (output_substates = false,), gradient_scaling = false, max_it = 200
+)
 
 # ### Reconstruct full-schedule case from calibrated parameters
 # The optimization was posed on the calibration period only. We now apply the
 # optimized parameters to the full five-year schedule for prediction.
 case_opt = dprm.setup_function(prm_opt)
-proxy_cal = JutulCase(case_opt.model, proxy.dt, proxy.forces;
-    state0 = proxy.state0, parameters = case_opt.parameters)
+proxy_cal = JutulCase(
+    case_opt.model, proxy.dt, proxy.forces;
+    state0 = proxy.state0, parameters = case_opt.parameters
+)
 
 # ### Simulate the full schedule using the calibrated proxy
 results_proxy_cal = simulate_reservoir(proxy_cal)
 states_proxy_cal = results_proxy_cal.result.states
 obj = Jutul.evaluate_objective(
-    objective, proxy_cal.model, states_proxy_cal[1:n_steps], 
-    proxy_cal.dt[1:n_steps], proxy_cal.forces[1:n_steps])
+    objective, proxy_cal.model, states_proxy_cal[1:n_steps],
+    proxy_cal.dt[1:n_steps], proxy_cal.forces[1:n_steps]
+)
 println("Final proxy mismatch: $obj")
 
 # ### Plot the calibrated results
@@ -175,24 +194,29 @@ println("Final proxy mismatch: $obj")
 # mismatch comparable to the initial proxy model for WellA and WellB in the
 # final year.
 fig = Figure(size = (800, 1200), fontsize = 20)
-time_tot = results_hifi.wells.time/si_unit(:year)
+time_tot = results_hifi.wells.time / si_unit(:year)
 for (wno, well) in enumerate(well_symbols(hifi.model))
-    ax = Axis(fig[wno, 1], xlabel = "Time (years)", ylabel = "Temperature (°C)",
-        title = "Well: $well")
-    plot_well_data!(ax, time_tot, states_hf, 
+    ax = Axis(
+        fig[wno, 1], xlabel = "Time (years)", ylabel = "Temperature (°C)",
+        title = "Well: $well"
+    )
+    plot_well_data!(
+        ax, time_tot, states_hf,
         vcat([states_proxy], [states_proxy_cal], [states_proxy_cal]);
         wells = [well],
         field = :Temperature,
         nan_ix = [
-            missing, 
-            n_steps+1:length(hifi.dt),
-            1:n_steps-1],
-        names=vcat(
-            "High-fidelity", 
-            "Proxy (initial)", 
+            missing,
+            (n_steps + 1):length(hifi.dt),
+            1:(n_steps - 1),
+        ],
+        names = vcat(
+            "High-fidelity",
+            "Proxy (initial)",
             "Proxy (calibration)",
-            "Proxy (prediction)"),
+            "Proxy (prediction)"
+        ),
         legend = wno == 2
-        )
+    )
 end
 fig
