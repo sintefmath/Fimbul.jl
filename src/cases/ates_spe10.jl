@@ -14,41 +14,6 @@ function spe10_data()
 end
 
 """
-    spe10_block(layers; ix = 1:60, iy = 1:220, coarsen = (1, 1, 1), minporo = 0.01)
-
-The SPE10 model 2 for the given `layers` (and optionally a lateral subset
-`ix × iy` of its columns): `kx`, `ky`, `kz` [m²] and `poro` as `nx × ny × nl`
-arrays (layer 1 at the top), and the cell sizes `dx`, `dy`, `dz` [m]. With
-`coarsen = (cx, cy, cz)`, blocks of `cx × cy × cz` cells are merged:
-arithmetic mean of the porosity and, for each permeability direction, the
-harmonic mean along that direction of the arithmetic means across it.
-"""
-function spe10_block(layers; ix = 1:60, iy = 1:220, coarsen = (1, 1, 1), minporo = 0.01)
-    d = spe10_data()
-    kx, ky, kz = d.kx[ix, iy, layers], d.ky[ix, iy, layers], d.kz[ix, iy, layers]
-    phi = max.(d.poro[ix, iy, layers], minporo)
-    n = size(phi)
-    all(n .% coarsen .== 0) || throw(ArgumentError("coarsen = $coarsen must divide the block size $n"))
-    m = n .÷ coarsen
-    blocks(I) = ntuple(a -> ((I[a] - 1) * coarsen[a] + 1):(I[a] * coarsen[a]), 3)
-    harmonic(x) = length(x) / sum(1 ./ max.(x, 1.0e-11 * darcy))
-    function upscale(k, dir)
-        out = zeros(m)
-        for I in CartesianIndices(m)
-            b = k[blocks(Tuple(I))...]
-            out[I] = harmonic(vec(mean(b, dims = filter(!=(dir), (1, 2, 3)))))
-        end
-        return out
-    end
-    poro = [mean(phi[blocks(Tuple(I))...]) for I in CartesianIndices(m)]
-    h = JutulDarcy.SPE10.CELL_DIMS .* coarsen
-    return (
-        kx = upscale(kx, 1), ky = upscale(ky, 2), kz = upscale(kz, 3), poro = poro,
-        dx = h[1], dy = h[2], dz = h[3],
-    )
-end
-
-"""
     ates_spe10(; <keyword arguments>)
 
 Aquifer thermal energy storage (ATES) in the SPE10 model 2 (Christie & Blunt,
@@ -76,7 +41,7 @@ length, perforated over the full aquifer thickness.
   `ix = i:i` without padding in x, and no boundary conditions on the sides of
   the slice)
 - `coarsen = (2, 2, 2)`: SPE10 cells merged in each block cell (see
-  `spe10_block`)
+  `JutulDarcy.SPE10.load_block`)
 - `depth_top = 800.0`: depth of the top of the aquifer [m]
 - `cap`, `base`: thicknesses of the cap and base rock layers, from the
   aquifer outwards [m]
@@ -144,7 +109,9 @@ function ates_spe10(;
         utes_schedule_args = NamedTuple()
     )
     ismissing(slice) || (ix = slice:slice)
-    blk = spe10_block(layers; ix = ix, iy = iy, coarsen = coarsen, minporo = minporo)
+    blk = JutulDarcy.SPE10.load_block(
+        layers; ix = ix, iy = iy, coarsen = coarsen, minporo = minporo, data = spe10_data()
+    )
     mx, my, ml = size(blk.poro)
 
     # ## Grid: the block with padding around it, cap rock above and base rock below
